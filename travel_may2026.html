@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2026년 5월 1주 해외여행 후보</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+:root {
+  --bg: #0f0f13;
+  --card: #1a1a22;
+  --card-hover: #22222e;
+  --border: #2a2a36;
+  --text: #e8e8ec;
+  --text2: #8888a0;
+  --text3: #555568;
+  --accent: #6c5ce7;
+  --green: #00d2a0;
+  --orange: #f0a040;
+  --red: #ff4d6a;
+  --blue: #4dabf7;
+  --radius: 14px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Inter', 'Apple SD Gothic Neo', sans-serif;
+  background: var(--bg); color: var(--text);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ─── HEADER ─── */
+.header {
+  padding: 28px 32px 20px;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  border-bottom: 1px solid var(--border);
+}
+.header h1 {
+  font-size: 22px; font-weight: 800; letter-spacing: -0.5px;
+  background: linear-gradient(135deg, #fff 0%, #a8a8ff 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.header-sub {
+  margin-top: 6px; font-size: 13px; color: var(--text2);
+  display: flex; gap: 16px; flex-wrap: wrap;
+}
+.header-tag {
+  background: rgba(108,92,231,0.15); color: #a89eff;
+  padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 500;
+}
+
+/* ─── FILTERS ─── */
+.filters-wrap {
+  padding: 16px 32px;
+  background: rgba(26,26,34,0.8);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 100;
+}
+.filters {
+  display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end;
+}
+.fg { display: flex; flex-direction: column; gap: 5px; }
+.fg-label { font-size: 10px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: 1px; }
+.fg-btns { display: flex; gap: 4px; flex-wrap: wrap; }
+.fb {
+  padding: 5px 12px; border: 1.5px solid var(--border); border-radius: 20px;
+  cursor: pointer; font-size: 11px; font-weight: 500;
+  background: transparent; color: var(--text2);
+  transition: all 0.2s; white-space: nowrap;
+}
+.fb:hover { border-color: var(--accent); color: var(--accent); }
+.fb.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.reset-btn {
+  padding: 5px 14px; border: 1.5px solid var(--border); border-radius: 20px;
+  cursor: pointer; font-size: 11px; background: transparent; color: var(--text3);
+  transition: all 0.2s; align-self: flex-end;
+}
+.reset-btn:hover { border-color: var(--red); color: var(--red); }
+
+/* ─── INFO BAR ─── */
+.info-bar {
+  padding: 10px 32px; font-size: 12px; color: var(--text3);
+  display: flex; justify-content: space-between; align-items: center;
+  border-bottom: 1px solid rgba(42,42,54,0.5);
+}
+.info-bar b { color: var(--accent); font-size: 16px; }
+
+/* ─── CARDS ─── */
+.cards-wrap { padding: 20px 32px 40px; }
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 14px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  transition: all 0.25s;
+  cursor: default;
+  position: relative;
+  overflow: hidden;
+}
+.card:hover {
+  background: var(--card-hover);
+  border-color: rgba(108,92,231,0.3);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+}
+.card.hidden { display: none; }
+.card.is-new::before {
+  content: ''; position: absolute; top: 0; left: 0;
+  width: 3px; height: 100%; background: var(--green);
+}
+
+/* Card top row */
+.card-top {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  margin-bottom: 14px;
+}
+.card-score {
+  width: 52px; height: 52px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; font-weight: 800;
+  position: relative; flex-shrink: 0;
+}
+.card-score::before {
+  content: ''; position: absolute; inset: 0; border-radius: 50%;
+  padding: 2.5px;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+}
+.score-high { color: var(--green); }
+.score-high::before { background: conic-gradient(var(--green) calc(var(--pct) * 3.6deg), var(--border) 0); }
+.score-mid { color: var(--orange); }
+.score-mid::before { background: conic-gradient(var(--orange) calc(var(--pct) * 3.6deg), var(--border) 0); }
+.score-low { color: var(--red); }
+.score-low::before { background: conic-gradient(var(--red) calc(var(--pct) * 3.6deg), var(--border) 0); }
+
+.card-meta { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.card-country { font-size: 12px; color: var(--text2); font-weight: 500; }
+.card-cost {
+  font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px;
+}
+.cost-l { background: rgba(0,210,160,0.12); color: var(--green); }
+.cost-m { background: rgba(240,160,64,0.12); color: var(--orange); }
+.cost-h { background: rgba(255,77,106,0.12); color: var(--red); }
+
+/* Card name */
+.card-name {
+  font-size: 17px; font-weight: 700; letter-spacing: -0.3px;
+  margin-bottom: 2px;
+}
+.card-en { font-size: 11px; color: var(--text3); margin-bottom: 12px; font-weight: 400; }
+.badge {
+  display: inline-block; padding: 2px 7px; border-radius: 8px;
+  font-size: 9px; font-weight: 700; margin-left: 6px; vertical-align: middle;
+  letter-spacing: 0.5px;
+}
+.badge-new { background: rgba(0,210,160,0.15); color: var(--green); }
+.badge-top { background: rgba(240,160,64,0.15); color: var(--orange); }
+
+/* Indicators row */
+.indicators {
+  display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px;
+}
+.ind {
+  display: flex; align-items: center; gap: 5px;
+  padding: 5px 10px; border-radius: 8px;
+  font-size: 11px; font-weight: 500;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.05);
+}
+.ind-icon { font-size: 13px; flex-shrink: 0; }
+.ind-y { color: var(--green); }
+.ind-p { color: var(--orange); }
+.ind-n { color: var(--text3); }
+
+/* Stars */
+.star-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.star-label { font-size: 10px; color: var(--text3); width: 28px; font-weight: 600; }
+.stars { display: flex; gap: 2px; }
+.star { width: 14px; height: 14px; border-radius: 3px; }
+.star-on { background: #f7c948; }
+.star-off { background: rgba(255,255,255,0.06); }
+
+/* Group & Note */
+.card-group {
+  font-size: 10px; color: var(--text3); line-height: 1.6;
+  padding: 8px 10px; border-radius: 8px;
+  background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04);
+  margin-bottom: 10px; white-space: pre-line;
+}
+.card-note {
+  font-size: 11px; color: var(--text2); line-height: 1.6;
+  border-top: 1px solid rgba(255,255,255,0.05);
+  padding-top: 10px; margin-top: 4px;
+}
+
+/* ─── ELIMINATED ─── */
+.eliminated {
+  padding: 0 32px 40px;
+}
+.eli-title { font-size: 13px; color: var(--text3); font-weight: 600; margin-bottom: 10px; }
+.eli-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.eli-item {
+  padding: 5px 12px; border-radius: 20px; font-size: 11px;
+  background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+  color: var(--text3); display: flex; gap: 6px; align-items: center;
+}
+.eli-reason { color: var(--red); font-size: 10px; font-weight: 600; }
+
+/* ─── SORT BAR ─── */
+.sort-bar {
+  padding: 0 32px 8px;
+  display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+}
+.sort-label { font-size: 10px; color: var(--text3); font-weight: 600; }
+.sort-btn {
+  padding: 4px 10px; border: 1px solid var(--border); border-radius: 16px;
+  cursor: pointer; font-size: 10px; font-weight: 500;
+  background: transparent; color: var(--text3); transition: all 0.15s;
+}
+.sort-btn:hover { border-color: var(--accent); color: var(--accent); }
+.sort-btn.on { background: rgba(108,92,231,0.15); border-color: var(--accent); color: var(--accent); font-weight: 700; }
+
+/* ─── SCORE LEGEND ─── */
+.legend {
+  padding: 0 32px 16px;
+  display: flex; gap: 20px; flex-wrap: wrap; font-size: 11px; color: var(--text3);
+}
+.legend-item { display: flex; align-items: center; gap: 5px; }
+.legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+@media (max-width: 768px) {
+  .header, .filters-wrap, .cards-wrap, .eliminated, .sort-bar, .legend { padding-left: 16px; padding-right: 16px; }
+  .cards { grid-template-columns: 1fr; }
+  .header h1 { font-size: 18px; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>2026년 5월 1주 · 혼자 해외여행 후보</h1>
+  <div class="header-sub">
+    <span class="header-tag">남자 혼자 · 5일</span>
+    <span class="header-tag">바다 · 휴양</span>
+    <span class="header-tag">미식</span>
+    <span class="header-tag">렌트 없이 이동</span>
+    <span class="header-tag">직항</span>
+  </div>
+</div>
+
+<div class="filters-wrap">
+  <div class="filters">
+    <div class="fg">
+      <div class="fg-label">국가</div>
+      <div class="fg-btns">
+        <button class="fb on" data-f="country" data-v="all">전체</button>
+        <button class="fb" data-f="country" data-v="일본">일본</button>
+        <button class="fb" data-f="country" data-v="대만">대만</button>
+        <button class="fb" data-f="country" data-v="홍콩">홍콩</button>
+        <button class="fb" data-f="country" data-v="중국">중국</button>
+        <button class="fb" data-f="country" data-v="필리핀">필리핀</button>
+        <button class="fb" data-f="country" data-v="말레이시아">말레이시아</button>
+        <button class="fb" data-f="country" data-v="싱가포르">싱가포르</button>
+        <button class="fb" data-f="country" data-v="미국령">괌·사이판</button>
+      </div>
+    </div>
+    <div class="fg">
+      <div class="fg-label">직항</div>
+      <div class="fg-btns">
+        <button class="fb on" data-f="direct" data-v="all">전체</button>
+        <button class="fb" data-f="direct" data-v="yes">직항만</button>
+        <button class="fb" data-f="direct" data-v="yp">직항+근접</button>
+      </div>
+    </div>
+    <div class="fg">
+      <div class="fg-label">5월 수영</div>
+      <div class="fg-btns">
+        <button class="fb on" data-f="swim" data-v="all">전체</button>
+        <button class="fb" data-f="swim" data-v="yes">가능</button>
+        <button class="fb" data-f="swim" data-v="yp">가능+애매</button>
+      </div>
+    </div>
+    <div class="fg">
+      <div class="fg-label">차 없이</div>
+      <div class="fg-btns">
+        <button class="fb on" data-f="car" data-v="all">전체</button>
+        <button class="fb" data-f="car" data-v="yes">완전 가능</button>
+        <button class="fb" data-f="car" data-v="yp">가능+Grab</button>
+      </div>
+    </div>
+    <div class="fg">
+      <div class="fg-label">비용</div>
+      <div class="fg-btns">
+        <button class="fb on" data-f="cost" data-v="all">전체</button>
+        <button class="fb" data-f="cost" data-v="lm">저~중까지</button>
+        <button class="fb" data-f="cost" data-v="mid">중까지</button>
+      </div>
+    </div>
+    <button class="reset-btn" onclick="resetAll()">필터 초기화</button>
+  </div>
+</div>
+
+<div class="info-bar">
+  <span id="cnt"></span>
+  <span style="font-size:10px; opacity:0.6;">추천 점수 = 바다(25) + 미식(25) + 차없이이동(20) + 5월수영(15) + 직항(10) + 비용(5)</span>
+</div>
+
+<div class="sort-bar">
+  <span class="sort-label">정렬 :</span>
+  <button class="sort-btn on" data-s="score">추천 점수순</button>
+  <button class="sort-btn" data-s="flight">비행시간순</button>
+  <button class="sort-btn" data-s="cost">비용순</button>
+  <button class="sort-btn" data-s="food">미식순</button>
+  <button class="sort-btn" data-s="beach">바다순</button>
+  <button class="sort-btn" data-s="name">이름순</button>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div> 70+ 강력 추천</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--orange)"></div> 50~69 조건부 추천</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div> 50 미만 조건 미충족</div>
+  <div class="legend-item" style="margin-left:16px;"><div style="width:3px;height:12px;background:var(--green);border-radius:2px;"></div> 신규 추천</div>
+</div>
+
+<div class="cards-wrap">
+  <div class="cards" id="cards"></div>
+</div>
+
+<div class="eliminated">
+  <div class="eli-title">탈락 목적지</div>
+  <div class="eli-list">
+    <div class="eli-item">다낭·호이안 <span class="eli-reason">방문함</span></div>
+    <div class="eli-item">나트랑(냐짱) <span class="eli-reason">방문함</span></div>
+    <div class="eli-item">나하·오키나와 <span class="eli-reason">방문함</span></div>
+    <div class="eli-item">퀴논 <span class="eli-reason">직항 없음</span></div>
+    <div class="eli-item">후아힌 <span class="eli-reason">방콕 경유</span></div>
+    <div class="eli-item">와카야마 시라하마 <span class="eli-reason">오사카+3h 버스</span></div>
+    <div class="eli-item">카스카이스 <span class="eli-reason">유럽 경유</span></div>
+    <div class="eli-item">퍼스 <span class="eli-reason">직항 없음 10h+</span></div>
+  </div>
+</div>
+
+<script>
+const D=[
+{name:"가오슝 + 컨딩",en:"Kaohsiung + Kenting",flag:"🇹🇼",country:"대만",
+ group:"가오슝 공항 기점 → 컨딩 버스 2h\n컨딩은 공항 없어 자동 묶음",
+ direct:"y",directS:"직항",flightMin:150,flightT:"2.5h",
+ car:"p",carS:"MRT(가오슝) + 셔틀(컨딩)",
+ swim:"y",swimS:"26°C+ 수영 가능",
+ food:4,beach:4,costLv:2,costT:"저~중",
+ note:"가오슝 야시장 미식 + 컨딩 해변 조합. 5월 날씨 최적. 컨딩 남만해수욕장 스노클링 가능",
+ isNew:false},
+{name:"타이베이권",en:"Taipei · 단수이 · 지룽",flag:"🇹🇼",country:"대만",
+ group:"타오위안/쑹산 공항 기점\n단수이=MRT 직결, 지룽=버스 1h",
+ direct:"y",directS:"직항 (GMP→쑹산 포함)",flightMin:150,flightT:"2.5h",
+ car:"y",carS:"MRT 직결",
+ swim:"p",swimS:"24°C 하구·항구 수영 부적합",
+ food:4,beach:1,costLv:1,costT:"저",
+ note:"단수이 노을·먹거리 + 지룽 야시장. 바다 수영은 기대 말 것",
+ isNew:false},
+{name:"홍콩 + 라마섬",en:"Hong Kong + Lamma Island",flag:"🇭🇰",country:"홍콩",
+ group:"단독 — 라마섬은 홍콩 페리 30분",
+ direct:"y",directS:"직항 (ICN·GMP 모두)",flightMin:210,flightT:"3.5h",
+ car:"y",carS:"MTR + 페리, 완전 대중교통",
+ swim:"p",swimS:"24°C 라마섬 해변 수영 가능",
+ food:5,beach:2,costLv:5,costT:"고",
+ note:"미식 최강 (딤섬·해산물·국제요리). 바다는 보조 역할. 비용이 걸림돌",
+ isNew:false},
+{name:"보홀",en:"Bohol · Alona Beach",flag:"🇵🇭",country:"필리핀",
+ group:"단독 — 팡글라오 공항 직항\n세부와 각자 공항, 별개 목적지",
+ direct:"y",directS:"직항 (팡글라오 국제공항)",flightMin:240,flightT:"4h",
+ car:"p",carS:"트라이시클·Grab, 해변 도보",
+ swim:"y",swimS:"29°C 알로나비치",
+ food:3,beach:4,costLv:2,costT:"저~중",
+ note:"초콜릿힐·안경원숭이. 5월 말 우기 시작 주의",
+ isNew:false},
+{name:"세부",en:"Cebu City",flag:"🇵🇭",country:"필리핀",
+ group:"단독 — 막탄세부 공항 직항\n보홀과 각자 공항, 별개 목적지",
+ direct:"y",directS:"직항",flightMin:240,flightT:"4h",
+ car:"p",carS:"Grab·지프니, 지하철 없음",
+ swim:"y",swimS:"29°C",
+ food:4,beach:3,costLv:2,costT:"저~중",
+ note:"레촌(통돼지구이) 유명. 근교 섬 투어로 바다 즐김",
+ isNew:false},
+{name:"보라카이",en:"Boracay · White Beach",flag:"🇵🇭",country:"필리핀",
+ group:"칼리보 공항 직항 → 버스 2h + 배 15분\n섬 안에서는 렌트 완전 불필요",
+ direct:"p",directS:"칼리보 직항 후 버스+배 2h",flightMin:240,flightT:"4h (+이동2h)",
+ car:"y",carS:"섬 안 삼륜차, 운전 불필요",
+ swim:"y",swimS:"29°C 화이트비치",
+ food:3,beach:5,costLv:3,costT:"중",
+ note:"세계 최고 수준 화이트비치. 섬 진입만 번거롭고 안에서 렌트 제로. 5월=건기 막바지",
+ isNew:false},
+{name:"마닐라베이",en:"Manila Bay",flag:"🇵🇭",country:"필리핀",
+ group:"단독 — 니노이아키노 공항",
+ direct:"y",directS:"직항",flightMin:240,flightT:"4h",
+ car:"p",carS:"LRT·Grab, 교통체증 극심",
+ swim:"n",swimS:"수영 불가 (오염)",
+ food:3,beach:1,costLv:1,costT:"저",
+ note:"마닐라만 일몰만 볼만함. 수영 목적이면 비추",
+ isNew:false},
+{name:"코타키나발루",en:"Kota Kinabalu",flag:"🇲🇾",country:"말레이시아",
+ group:"단독 — KK 국제공항 직항",
+ direct:"y",directS:"직항 (에어아시아 등)",flightMin:300,flightT:"5h",
+ car:"p",carS:"Grab + 섬투어 보트",
+ swim:"y",swimS:"29°C 툰쿠압둘라만 섬",
+ food:3,beach:4,costLv:2,costT:"저~중",
+ note:"시내 해산물 시장 + 섬 투어. 5월에도 날씨 양호",
+ isNew:false},
+{name:"페낭",en:"Penang · George Town",flag:"🇲🇾",country:"말레이시아",
+ group:"단독 — 페낭 국제공항 직항",
+ direct:"y",directS:"직항",flightMin:360,flightT:"6h",
+ car:"p",carS:"Grab·Rapid 버스",
+ swim:"p",swimS:"27°C 바투페링기 (보통)",
+ food:5,beach:2,costLv:2,costT:"저~중",
+ note:"아시아 미식 도시 톱5. 조지타운 유네스코. 바다보다 먹방 여행",
+ isNew:false},
+{name:"싱가포르",en:"Singapore · Sentosa",flag:"🇸🇬",country:"싱가포르",
+ group:"단독 — 창이 공항\n센토사 모노레일 연결",
+ direct:"y",directS:"직항 (ICN·GMP)",flightMin:390,flightT:"6.5h",
+ car:"y",carS:"MRT + 센토사 모노레일",
+ swim:"y",swimS:"30°C 실로소비치",
+ food:5,beach:2,costLv:5,costT:"고",
+ note:"미식+도시 최상. 해변은 인공적. 비용 가장 높음",
+ isNew:false},
+{name:"샤먼",en:"Xiamen · 鼓浪嶼",flag:"🇨🇳",country:"중국",
+ group:"단독 — 구랑위 페리 10분",
+ direct:"y",directS:"직항",flightMin:120,flightT:"2h",
+ car:"y",carS:"지하철 + 페리",
+ swim:"p",swimS:"23°C 가능하나 선선함",
+ food:3,beach:2,costLv:3,costT:"중",
+ note:"구랑위 골목 분위기. 민난 해산물. 중국 비자 필요",
+ isNew:false},
+{name:"상해 + 저우산",en:"Shanghai + 舟山",flag:"🇨🇳",country:"중국",
+ group:"상해 공항 기점\n저우산 공항 없음 → 버스+페리 3h",
+ direct:"y",directS:"상해 직항 (GMP→홍차오)",flightMin:90,flightT:"1.5h",
+ car:"p",carS:"상해 지하철 / 저우산 버스",
+ swim:"n",swimS:"17°C 수영 불가",
+ food:4,beach:1,costLv:4,costT:"중~고",
+ note:"저우산 바다 5월 너무 차가움. 상해 미식 도시 여행 위주",
+ isNew:false},
+{name:"칭다오",en:"Qingdao · 八大關",flag:"🇨🇳",country:"중국",
+ group:"단독",
+ direct:"y",directS:"직항",flightMin:90,flightT:"1.5h",
+ car:"y",carS:"지하철, 시내 대중교통 편리",
+ swim:"n",swimS:"15°C 수영 불가",
+ food:3,beach:2,costLv:2,costT:"저~중",
+ note:"팔대관 유럽풍 건축. 칭다오 맥주·해산물. 바다 수영은 포기",
+ isNew:false},
+{name:"다카마쓰",en:"Takamatsu · 直島",flag:"🇯🇵",country:"일본",
+ group:"단독 — 다카마쓰 공항 직항",
+ direct:"y",directS:"직항 (ICN)",flightMin:90,flightT:"1.5h",
+ car:"p",carS:"시내 버스·자전거, 나오시마 페리",
+ swim:"n",swimS:"18°C 세토내해 수영 X",
+ food:3,beach:1,costLv:3,costT:"중",
+ note:"사누키 우동 성지. 나오시마 아트섬. 문화·식도락 여행",
+ isNew:false},
+{name:"오사카 + 고베",en:"Osaka + Kobe",flag:"🇯🇵",country:"일본",
+ group:"오사카 공항 기점\n고베=오사카에서 전철 35분\n고베 공항엔 한국 직항 없음",
+ direct:"y",directS:"직항 (GMP→이타미, ICN→간사이)",flightMin:120,flightT:"2h",
+ car:"y",carS:"지하철·한큐·JR 완전 대중교통",
+ swim:"n",swimS:"17°C 수영 부적합",
+ food:5,beach:1,costLv:4,costT:"중~고",
+ note:"고베규·타코야키·오마카세 미식 최강. 바다는 포기하는 여행",
+ isNew:false},
+{name:"미야자키 니치난",en:"Miyazaki · Nichinan",flag:"🇯🇵",country:"일본",
+ group:"단독 — 미야자키 공항 직항",
+ direct:"y",directS:"직항 (ICN)",flightMin:90,flightT:"1.5h",
+ car:"n",carS:"렌트 거의 필수, 버스 드묾",
+ swim:"p",swimS:"20°C 가능하나 서늘",
+ food:3,beach:3,costLv:3,costT:"중",
+ note:"아오시마·선화암 경관. 렌트 없이 니치난 해안 접근 어려움",
+ isNew:false},
+{name:"이세시마 + 토코나메",en:"Ise-Shima + Tokoname",flag:"🇯🇵",country:"일본",
+ group:"나고야 공항 기점\n이세시마=킨테쓰 1.5h, 토코나메=메이테쓰 10분",
+ direct:"p",directS:"나고야 직항 후 전철 1.5h",flightMin:210,flightT:"2h+1.5h",
+ car:"p",carS:"킨테쓰+버스, 일부 렌트 권장",
+ swim:"n",swimS:"18°C 수영 부적합",
+ food:4,beach:2,costLv:4,costT:"중~고",
+ note:"이세신궁 + 굴·이세에비 미식. 바다 수영보다 식도락 여행",
+ isNew:false},
+{name:"요코하마",en:"Yokohama",flag:"🇯🇵",country:"일본",
+ group:"도쿄 기점 — GMP→하네다 직항 → 전철 30분",
+ direct:"p",directS:"GMP→하네다 후 전철 30분",flightMin:150,flightT:"2h+0.5h",
+ car:"y",carS:"지하철·전철 완전 가능",
+ swim:"n",swimS:"18°C 도쿄만 수영 X",
+ food:4,beach:1,costLv:5,costT:"고",
+ note:"차이나타운·야경. 바다 여행으로 부적합. 도시 관광",
+ isNew:false},
+{name:"시즈오카 이즈",en:"Izu Peninsula",flag:"🇯🇵",country:"일본",
+ group:"도쿄 경유 or 시즈오카 공항\n이즈급행+버스 2h 추가",
+ direct:"p",directS:"시즈오카 or 도쿄 경유+2h",flightMin:270,flightT:"4h+",
+ car:"n",carS:"렌트 사실상 필수",
+ swim:"n",swimS:"18°C 수영 어려움",
+ food:3,beach:2,costLv:4,costT:"중~고",
+ note:"온천·해산물. 차 없이 이동 매우 불편",
+ isNew:false},
+{name:"시마네 마쓰에",en:"Matsue · Shimane",flag:"🇯🇵",country:"일본",
+ group:"요나고 공항 기점 → 버스 40분\n편수 적음 주의",
+ direct:"p",directS:"요나고 직항 (편수 적음)",flightMin:90,flightT:"1.5h",
+ car:"n",carS:"렌트 거의 필수",
+ swim:"n",swimS:"15°C 동해 5월 차가움",
+ food:3,beach:1,costLv:3,costT:"중",
+ note:"이즈모타이샤·마쓰에성. 바다·차 조건 모두 미충족",
+ isNew:false},
+{name:"이나게",en:"Inage Kaigan (Chiba)",flag:"🇯🇵",country:"일본",
+ group:"도쿄 경유 — JR 케이요선",
+ direct:"p",directS:"도쿄 경유 전철",flightMin:150,flightT:"2.5h",
+ car:"y",carS:"JR 연결",
+ swim:"n",swimS:"15°C 수영 불가",
+ food:2,beach:1,costLv:3,costT:"중",
+ note:"도쿄 근교 해변공원. 여행지로 매력 낮음",
+ isNew:false},
+{name:"후쿠오카",en:"Fukuoka · 糸島",flag:"🇯🇵",country:"일본",
+ group:"단독 — 후쿠오카 공항 직항\n이토시마 해변 버스 연결",
+ direct:"y",directS:"직항 (ICN·GMP)",flightMin:90,flightT:"1.5h",
+ car:"p",carS:"지하철(시내) + 이토시마 버스",
+ swim:"p",swimS:"19°C 이토시마 (아슬아슬)",
+ food:5,beach:2,costLv:3,costT:"중",
+ note:"라멘·모츠나베·명란 하카타 미식 압도적. 가깝고 맛있음",
+ isNew:true},
+{name:"괌",en:"Guam · Tumon Bay",flag:"🇺🇸",country:"미국령",
+ group:"단독 — 아가냐 공항",
+ direct:"y",directS:"직항 (ICN)",flightMin:240,flightT:"4h",
+ car:"p",carS:"셔틀·택시, 투몬 내 도보",
+ swim:"y",swimS:"28°C 투몬비치 스노클링",
+ food:3,beach:4,costLv:4,costT:"중~고",
+ note:"5월 비수기라 한산. 스노클링·다이빙 좋음. 투몬 집중 시 렌트 불필요",
+ isNew:true},
+{name:"사이판",en:"Saipan · Managaha",flag:"🇺🇸",country:"미국령",
+ group:"단독 — 사이판 공항",
+ direct:"y",directS:"직항 (ICN)",flightMin:240,flightT:"4h",
+ car:"p",carS:"셔틀·투어버스",
+ swim:"y",swimS:"28°C 마나가하섬",
+ food:2,beach:4,costLv:4,costT:"중~고",
+ note:"괌보다 한적하고 자연 그대로. 마나가하섬 투명도 최고. 식당은 단순",
+ isNew:true},
+];
+
+// 추천 점수 계산
+function calcScore(d) {
+  let s = 0;
+  s += d.beach * 5;                                    // 바다 25점
+  s += d.food * 5;                                     // 미식 25점
+  s += d.car==='y'? 20 : d.car==='p'? 12 : 0;         // 차없이 20점
+  s += d.swim==='y'? 15 : d.swim==='p'? 8 : 0;        // 수영 15점
+  s += d.direct==='y'? 10 : d.direct==='p'? 5 : 0;    // 직항 10점
+  s += [0, 5, 4, 3, 2, 1][d.costLv];                  // 비용 5점
+  return s;
+}
+D.forEach(d => d.score = calcScore(d));
+
+const F = {country:"all",direct:"all",swim:"all",car:"all",cost:"all"};
+let sortMode = "score";
+
+function starHTML(n, max=5) {
+  let h='';
+  for(let i=1;i<=max;i++) h+=`<div class="star ${i<=n?'star-on':'star-off'}"></div>`;
+  return h;
+}
+
+function render() {
+  let arr = [...D];
+  // Sort
+  if(sortMode==="score") arr.sort((a,b)=>b.score-a.score);
+  else if(sortMode==="flight") arr.sort((a,b)=>a.flightMin-b.flightMin);
+  else if(sortMode==="cost") arr.sort((a,b)=>a.costLv-b.costLv);
+  else if(sortMode==="food") arr.sort((a,b)=>b.food-a.food);
+  else if(sortMode==="beach") arr.sort((a,b)=>b.beach-a.beach);
+  else arr.sort((a,b)=>a.name.localeCompare(b.name,'ko'));
+
+  const c=document.getElementById('cards');
+  c.innerHTML='';
+  let shown=0;
+  arr.forEach(d=>{
+    const vis=chk(d);
+    if(vis) shown++;
+    const scCls = d.score>=70?'score-high':d.score>=50?'score-mid':'score-low';
+    const cCls = d.costLv<=2?'cost-l':d.costLv<=3?'cost-m':'cost-h';
+    const div=document.createElement('div');
+    div.className=`card${d.isNew?' is-new':''}${!vis?' hidden':''}`;
+    div.innerHTML=`
+      <div class="card-top">
+        <div class="card-score ${scCls}" style="--pct:${d.score}">
+          ${d.score}
+        </div>
+        <div class="card-meta">
+          <div class="card-country">${d.flag} ${d.country}</div>
+          <div class="card-cost ${cCls}">${d.costT}</div>
+        </div>
+      </div>
+      <div class="card-name">
+        ${d.name}
+        ${d.score>=75?'<span class="badge badge-top">TOP</span>':''}
+        ${d.isNew?'<span class="badge badge-new">NEW</span>':''}
+      </div>
+      <div class="card-en">${d.en}</div>
+      <div class="indicators">
+        <div class="ind">
+          <span class="ind-icon">${d.direct==='y'?'✈️':d.direct==='p'?'🔄':'❌'}</span>
+          <span class="ind-${d.direct==='y'?'y':d.direct==='p'?'p':'n'}">${d.directS}</span>
+        </div>
+        <div class="ind">
+          <span class="ind-icon">⏱</span>
+          <span>${d.flightT}</span>
+        </div>
+        <div class="ind">
+          <span class="ind-icon">${d.car==='y'?'🚇':d.car==='p'?'🚕':'🚗'}</span>
+          <span class="ind-${d.car==='y'?'y':d.car==='p'?'p':'n'}">${d.carS}</span>
+        </div>
+        <div class="ind">
+          <span class="ind-icon">${d.swim==='y'?'🏊':d.swim==='p'?'🌊':'❄️'}</span>
+          <span class="ind-${d.swim==='y'?'y':d.swim==='p'?'p':'n'}">${d.swimS}</span>
+        </div>
+      </div>
+      <div class="star-row">
+        <div class="star-label">미식</div>
+        <div class="stars">${starHTML(d.food)}</div>
+      </div>
+      <div class="star-row">
+        <div class="star-label">바다</div>
+        <div class="stars">${starHTML(d.beach)}</div>
+      </div>
+      <div class="card-group">${d.group}</div>
+      <div class="card-note">${d.note}</div>
+    `;
+    c.appendChild(div);
+  });
+  document.getElementById('cnt').innerHTML=`<b>${shown}</b>개 표시 중`;
+}
+
+function chk(d){
+  const{country,direct,swim,car,cost}=F;
+  if(country!=='all'&&d.country!==country) return false;
+  if(direct==='yes'&&d.direct!=='y') return false;
+  if(direct==='yp'&&d.direct==='n') return false;
+  if(swim==='yes'&&d.swim!=='y') return false;
+  if(swim==='yp'&&d.swim==='n') return false;
+  if(car==='yes'&&d.car!=='y') return false;
+  if(car==='yp'&&d.car==='n') return false;
+  if(cost==='lm'&&d.costLv>2) return false;
+  if(cost==='mid'&&d.costLv>3) return false;
+  return true;
+}
+
+document.querySelectorAll('.fb').forEach(b=>{
+  b.addEventListener('click',()=>{
+    const f=b.dataset.f,v=b.dataset.v;
+    F[f]=v;
+    document.querySelectorAll(`[data-f="${f}"]`).forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');
+    render();
+  });
+});
+
+document.querySelectorAll('.sort-btn').forEach(b=>{
+  b.addEventListener('click',()=>{
+    sortMode=b.dataset.s;
+    document.querySelectorAll('.sort-btn').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');
+    render();
+  });
+});
+
+function resetAll(){
+  Object.keys(F).forEach(k=>F[k]='all');
+  document.querySelectorAll('.fb').forEach(b=>b.classList.toggle('on',b.dataset.v==='all'));
+  render();
+}
+
+render();
+</script>
+</body>
+</html>
