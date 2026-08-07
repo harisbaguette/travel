@@ -36,20 +36,23 @@ A (DB 기반)  ──▶  B (API 라우트)  ──┐
 
 ---
 
-### 📦 A. Neon 데이터베이스 기반 만들기 — [Not started]
+### 📦 A. Neon 데이터베이스 기반 만들기 — [Done — Supabase 파일 정리만 D로 넘김]
 
 **담당 파일**: `src/lib/db.ts`(새로), `src/lib/schema.sql`(새로), `.env.example`, `README.md`
 
-- [ ] Neon 프로젝트 만들고 연결 문자열 받기 (무료 등급: 프로젝트 100개, 저장 0.5GB)
-- [ ] `npm i @neondatabase/serverless` — HTTP로 붙는 드라이버라 Vercel 서버리스에서 동작
-- [ ] `src/lib/db.ts` — `DATABASE_URL` 없으면 `null` 반환(키 없이도 앱이 그냥 돌아가야 함)
-- [ ] `src/lib/schema.sql` — 테이블 2개
-      `pins(id, room_id, lat, lng, type, name, memo, emoji, is_ai, created_at, created_by, updated_at)`
-      `itineraries(room_id pk, data jsonb, updated_at)`
-      + `pins(room_id)` 인덱스, `updated_at` 자동 갱신
-- [ ] `.env.example`·README를 Neon 기준으로 갈아엎기 (Supabase 문구 제거)
-- [ ] 기존 파일 삭제: `src/lib/supabase.ts`, `src/lib/supabaseServer.ts`
-- [ ] `npm uninstall @supabase/supabase-js`
+- [x] Neon 프로젝트 생성 완료 — `travel` (ap-southeast-1, Postgres 18)
+      접속 주소는 `.env.local`(git 무시)과 Vercel Production 환경변수에 등록됨
+- [x] `@neondatabase/serverless` 1.1.0 설치 (HTTP 드라이버 — Vercel 서버리스에서 동작)
+- [x] `src/lib/db.ts` — `getDb()`는 `DATABASE_URL` 없으면 `null`, `isDbReady()` 제공
+- [x] `src/lib/schema.sql` — `pins`(+`deleted` 칸) / `itineraries` 테이블,
+      `pins(room_id)`·`pins(room_id, updated_at)` 색인, `updated_at` 자동 갱신 트리거
+- [x] **실 DB에 스키마 적용 완료** — 넣기/고치기/"그 시각 이후 바뀐 것" 조회/일정 저장 전부 실행 확인
+- [x] `.env.example`·README를 Neon 기준으로 교체 (Supabase 문구 제거, 폴링 이유 설명 추가)
+- [ ] `src/lib/supabase.ts`·`supabaseServer.ts` 삭제 + `npm uninstall @supabase/supabase-js`
+      → **D로 이관**: 지금 지우면 `page.tsx`·API 라우트가 아직 import 중이라 빌드가 깨진다.
+- ℹ️ B가 알아야 할 것: 서버 라우트에서 `import { getDb } from "@/lib/db"` 후
+      `` const sql = getDb(); if (!sql) return Response.json({ ok: true, configured: false, pins: [] }) ``
+      스키마 칸 이름은 `snake_case`(`room_id`, `is_ai`, `created_by`, `updated_at`, `deleted`)
 
 ### 📦 B. API 라우트 Neon으로 교체 — [Not started] (A 이후)
 

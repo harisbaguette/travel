@@ -5,7 +5,7 @@
 
 - 지도: Leaflet + OpenStreetMap (무료, 키 불필요)
 - 맛집 찾기: Overpass API (OpenStreetMap 데이터, 무료)
-- 함께 편집: Supabase Realtime (키 없으면 자동으로 혼자 쓰기 모드)
+- 함께 편집: Neon (인터넷 Postgres) — 접속 주소가 없으면 자동으로 혼자 쓰기 모드
 
 ## 실행
 
@@ -27,47 +27,26 @@ npm run dev     # http://localhost:3000
 
 ## 함께 편집 켜기 (선택)
 
-Supabase 키가 없어도 앱은 그대로 동작한다 (내 브라우저에만 저장).
-여러 사람이 실시간으로 같이 편집하려면 `.env.local`을 만든다:
+접속 주소가 없어도 앱은 그대로 동작한다 (내 브라우저에만 저장).
+여러 사람이 같이 편집하려면 [Neon](https://neon.com)에서 무료 Postgres를 만들고
+`.env.local`에 접속 주소를 넣는다:
 
 ```bash
-NEXT_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+cp .env.example .env.local
+# DATABASE_URL=postgresql://...neon.tech/neondb?sslmode=require
 ```
 
-핀·일정을 서버에도 남기려면 Supabase SQL 편집기에서 아래를 실행한다
-(테이블 없이 실시간 방송만 써도 함께 편집은 동작한다):
+테이블은 `src/lib/schema.sql` 한 파일에 다 들어 있다. Neon 콘솔의 SQL 편집기에
+붙여넣거나 psql로 실행한다 (여러 번 실행해도 안전하다).
 
-```sql
-create table pins (
-  id text primary key,
-  room_id text not null,
-  lat double precision not null,
-  lng double precision not null,
-  type text not null,
-  name text not null,
-  memo text default '',
-  emoji text default '',
-  is_ai boolean default false,
-  created_at bigint not null,
-  created_by text default ''
-);
-create index pins_room_idx on pins(room_id);
-alter table pins enable row level security;
-create policy "anyone can read/write" on pins for all using (true) with check (true);
+### 왜 폴링인가
 
-create table itineraries (
-  room_id text primary key,
-  data jsonb not null,
-  updated_at timestamptz default now()
-);
-alter table itineraries enable row level security;
-create policy "anyone can read/write" on itineraries for all using (true) with check (true);
-```
-
-> 위 정책은 링크를 아는 사람이면 누구나 읽고 쓸 수 있는 설정이다. 공개 여행 계획용으로만 쓴다.
+Neon은 데이터베이스만 제공하고, Supabase처럼 "바뀌면 즉시 알려주는" 기능은 없다.
+그래서 이 앱은 3초마다 "그 시각 이후 바뀐 것 있어?"라고 물어보는 방식으로 맞춘다.
+바뀐 것만 골라 오므로 오가는 양이 적고, 다른 탭을 보고 있으면 아예 묻지 않는다.
+두세 명이 여행 계획을 짜는 용도에는 이 정도로 충분하다.
 
 ## 배포
 
 Vercel에 그대로 올라간다. 함께 편집을 쓸 경우 Vercel 프로젝트 설정에
-위 환경 변수 2개를 등록한다.
+`DATABASE_URL` 하나만 등록하면 된다.
