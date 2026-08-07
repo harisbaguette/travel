@@ -19,12 +19,13 @@ import {
   EMPTY_ITINERARY,
 } from "@/lib/itineraryStorage";
 import { getUserId } from "@/lib/user";
-import { isSupabaseReady } from "@/lib/supabase";
 import {
-  broadcastItinerary,
-  broadcastPins,
-  subscribeToRoom,
-} from "@/lib/realtime";
+  applyPinChanges,
+  pushItinerary,
+  pushPin,
+  pushPinDelete,
+  useRoomSync,
+} from "@/lib/sync";
 import PinModal from "@/components/PinModal";
 import Sidebar from "@/components/Sidebar";
 
@@ -107,53 +108,32 @@ export default function Home() {
 
   // 로그인 없이 브라우저를 구분하는 ID — 렌더에도 쓰이므로 state(첫 렌더에 한 번만 계산).
   const [userId] = useState<string>(() => getUserId());
-  const realtimeUnsub = useRef<(() => void) | null>(null);
-  // 외부(다른 사용자)로부터 들어온 변경 표시 — broadcast echo 무한루프 방지용.
-  const applyingRemote = useRef(false);
 
-  // 핀 저장 — 로컬 + 브로드캐스트
+  // 핀·일정 로컬 저장 — 서버 전송은 각 조작 핸들러에서 따로 한다.
   useEffect(() => {
     savePins(room, pins);
-    if (!applyingRemote.current) broadcastPins(room, pins);
   }, [room, pins]);
 
-  // 일정 저장 — 로컬 + 브로드캐스트
   useEffect(() => {
     saveItinerary(room, itinerary);
-    if (!applyingRemote.current) broadcastItinerary(room, itinerary);
   }, [room, itinerary]);
 
-  // 실시간 구독 — room 바뀔 때마다 재구독
-  useEffect(() => {
-    realtimeUnsub.current?.();
-    if (!room || !isSupabaseReady()) {
-      realtimeUnsub.current = null;
-      return;
-    }
-    realtimeUnsub.current = subscribeToRoom(room, {
-      onPins: (remote) => {
-        applyingRemote.current = true;
-        setPins(remote);
-        savePins(room, remote);
-        // 다음 틱에 플래그 해제 — 로컬 저장 effect가 원격 변경 저장도 broadcast 안 하도록.
-        setTimeout(() => {
-          applyingRemote.current = false;
-        }, 0);
-      },
-      onItinerary: (remote) => {
-        applyingRemote.current = true;
-        setItinerary(remote);
-        saveItinerary(room, remote);
-        setTimeout(() => {
-          applyingRemote.current = false;
-        }, 0);
-      },
-    });
-    return () => {
-      realtimeUnsub.current?.();
-      realtimeUnsub.current = null;
-    };
-  }, [room]);
+  // 3초 폴링 동기화 — 다른 사람의 변경분을 받아 합친다(내 변경의 메아리는 sync가 걸러줌).
+  const { enabled: syncEnabled } = useRoomSync(room, {
+    onPinChanges: (upserts, deletedIds) => {
+      setPins((prev) => applyPinChanges(prev, upserts, deletedIds));
+      if (deletedIds.length > 0) {
+        setItinerary((prev) => ({
+          ...prev,
+          days: prev.days.map((d) => ({
+            ...d,
+            pinIds: d.pinIds.filter((pid) => !deletedIds.includes(pid)),
+          })),
+        }));
+      }
+    },
+    onItinerary: (remote) => setItinerary(remote),
+  });
 
   const handleMapReady = useCallback((map: LeafletMap) => {
     mapRef.current = map;
@@ -228,25 +208,32 @@ export default function Home() {
       createdBy: userId || undefined,
     };
     setPins((prev) => [...prev, newPin]);
+    void pushPin(room, newPin);
     setModalCoord(null);
   };
 
-  const handlePinDelete = useCallback((id: string) => {
-    setPins((prev) => prev.filter((p) => p.id !== id));
-    // 일정에서도 해당 핀 제거
-    setItinerary((prev) => ({
-      ...prev,
-      days: prev.days.map((d) => ({ ...d, pinIds: d.pinIds.filter((pid) => pid !== id) })),
-    }));
-  }, []);
+  const handlePinDelete = useCallback(
+    (id: string) => {
+      setPins((prev) => prev.filter((p) => p.id !== id));
+      void pushPinDelete(room, id);
+      // 일정에서도 해당 핀 제거
+      setItinerary((prev) => ({
+        ...prev,
+        days: prev.days.map((d) => ({ ...d, pinIds: d.pinIds.filter((pid) => pid !== id) })),
+      }));
+    },
+    [room]
+  );
 
   const handlePinDragEnd = useCallback(
     (id: string, lat: number, lng: number) => {
       setPins((prev) =>
         prev.map((p) => (p.id === id ? { ...p, lat, lng } : p))
       );
+      const moved = pins.find((p) => p.id === id);
+      if (moved) void pushPin(room, { ...moved, lat, lng });
     },
-    []
+    [pins, room]
   );
 
   const handlePinClick = useCallback((pin: Pin) => {
@@ -282,26 +269,34 @@ export default function Home() {
         setNotice(data.error ?? "맛집 검색에 실패했어요");
         return;
       }
-      setPins((prev) => {
-        const filtered = data.pins!.filter(
-          (np) =>
-            !prev.some(
-              (ep) => distanceMeters(ep.lat, ep.lng, np.lat, np.lng) < 50
-            )
-        );
-        if (filtered.length === 0) {
-          setNotice("새로운 맛집을 찾지 못했어요");
-          return prev;
-        }
-        setNotice(`맛집 ${filtered.length}개를 찾았어요 🍜`);
-        return [...prev, ...filtered];
-      });
+      const fresh = data.pins.filter(
+        (np) =>
+          !pins.some(
+            (ep) => distanceMeters(ep.lat, ep.lng, np.lat, np.lng) < 50
+          )
+      );
+      if (fresh.length === 0) {
+        setNotice("새로운 맛집을 찾지 못했어요");
+        return;
+      }
+      setNotice(`맛집 ${fresh.length}개를 찾았어요 🍜`);
+      setPins((prev) => [...prev, ...fresh]);
+      for (const p of fresh) void pushPin(room, p);
     } catch {
       setNotice("맛집 검색 중 문제가 생겼어요");
     } finally {
       setAILoading(false);
     }
-  }, []);
+  }, [pins, room]);
+
+  // 일정 변경 — 로컬 반영 + 서버 전송(내부에서 0.8초 모아 보냄)
+  const handleItineraryChange = useCallback(
+    (it: Itinerary) => {
+      setItinerary(it);
+      pushItinerary(room, it);
+    },
+    [room]
+  );
 
   // 초대 링크 복사
   const handleCopyInvite = useCallback(async () => {
@@ -396,10 +391,10 @@ export default function Home() {
         </div>
       )}
 
-      {/* Supabase 미설정 안내 — 작게 */}
-      {!isSupabaseReady() && (
+      {/* DB 미연결 안내 — 작게 */}
+      {!syncEnabled && (
         <div className="shrink-0 bg-[var(--surface-hover)] px-4 py-1.5 text-xs text-[var(--text-muted)]">
-          아직 혼자만 사용 중 — 초대 링크로 함께 편집하려면 Supabase 키 설정이 필요해요.
+          아직 혼자만 사용 중 — 초대 링크로 함께 편집하려면 서버 데이터베이스(Neon) 연결이 필요해요.
         </div>
       )}
 
@@ -428,7 +423,7 @@ export default function Home() {
             onAISearch={handleAISearch}
             onPinClick={handlePinClick}
             onPinDelete={handlePinDelete}
-            onItineraryChange={setItinerary}
+            onItineraryChange={handleItineraryChange}
           />
         </div>
       </div>
@@ -441,7 +436,7 @@ export default function Home() {
         onAISearch={handleAISearch}
         onPinClick={handlePinClick}
         onPinDelete={handlePinDelete}
-        onItineraryChange={setItinerary}
+        onItineraryChange={handleItineraryChange}
       />
 
       {modalCoord && (

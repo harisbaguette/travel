@@ -48,8 +48,9 @@ A (DB 기반)  ──▶  B (API 라우트)  ──┐
       `pins(room_id)`·`pins(room_id, updated_at)` 색인, `updated_at` 자동 갱신 트리거
 - [x] **실 DB에 스키마 적용 완료** — 넣기/고치기/"그 시각 이후 바뀐 것" 조회/일정 저장 전부 실행 확인
 - [x] `.env.example`·README를 Neon 기준으로 교체 (Supabase 문구 제거, 폴링 이유 설명 추가)
-- [ ] `src/lib/supabase.ts`·`supabaseServer.ts` 삭제 + `npm uninstall @supabase/supabase-js`
-      → **D로 이관**: 지금 지우면 `page.tsx`·API 라우트가 아직 import 중이라 빌드가 깨진다.
+- [ ] `supabase.ts`는 D에서 삭제 완료. 남은 것: `supabaseServer.ts` 삭제 +
+      `npm uninstall @supabase/supabase-js` → **B로 이관**: API 라우트가 아직 import 중,
+      B의 라우트 교체가 끝나면 함께 정리.
 - ℹ️ B가 알아야 할 것: 서버 라우트에서 `import { getDb } from "@/lib/db"` 후
       `` const sql = getDb(); if (!sql) return Response.json({ ok: true, configured: false, pins: [] }) ``
       스키마 칸 이름은 `snake_case`(`room_id`, `is_ai`, `created_by`, `updated_at`, `deleted`)
@@ -80,19 +81,21 @@ A (DB 기반)  ──▶  B (API 라우트)  ──┐
 - [x] 화면이 안 보이면(다른 탭) 폴링 멈추기 — `document.visibilityState`
 - [x] 내가 방금 바꾼 건 되돌아와도 무시(내 것이 최신) — `updated_at` 큰 쪽이 이김
 - [x] DB 미설정이면 폴링 자체를 하지 않음 (`configured:false`거나 `serverNow` 없으면 정지)
-- [ ] `src/lib/realtime.ts` 삭제 → **D로 이관**: 지금 지우면 `page.tsx`가 아직 import 중이라
-      빌드가 깨진다. D에서 page.tsx 배선을 `useRoomSync`로 바꾸면서 같이 지울 것.
+- [x] `src/lib/realtime.ts` 삭제 — D 배선 교체와 함께 삭제 완료
 - ⚠️ B 구현 시 응답 규격은 `src/lib/sync.ts` 상단 주석 참조
       (`GET /api/pins`가 `configured`·`serverNow`·`updatedAt`·`deleted`를 반드시 포함해야 폴링이 동작)
 
-### 📦 D. 화면 배선 — [Not started] (B·C 이후)
+### 📦 D. 화면 배선 — [Done] (B·C 이후)
 
 **담당 파일**: `src/app/page.tsx`
 
-- [ ] `subscribeToRoom`/`broadcastPins`/`broadcastItinerary` 호출 제거 → `useRoomSync`로 교체
-- [ ] 핀 추가·삭제·이동 시 서버에도 보내기(실패해도 로컬은 유지)
-- [ ] 안내 배너 문구를 Neon 기준으로 수정
-- [ ] `isSupabaseReady` 사용처 정리
+- [x] `subscribeToRoom`/`broadcastPins`/`broadcastItinerary` 호출 제거 → `useRoomSync`로 교체
+      (받은 변경분은 `applyPinChanges`로 합치고, 지워진 핀은 일정에서도 제거)
+- [x] 핀 추가·삭제·이동·AI 맛집 추가 시 서버에도 보내기(실패해도 로컬은 유지) —
+      `pushPin`/`pushPinDelete`, 일정은 `pushItinerary`(0.8초 디바운스)
+- [x] 안내 배너 문구를 Neon 기준으로 수정 — `{enabled}`가 false로 판명될 때만 표시
+- [x] `isSupabaseReady` 사용처 정리 + `src/lib/realtime.ts`·`src/lib/supabase.ts` 삭제
+      (`supabaseServer.ts`와 `npm uninstall`은 B 완료 후 — 라우트가 아직 import 중)
 
 ### 📦 E. 배포·실측 — [Not started] (D 이후)
 
