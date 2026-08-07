@@ -63,18 +63,22 @@ A (DB 기반)  ──▶  B (API 라우트)  ──┐
 - [ ] DB 미설정이면 `{ok:true, pins:[]}` 같은 빈 응답 — 오류 대신 조용히 혼자 쓰기 모드
 - [ ] 입력값 검증(방 이름 길이, 좌표 범위, 이름 길이) — 아무 값이나 들어오면 거절
 
-### 📦 C. 클라이언트 동기화(폴링) — [Not started] (A 이후, B와 동시 가능)
+### 📦 C. 클라이언트 동기화(폴링) — [Done — realtime.ts 삭제만 D로 넘김] (A 이후, B와 동시 가능)
 
 **담당 파일**: `src/lib/sync.ts`(새로), `src/lib/realtime.ts`(삭제)
 
 > Neon에는 Supabase 같은 "바뀌면 알려주는" 기능이 없다. 그래서 3초마다
 > "새로 바뀐 거 있어?"라고 물어보는 방식으로 만든다. 사람 2~5명 쓰는 앱엔 충분하다.
 
-- [ ] `useRoomSync(room)` — 3초 주기로 `?since=마지막시각` 조회, 바뀐 것만 합치기
-- [ ] 화면이 안 보이면(다른 탭) 폴링 멈추기 — `document.visibilityState`
-- [ ] 내가 방금 바꾼 건 되돌아와도 무시(내 것이 최신) — `updated_at` 큰 쪽이 이김
-- [ ] DB 미설정이면 폴링 자체를 하지 않음
-- [ ] `src/lib/realtime.ts` 삭제
+- [x] `useRoomSync(room)` — 3초 주기로 `?since=마지막시각` 조회, 바뀐 것만 합치기
+      (+ `pushPin`/`pushPinDelete`/`pushItinerary` 전송 함수, `applyPinChanges` 합치기 도우미 — D가 쓸 것)
+- [x] 화면이 안 보이면(다른 탭) 폴링 멈추기 — `document.visibilityState`
+- [x] 내가 방금 바꾼 건 되돌아와도 무시(내 것이 최신) — `updated_at` 큰 쪽이 이김
+- [x] DB 미설정이면 폴링 자체를 하지 않음 (`configured:false`거나 `serverNow` 없으면 정지)
+- [ ] `src/lib/realtime.ts` 삭제 → **D로 이관**: 지금 지우면 `page.tsx`가 아직 import 중이라
+      빌드가 깨진다. D에서 page.tsx 배선을 `useRoomSync`로 바꾸면서 같이 지울 것.
+- ⚠️ B 구현 시 응답 규격은 `src/lib/sync.ts` 상단 주석 참조
+      (`GET /api/pins`가 `configured`·`serverNow`·`updatedAt`·`deleted`를 반드시 포함해야 폴링이 동작)
 
 ### 📦 D. 화면 배선 — [Not started] (B·C 이후)
 
