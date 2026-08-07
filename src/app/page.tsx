@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import type { Map as LeafletMap } from "leaflet";
 import { resolveCity, type LatLng } from "@/lib/cities";
@@ -18,11 +18,18 @@ const MapView = dynamic(() => import("@/components/MapView"), {
 // 임시 여행 방 목록 — 기능은 나중에
 const ROOMS = ["새 방 만들기", "오사카 5월", "가오슝 6월"];
 
+// localStorage에서 안전하게 값 읽기 (SSR 시 빈 문자열)
+function readStoredRoom(): string {
+  if (typeof window === "undefined") return "";
+  return window.localStorage.getItem("currentRoom") ?? "";
+}
+
 export default function Home() {
   const mapRef = useRef<LeafletMap | null>(null);
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
-  const [room, setRoom] = useState<string>("");
+  // lazy 초기값으로 localStorage 복원 — effect 안에서 setState 금지 규칙 회피
+  const [room, setRoom] = useState<string>(readStoredRoom);
   const [notice, setNotice] = useState<string>("");
 
   // 지도 인스턴스 저장 (onReady 콜백)
@@ -30,13 +37,7 @@ export default function Home() {
     mapRef.current = map;
   }, []);
 
-  // localStorage에서 마지막 선택 방 복원
-  useEffect(() => {
-    const saved = localStorage.getItem("currentRoom");
-    if (saved) setRoom(saved);
-  }, []);
-
-  // 방 변경 시 localStorage에 저장
+  // 방 변경 시 localStorage에 저장 (state는 이벤트 핸들러에서만 변경)
   const handleRoomChange = (value: string) => {
     setRoom(value);
     if (value && value !== "새 방 만들기") {
