@@ -106,12 +106,21 @@ export async function POST(request: Request): Promise<Response> {
   const query = buildQuery({ north, south, east, west });
 
   let elements: OverpassElement[] | null = null;
+  const failures: string[] = [];
   for (const mirror of OVERPASS_MIRRORS) {
     try {
       elements = await fetchFromMirror(mirror, query);
       break;
-    } catch {
-      // 이 서버는 실패 — 다음 미러로
+    } catch (err) {
+      // 이 서버는 실패 — 다음 미러로 (실패 사유는 진단용으로 수집)
+      const host = new URL(mirror).host;
+      const reason =
+        err instanceof Error
+          ? err.name === "AbortError" || err.name === "TimeoutError"
+            ? "timeout"
+            : err.message
+          : String(err);
+      failures.push(`${host}: ${reason}`);
     }
   }
 
@@ -121,6 +130,7 @@ export async function POST(request: Request): Promise<Response> {
         ok: false,
         error:
           "지도 정보를 주는 서버들이 지금 모두 바빠요. 잠시 뒤 다시 시도해 주세요.",
+        detail: failures,
       },
       { status: 502 }
     );
