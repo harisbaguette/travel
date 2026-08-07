@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Itinerary, Pin } from "./types";
 
 // 폴링 동기화 — Neon(Postgres)에는 Supabase처럼 "바뀌면 알려주는" 기능이 없어서
@@ -89,7 +89,20 @@ export async function pushPinDelete(room: string, id: string): Promise<boolean> 
   }
 }
 
-export async function pushItinerary(room: string, it: Itinerary): Promise<boolean> {
+// 일정은 타이핑·드래그마다 바뀌므로 0.8초 잠잠해질 때까지 모았다가 한 번만 보낸다.
+const ITINERARY_DEBOUNCE_MS = 800;
+let itineraryTimer: ReturnType<typeof setTimeout> | null = null;
+
+export function pushItinerary(room: string, it: Itinerary): void {
+  if (!room || dbConfigured === false) return;
+  if (itineraryTimer) clearTimeout(itineraryTimer);
+  itineraryTimer = setTimeout(() => {
+    itineraryTimer = null;
+    void sendItinerary(room, it);
+  }, ITINERARY_DEBOUNCE_MS);
+}
+
+async function sendItinerary(room: string, it: Itinerary): Promise<boolean> {
   if (!room || dbConfigured === false) return false;
   try {
     const res = await fetch("/api/itinerary", {
@@ -129,9 +142,20 @@ export interface RoomSyncHandlers {
   onPinChanges: (upserts: Pin[], deletedIds: string[]) => void;
   // 다른 사람이 바꾼 일정. 넘어오면 통째로 교체하면 된다.
   onItinerary?: (it: Itinerary) => void;
+  // DB 연결 여부가 판명되면 알려준다(미연결 안내 배너용).
+  onConfigured?: (configured: boolean) => void;
 }
 
-export function useRoomSync(room: string, handlers: RoomSyncHandlers): void {
+export interface RoomSyncState {
+  // DB가 붙어 있어 함께 편집이 되는지. 처음엔 true(하이드레이션 안전),
+  // 서버가 "DB 미설정"이라고 알려주면 false로 바뀐다 — 안내 배너용.
+  enabled: boolean;
+}
+
+export function useRoomSync(room: string, handlers: RoomSyncHandlers): RoomSyncState {
+  // 첫 화면(서버 렌더 포함)에선 아직 모르니 true로 시작 — 하이드레이션 안전.
+  // 이 세션에서 이미 "미설정"으로 판명났으면 처음부터 false.
+  const [enabled, setEnabled] = useState(() => dbConfigured !== false);
   // 핸들러는 ref로 들고 있어 렌더마다 폴링이 재시작되지 않게 한다.
   const handlersRef = useRef(handlers);
   useEffect(() => {
@@ -139,8 +163,8 @@ export function useRoomSync(room: string, handlers: RoomSyncHandlers): void {
   });
 
   useEffect(() => {
-    if (!room || typeof window === "undefined") return;
-    if (dbConfigured === false) return;
+    if (typeof window === "undefined") return;
+    if (dbConfigured === false || !room) return;
 
     let stopped = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -172,6 +196,7 @@ export function useRoomSync(room: string, handlers: RoomSyncHandlers): void {
         ) {
           dbConfigured = false;
           stopped = true;
+          setEnabled(false);
           return;
         }
         dbConfigured = true;
@@ -237,4 +262,6 @@ export function useRoomSync(room: string, handlers: RoomSyncHandlers): void {
       document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [room]);
+
+  return { enabled };
 }

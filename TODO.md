@@ -73,8 +73,10 @@ A (DB 기반)  ──▶  B (API 라우트)  ──┐
 > Neon에는 Supabase 같은 "바뀌면 알려주는" 기능이 없다. 그래서 3초마다
 > "새로 바뀐 거 있어?"라고 물어보는 방식으로 만든다. 사람 2~5명 쓰는 앱엔 충분하다.
 
-- [x] `useRoomSync(room)` — 3초 주기로 `?since=마지막시각` 조회, 바뀐 것만 합치기
-      (+ `pushPin`/`pushPinDelete`/`pushItinerary` 전송 함수, `applyPinChanges` 합치기 도우미 — D가 쓸 것)
+- [x] `useRoomSync(room, handlers)` — 3초 주기로 `?since=마지막시각` 조회, 바뀐 것만 합치기.
+      `{enabled}` 반환(DB 미설정 판명 시 false — 안내 배너용, 초기값 true라 하이드레이션 안전)
+      (+ `pushPin`/`pushPinDelete`/`pushItinerary`(0.8초 디바운스) 전송 함수,
+      `applyPinChanges` 합치기 도우미 — D가 쓸 것)
 - [x] 화면이 안 보이면(다른 탭) 폴링 멈추기 — `document.visibilityState`
 - [x] 내가 방금 바꾼 건 되돌아와도 무시(내 것이 최신) — `updated_at` 큰 쪽이 이김
 - [x] DB 미설정이면 폴링 자체를 하지 않음 (`configured:false`거나 `serverNow` 없으면 정지)
