@@ -142,8 +142,6 @@ export interface RoomSyncHandlers {
   onPinChanges: (upserts: Pin[], deletedIds: string[]) => void;
   // 다른 사람이 바꾼 일정. 넘어오면 통째로 교체하면 된다.
   onItinerary?: (it: Itinerary) => void;
-  // DB 연결 여부가 판명되면 알려준다(미연결 안내 배너용).
-  onConfigured?: (configured: boolean) => void;
 }
 
 export interface RoomSyncState {
