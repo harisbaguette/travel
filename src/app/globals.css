@@ -117,6 +117,17 @@ body {
   overflow: hidden;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.02), 0 20px 40px rgba(0, 0, 0, 0.1);
   padding-top: env(safe-area-inset-top);
+  /* 아래 메뉴가 차지하는 높이(위여백 36 + 막대 68 + 아래여백 12 + 안전 여백).
+     지도가 메뉴 뒤까지 깔리므로, 지도 위 작은 단추들은 이만큼 띄워 가리지 않게 한다. */
+  --dock-space: calc(116px + env(safe-area-inset-bottom));
+}
+
+/* 지도 판 — 위 알약 줄과 아래 메뉴 뒤까지 화면 전체에 깔린다.
+   위에 얹히는 것들은 모두 z 999 이상이라 지도(0)보다 앞에 온다. */
+.map-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
 }
 @media (max-width: 480px) {
   body {
@@ -148,10 +159,14 @@ body {
   /* 탭 화면 덮개(z 1010)보다 위 — 안 그러면 위로 튀어나온 + 단추의 윗부분이 덮개에 잘린다 */
   position: relative;
   z-index: 1020;
-  /* 위 여백은 가운데 + 단추가 튀어나올 자리 — dock-wrap이 relative라 여기 안에서 겹치지 않는다 */
-  padding: 12px 14px calc(12px + env(safe-area-inset-bottom)) 14px;
+  /* 위 여백은 가운데 + 단추가 튀어나올 자리 — Doweek 원본 수치(36px) 그대로 */
+  padding: 36px 14px calc(12px + env(safe-area-inset-bottom)) 14px;
   background: var(--bg);
   flex-shrink: 0;
+}
+/* 지도를 볼 때 — 메뉴 바탕을 비워, 유리판 옆과 뒤로 지도가 그대로 보이게 한다 */
+.dock-nav--float {
+  background: transparent;
 }
 .dock-wrap {
   position: relative;
@@ -162,15 +177,17 @@ body {
 }
 .dock-glass {
   position: relative;
+  /* 고정값: .dock-fab(z-index:1)보다 반드시 위여야 + 단추가 이 막대 뒤로 걸친다. 내리지 말 것. */
   z-index: 2;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   align-items: center;
   min-height: var(--dock-height);
   padding: 9px 6px 8px;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: saturate(180%) blur(24px);
-  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  /* 고정값: 알파를 1 아래로 내리지 말 것 — dock-nav가 이미 불투명(var(--bg))이라
+     반투명해서 얻는 배경은 없고, 대신 뒤에 겹친 + 단추(z-index:1) 파란색이
+     비쳐 보이는 부작용만 생긴다(사용자 08-08 지적). 흐림 효과도 같은 이유로 뺐다. */
+  background: #fff;
   border-radius: 24px;
   border: 1px solid rgba(255, 255, 255, 0.8);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 0 0 0.5px rgba(0, 0, 0, 0.04),
@@ -259,29 +276,59 @@ body {
 .dock-glass--4 {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
-/* 독 가운데서 위로 튀어나온 파란 + 단추 — Doweek FAB 이식 */
+/* 독 가운데서 위로 튀어나온 파란 + 단추 — Doweek BottomNav.jsx 원본 수치를 그대로 옮김.
+   출처: Doweek-recovered/src/shared/components/BottomNav.jsx의 .dock-fab 블록.
+   고정값: 이후 어떤 수정에서도 이 파일 수치(크기·위치·그림자)를 임의로 바꾸지 말고,
+   바꿔야 하면 반드시 원본 BottomNav.jsx를 먼저 고치고 그 값을 그대로 다시 옮길 것. */
 .dock-fab {
   position: absolute;
-  /* 가운데 탭(비서) 아이콘과 겹쳐 못 누르지 않도록, 살짝만 걸치고 대부분 막대 위로 뜨게 */
-  top: -50px;
+  top: 0;
   left: 50%;
-  transform: translateX(-50%);
-  z-index: 5;
+  transform: translate(-50%, -66%);
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 56px;
-  height: 56px;
-  border: none;
-  border-radius: 9999px;
+  border: 4px solid var(--bg);
   background: var(--accent);
-  color: #fff;
   cursor: pointer;
-  box-shadow: 0 0 0 4px var(--bg), 0 10px 20px -6px rgba(0, 0, 0, 0.35);
-  transition: opacity 0.18s, transform 0.12s;
+  padding: 0;
+  /* 고정값: .dock-glass(z-index:2)보다 반드시 아래(1)여야 단추 아랫부분이 막대 뒤로 걸친다. */
+  z-index: 1;
+  transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.22s, opacity 0.18s;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 0 0 1px rgba(15, 23, 42, 0.08),
+    0 8px 20px -4px color-mix(in srgb, var(--accent) 58%, transparent),
+    0 3px 8px -2px rgba(0, 0, 0, 0.15);
+}
+.dock-fab::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.3);
+  pointer-events: none;
+}
+.dock-fab svg {
+  transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@media (hover: hover) and (pointer: fine) {
+  .dock-fab:hover {
+    transform: translate(-50%, -68%);
+  }
+  .dock-fab:hover svg {
+    transform: rotate(90deg);
+  }
 }
 .dock-fab:active {
-  transform: translateX(-50%) scale(0.93);
+  transform: translate(-50%, -66%) scale(0.94);
+  transition: transform 0.1s;
+}
+.dock-fab:active svg {
+  transform: rotate(45deg);
+  transition: transform 0.1s;
 }
 .dock-fab--hidden {
   opacity: 0;
@@ -426,71 +473,103 @@ body {
   }
 }
 
-/* ── 여행 화면의 접이식 구역 ── */
-.trip-section {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+/* ── 준비 화면 항목 고르기 — Doweek 필터 줄 이식(접이식 머리 대체) ──
+   흰 알약 판 안에서 하나만 채워지고, 남은 개수는 오른쪽 작은 원에 붙는다.
+   칩이 화면보다 길면 줄 안에서 옆으로 밀려 스크롤된다. */
+.prep-filter-wrap {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  /* 부모 좌우 여백(16px)을 넘어 화면 끝까지 밀리게 — 스크롤이 잘려 보이지 않는다. */
+  margin: 0 -16px;
+  padding: 0 16px 12px;
+  background: var(--bg);
 }
-.trip-section-head {
+.prep-filter {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  min-height: 48px;
-  padding: 0 14px;
-  border: none;
-  border-radius: var(--radius-card);
+  gap: 2px;
+  padding: 4px;
+  border-radius: 18px;
   background: var(--surface);
   box-shadow: var(--shadow-1);
-  color: var(--text);
-  text-align: left;
-  cursor: pointer;
-  font-family: inherit;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
 }
-.trip-section-title {
-  font-size: 0.95rem;
-  font-weight: 700;
+.prep-filter::-webkit-scrollbar {
+  display: none;
 }
-.trip-section-hint {
-  margin-left: auto;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--text-muted);
-}
-.trip-section-chevron {
-  flex-shrink: 0;
-  color: var(--text-muted);
-  transition: transform 0.16s var(--ease);
-}
-.trip-section-chevron.up {
-  transform: rotate(180deg);
-}
-.trip-section-body {
-  padding: 0 2px 4px;
-}
-
-/* ── 지도 위 보기 전환(지도 | 리스트) — 독과 같은 유리판 문법 ── */
-.map-seg {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  padding: 4px;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: saturate(180%) blur(24px);
-  -webkit-backdrop-filter: saturate(180%) blur(24px);
-  border-radius: 9999px;
-  border: 1px solid rgba(255, 255, 255, 0.8);
-  box-shadow: var(--shadow-2), 0 0 0 0.5px rgba(0, 0, 0, 0.04);
-}
-.map-seg-item {
-  min-width: 76px;
-  height: 44px;
+.prep-chip {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 14px;
   border: none;
-  border-radius: 9999px;
+  border-radius: 14px;
   background: transparent;
   color: var(--text-muted);
   font-family: inherit;
-  font-size: 0.875rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.18s var(--ease), color 0.18s var(--ease);
+}
+.prep-chip.active {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+}
+.prep-chip-badge {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 9999px;
+  background: var(--surface-hover);
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+}
+.prep-chip.active .prep-chip-badge {
+  background: rgba(255, 255, 255, 0.24);
+  color: #fff;
+}
+.prep-body {
+  padding: 0 2px 4px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .prep-chip:not(.active):hover {
+    background: var(--surface-hover);
+    color: var(--text);
+  }
+}
+
+/* ── 보기 전환 마디(지도 | 리스트) — Doweek 세그먼트 문법:
+   흰 판 한 줄을 가로로 꽉 채우고, 고른 쪽만 파란 알약으로 채운다. ── */
+.map-seg {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px;
+  width: 100%;
+  padding: 4px;
+  background: var(--surface);
+  border-radius: 18px;
+  box-shadow: var(--shadow-1);
+}
+.map-seg-item {
+  min-width: 0;
+  height: 44px;
+  border: none;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.9375rem;
   font-weight: 600;
   cursor: pointer;
   transition: background 0.18s var(--ease), color 0.18s var(--ease);
@@ -498,7 +577,8 @@ body {
 .map-seg-item.active {
   background: var(--accent);
   color: #fff;
-  font-weight: 700;
+  font-weight: 800;
+  box-shadow: 0 2px 8px -2px color-mix(in srgb, var(--accent) 50%, transparent);
 }
 
 /* ── 바닥에서 올라오는 입력 시트 — Doweek add-modal 이식 ── */
@@ -716,7 +796,8 @@ body {
   width: 20px;
   height: 20px;
   padding: 0 !important;
-  margin: 0 6px 6px 0 !important;
+  /* 지도가 아래 메뉴 뒤까지 깔리므로, 출처 표기 ⓘ 를 메뉴 위로 올려 가리지 않게 한다 */
+  margin: 0 6px calc(var(--dock-space) + 6px) 0 !important;
   font-size: 0;
   line-height: 0;
   border-radius: 999px;
@@ -755,12 +836,12 @@ body {
   color: var(--text-faint) !important;
 }
 
-/* 내 위치 단추 — 지도 오른쪽 아래. 자리 고르는 중엔 아래 확인/취소 막대(48px+16px)가
-   같은 자리를 쓰므로, 겹치지 않게 그 위 72px에 둔다. */
+/* 내 위치 단추 — 지도 오른쪽 아래. 지도가 아래 메뉴 뒤까지 깔리므로 메뉴 높이만큼 올리고,
+   자리 고르는 중엔 확인/취소 막대(48px+16px)가 그 위를 쓰므로 다시 72px 더 올려 둔다. */
 .map-locate-btn {
   position: absolute;
   right: 16px;
-  bottom: 72px;
+  bottom: calc(var(--dock-space) + 72px);
   z-index: 1000;
   width: 44px;
   height: 44px;
