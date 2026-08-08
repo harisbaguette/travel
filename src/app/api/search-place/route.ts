@@ -8,6 +8,25 @@ interface PlaceResult {
   name: string;
   lat: number;
   lng: number;
+  /** 구글이 알려 준 주소 — 못 찾으면 빈 칸. */
+  address?: string;
+}
+
+// 구글이 실어 보내는 글자들 중 주소를 골라낸다.
+// 주소는 거의 항상 두 벌로 들어 있다 — "주소"와 "주소 + 가게이름". 앞이 뒤의 앞부분과
+// 똑같다는 성질로 골라내면 나라·언어를 가리지 않는다.
+// simplify: 구글이 형식을 바꾸면 빈 칸이 된다 — 부르는 쪽이 빈 칸을 정상으로 다룬다.
+function pickAddress(raw: string): string {
+  const seen = [...raw.matchAll(/"([^"\\]{8,120})"/g)].map((m) => m[1]);
+  const uniq = [...new Set(seen)];
+  let best = "";
+  for (const a of uniq) {
+    if (/^[A-Z0-9]{4}\+/.test(a)) continue; // 구글 좌표 약칭(플러스 코드)은 주소가 아니다
+    if (!/\s/.test(a)) continue;
+    const wrapped = uniq.some((b) => b !== a && b.startsWith(a + " "));
+    if (wrapped && a.length > best.length) best = a;
+  }
+  return best;
 }
 
 const EMBED_TIMEOUT_MS = 8000;
@@ -51,9 +70,11 @@ function parseInitEmbed(html: string, query: string): PlaceResult[] {
   if (start < 0) return [];
   const end = html.indexOf(");", start);
   if (end < 0) return [];
+  const rawJson = html.slice(start + "initEmbed(".length, end);
+  const address = pickAddress(rawJson);
   let data: unknown;
   try {
-    data = JSON.parse(html.slice(start + "initEmbed(".length, end));
+    data = JSON.parse(rawJson);
   } catch {
     return [];
   }
@@ -62,16 +83,14 @@ function parseInitEmbed(html: string, query: string): PlaceResult[] {
   const walk = (node: unknown, name: string): void => {
     if (!Array.isArray(node)) return;
     const ownName =
-      isNameString(node[1]) && Array.isArray(node[4]) && node[4].some(isLocEntry)
-        ? node[1]
-        : name;
+      isNameString(node[1]) && Array.isArray(node[4]) && node[4].some(isLocEntry) ? node[1] : name;
     for (const child of node) {
       if (isLocEntry(child)) {
         const coord = child[3] as [number, number];
         const lat = coord[0] / 1e7;
         const lng = coord[1] / 1e7;
         if (Math.abs(lat) > 90 || Math.abs(lng) > 180) continue;
-        out.push({ name: ownName, lat, lng });
+        out.push({ name: ownName, lat, lng, address });
       } else {
         walk(child, ownName);
       }
@@ -83,10 +102,7 @@ function parseInitEmbed(html: string, query: string): PlaceResult[] {
   const dedup: PlaceResult[] = [];
   for (const r of out) {
     const near = dedup.some(
-      (d) =>
-        d.name === r.name &&
-        Math.abs(d.lat - r.lat) < 0.002 &&
-        Math.abs(d.lng - r.lng) < 0.002
+      (d) => d.name === r.name && Math.abs(d.lat - r.lat) < 0.002 && Math.abs(d.lng - r.lng) < 0.002
     );
     if (!near) dedup.push(r);
   }

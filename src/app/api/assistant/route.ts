@@ -93,7 +93,7 @@ async function geocodeByPlaceApi(
   const res = await fetch(url, { signal: AbortSignal.timeout(9000) });
   if (!res.ok) return [];
   const data = (await res.json()) as {
-    results?: { name?: string; lat?: number; lng?: number }[];
+    results?: { name?: string; lat?: number; lng?: number; address?: string }[];
   };
   const out: { name: string; lat: number; lng: number; address: string }[] = [];
   for (const r of data.results ?? []) {
@@ -102,7 +102,7 @@ async function geocodeByPlaceApi(
       name: r.name,
       lat: r.lat as number,
       lng: r.lng as number,
-      address: "",
+      address: typeof r.address === "string" ? r.address : "",
     });
   }
   return out;
@@ -144,7 +144,7 @@ function buildSystem(context: AssistantContext): string {
     "- postdate(올린 날짜)가 오래된 글보다 최근 글을 믿으세요. 문 닫았을 수 있는 곳은 recent: true 로 한 번 더 확인하세요.",
     "- 후기에 이름만 스쳐 지나가는 곳은 빼고, 실제로 다녀와서 쓴 티가 나는 곳만 고르세요.",
     "- 같은 가게의 다른 지점을 섞지 말고, 후기에 나온 지점 이름을 그대로 쓰세요.",
-    "좌표는 앱이 알아서 찾으니 절대 지어내지 말고, 대신 area 칸에 지역·도시를 정확히 적으세요(예: '서울 성수동', 'Da Nang').",
+    "가게 좌표는 앱이 직접 찾으니 지어내지 마세요. 대신 area 에 지역 이름을, area_lat/area_lng 에 그 지역(도시·동네) 중심의 대략적인 좌표를 적으세요. 예: 다낭 16.05/108.21, 방콕 13.75/100.50, 서울 성수동 37.544/127.056. 이 값은 앱이 '가게가 그 동네에 있는지' 재는 잣대로만 씁니다.",
     "memo에는 블로그 후기에서 본 내용을 근거로 추천 이유를 한 줄 적으세요(예: 후기에서 육수가 진하다고 칭찬한 국밥집).",
     "sources에는 반드시 naver_blog_search 결과로 받은 링크만 그대로 붙여 넣으세요. 링크나 제목을 지어내면 그 후보는 버려집니다.",
     "출처가 없는 장소는 제출하지 마세요. 후보는 3~8곳이 적당합니다.",
@@ -202,7 +202,15 @@ const TOOLS = [
                 },
                 area: {
                   type: "string",
-                  description: "지역·도시(예: '서울 성수동', 'Da Nang')",
+                  description: "지역·도시(예: '서울 성수동', '다낭')",
+                },
+                area_lat: {
+                  type: "number",
+                  description: "그 지역·도시 중심의 대략적인 위도(가게 좌표가 아니라 도시 중심)",
+                },
+                area_lng: {
+                  type: "number",
+                  description: "그 지역·도시 중심의 대략적인 경도",
                 },
                 type: { type: "string", enum: [...PIN_TYPE_VALUES] },
                 memo: {
@@ -222,7 +230,7 @@ const TOOLS = [
                   },
                 },
               },
-              required: ["name", "area", "type", "sources"],
+              required: ["name", "area", "area_lat", "area_lng", "type", "sources"],
             },
           },
         },
@@ -248,6 +256,8 @@ interface ApiMessage {
 interface ProposedPin {
   name?: unknown;
   area?: unknown;
+  area_lat?: unknown;
+  area_lng?: unknown;
   type?: unknown;
   memo?: unknown;
   sources?: unknown;
@@ -562,8 +572,14 @@ async function buildPins(
   let droppedNoMention = 0;
 
   // 1단계 — 이름과 출처가 멀쩡한 후보만 남긴다
-  const kept: { name: string; area: string; type: PinType; memo: string; sources: PinSource[] }[] =
-    [];
+  const kept: {
+    name: string;
+    area: string;
+    anchor?: { lat: number; lng: number };
+    type: PinType;
+    memo: string;
+    sources: PinSource[];
+  }[] = [];
   for (const p of list) {
     if (kept.length >= MAX_PINS) break;
     const name = typeof p.name === "string" ? p.name.trim() : "";
@@ -599,32 +615,36 @@ async function buildPins(
     const type: PinType = (PIN_TYPE_VALUES as readonly string[]).includes(String(p.type))
       ? (p.type as PinType)
       : "etc";
+    // AI가 적어 준 동네 중심 좌표 — 값이 이상하면 안 쓴다.
+    const aLat = Number(p.area_lat);
+    const aLng = Number(p.area_lng);
+    const anchor =
+      Number.isFinite(aLat) &&
+      Number.isFinite(aLng) &&
+      Math.abs(aLat) <= 90 &&
+      Math.abs(aLng) <= 180
+        ? { lat: aLat, lng: aLng }
+        : undefined;
+
     kept.push({
       name,
       area: typeof p.area === "string" ? p.area : "",
+      anchor,
       type,
       memo: typeof p.memo === "string" ? p.memo : "",
       sources,
     });
   }
 
-  // 2단계 — 후보들이 말한 동네가 지구 어디쯤인지 먼저 한 번씩 찾아 둔다.
-  // 이 동네 위치가 "가게가 진짜 그 동네에 있는지" 재는 잣대가 된다.
-  const areaNames = [...new Set(kept.map((k) => k.area).filter(Boolean))];
-  const areaSpots = new Map<string, { lat: number; lng: number } | undefined>();
-  await Promise.all(
-    areaNames.map(async (a) => {
-      const hit = (await geocode(a).catch(() => []))[0];
-      areaSpots.set(a, hit ? { lat: hit.lat, lng: hit.lng } : undefined);
-    })
-  );
-
-  // 3단계 — 남은 후보의 좌표를 한꺼번에 찾는다.
-  // 잣대는 후보가 말한 동네이고, 동네를 못 찾았을 때만 지금 보는 지도 위치를 쓴다.
+  // 2단계 — 남은 후보의 좌표를 한꺼번에 찾는다.
+  // 잣대는 AI가 적어 준 그 동네 중심 좌표이고, 없으면 지금 보는 지도 위치를 쓴다.
+  // 한꺼번에 우르르 물으면 장소 사전이 "너무 잦다"며 몇 건을 흘려버려 주소가 빈 채로 남는다.
+  // 0.15초씩 시차를 두고 보내면 다 받아 준다(전체는 여전히 1초 남짓).
   const spots = await Promise.all(
-    kept.map((k) =>
-      locate(k.name, k.area, areaSpots.get(k.area) ?? (k.area ? undefined : near), base)
-    )
+    kept.map(async (k, i) => {
+      await new Promise((r) => setTimeout(r, i * 150));
+      return locate(k.name, k.area, k.anchor ?? near, base);
+    })
   );
 
   const pins: Pin[] = [];
