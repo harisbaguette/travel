@@ -520,9 +520,9 @@ body {
 }
 .prep-chip {
   display: flex;
-  /* 칸을 고르게 나눠 가진다 — 세 칸이 판을 꽉 채우는 Doweek 필터 모양. */
-  flex: 1 1 0;
-  min-width: 0;
+  /* 남는 자리를 나눠 가져 판을 꽉 채우되(1), 글자보다 좁아지지는 않는다(0).
+     아주 좁은 폰에서는 글자가 잘리는 대신 줄이 옆으로 밀린다. */
+  flex: 1 0 auto;
   align-items: center;
   justify-content: center;
   gap: 6px;

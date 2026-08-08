@@ -76,6 +76,8 @@ export interface ChecklistItem {
 }
 
 // 집합 약속 — 언제 어디서 모일지.
+// 2026-08-08 화면에서 뺐다(사용자 요청). 예전에 저장해 둔 값을 지우지 않으려고
+// 저장 형식만 그대로 남겨 둔다 — 새로 적는 화면은 없다.
 export interface MeetupInfo {
   id: string;
   place: string;

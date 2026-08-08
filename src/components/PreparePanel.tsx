@@ -1,19 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import {
-  AlarmClock,
-  BedDouble,
-  CalendarDays,
-  ListChecks,
-  Luggage,
-  Plane,
-  ShoppingCart,
-} from "lucide-react";
+import { CalendarDays, ListChecks, Luggage, ShoppingCart } from "lucide-react";
 import type { ChecklistItem, Itinerary, Pin } from "@/lib/types";
 import ChecklistCard from "./ChecklistCard";
 import ItineraryPanel from "./ItineraryPanel";
-import MeetupPanel from "./MeetupPanel";
 import TravelInfoPanel from "./TravelInfoPanel";
 
 interface PreparePanelProps {
@@ -23,20 +14,13 @@ interface PreparePanelProps {
   onItineraryChange: (it: Itinerary) => void;
 }
 
-type SectionKey =
-  | "flights"
-  | "plan"
-  | "stays"
-  | "meetup"
-  | "packing"
-  | "shopping"
-  | "agenda";
+type SectionKey = "plan" | "packing" | "agenda";
 
 interface Section {
   key: SectionKey;
   Icon: typeof CalendarDays;
   label: string;
-  /** 칩에 붙는 숫자 — 아직 남은 것(0이면 숫자를 감춘다). */
+  /** 칩에 붙는 숫자 — 0이면 감춘다. */
   count: number;
   body: () => React.ReactNode;
 }
@@ -46,101 +30,91 @@ function todoOf(items: ChecklistItem[]): number {
   return items.filter((i) => !i.done).length;
 }
 
-// 떠나기 전에 채우는 화면 — 위 필터 줄에서 고른 한 가지만 아래에 펼친다.
+// 목록 위에 붙는 작은 제목 — 한 화면에 목록이 둘 이상 쌓일 때 구분용.
+function GroupTitle({ Icon, text }: { Icon: typeof CalendarDays; text: string }) {
+  return (
+    <h3 className="flex items-center gap-1.5 px-1 text-sm font-bold text-[var(--text)]">
+      <Icon size={16} strokeWidth={2.2} aria-hidden className="text-[var(--accent-ink)]" />
+      {text}
+    </h3>
+  );
+}
+
+// 떠나기 전에 채우는 화면 — 위 필터 줄에서 고른 한 묶음만 아래에 펼친다.
 export default function PreparePanel({
   pins,
   itinerary,
   onShowOnMap,
   onItineraryChange,
 }: PreparePanelProps) {
-  // 비행기 날짜가 여행 날짜의 뿌리라 항공부터 보여 준다.
-  const [active, setActive] = useState<SectionKey>("flights");
+  const [active, setActive] = useState<SectionKey>("plan");
 
   const packing = itinerary.packing ?? [];
   const agenda = itinerary.agenda ?? [];
   const shopping = itinerary.shopping ?? [];
-  const meetups = itinerary.meetups ?? [];
+
+  const flightCount =
+    (itinerary.outbound?.flightNo ? 1 : 0) + (itinerary.inbound?.flightNo ? 1 : 0);
+  const stayCount = itinerary.stays?.length ?? 0;
+  const planned = new Set(itinerary.days.flatMap((d) => d.pinIds)).size;
 
   const sections: Section[] = [
     {
-      key: "flights",
-      Icon: Plane,
-      label: "항공",
-      count:
-        (itinerary.outbound?.flightNo ? 1 : 0) + (itinerary.inbound?.flightNo ? 1 : 0),
-      body: () => (
-        <TravelInfoPanel itinerary={itinerary} onChange={onItineraryChange} part="flights" />
-      ),
-    },
-    {
       key: "plan",
       Icon: CalendarDays,
-      label: "일정 설정",
-      count: new Set(itinerary.days.flatMap((d) => d.pinIds)).size,
+      label: "일정",
+      // 비행기·숙소·날짜에 넣은 곳을 모두 합친 "적어 둔 것" 개수.
+      count: flightCount + stayCount + planned,
       body: () => (
-        <ItineraryPanel
-          pins={pins}
-          itinerary={itinerary}
-          onChange={onItineraryChange}
-          onShowOnMap={onShowOnMap}
-        />
-      ),
-    },
-    {
-      key: "stays",
-      Icon: BedDouble,
-      label: "숙소",
-      count: itinerary.stays?.length ?? 0,
-      body: () => (
-        <TravelInfoPanel itinerary={itinerary} onChange={onItineraryChange} part="stays" />
-      ),
-    },
-    {
-      key: "meetup",
-      Icon: AlarmClock,
-      label: "집합 시간",
-      count: meetups.length,
-      body: () => (
-        <MeetupPanel
-          meetups={meetups}
-          startDate={itinerary.startDate}
-          onChange={(next) => onItineraryChange({ ...itinerary, meetups: next })}
-        />
+        <div className="flex flex-col gap-4">
+          {/* 짧게 적고 끝나는 예약 정보가 위, 계속 손대는 날짜별 계획이 아래. */}
+          <TravelInfoPanel itinerary={itinerary} onChange={onItineraryChange} part="flights" />
+          <TravelInfoPanel itinerary={itinerary} onChange={onItineraryChange} part="stays" />
+          <div className="flex flex-col gap-2">
+            <GroupTitle Icon={CalendarDays} text="날짜별 계획" />
+            <ItineraryPanel
+              pins={pins}
+              itinerary={itinerary}
+              onChange={onItineraryChange}
+              onShowOnMap={onShowOnMap}
+            />
+          </div>
+        </div>
       ),
     },
     {
       key: "packing",
       Icon: Luggage,
-      label: "짐 챙기기",
-      count: todoOf(packing),
+      label: "챙기기",
+      count: todoOf(packing) + todoOf(shopping),
       body: () => (
-        <ChecklistCard
-          items={packing}
-          placeholder="챙길 것 — 예: 여권, 선크림"
-          emptyText="챙길 짐을 하나씩 적어 보세요 — 챙기면 동그라미를 눌러요"
-          onChange={(next) => onItineraryChange({ ...itinerary, packing: next })}
-        />
-      ),
-    },
-    {
-      key: "shopping",
-      Icon: ShoppingCart,
-      label: "장보기",
-      count: todoOf(shopping),
-      body: () => (
-        <ChecklistCard
-          items={shopping}
-          withAssignee
-          placeholder="살 것 — 예: 물, 라면"
-          emptyText="살 것을 적고 담당 칸에 맡을 사람 이름을 써요"
-          onChange={(next) => onItineraryChange({ ...itinerary, shopping: next })}
-        />
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
+            <GroupTitle Icon={Luggage} text="짐 챙기기" />
+            <ChecklistCard
+              items={packing}
+              placeholder="챙길 것 — 예: 여권, 선크림"
+              emptyText="챙길 짐을 하나씩 적어 보세요 — 챙기면 동그라미를 눌러요"
+              onChange={(next) => onItineraryChange({ ...itinerary, packing: next })}
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <GroupTitle Icon={ShoppingCart} text="장보기" />
+            <ChecklistCard
+              items={shopping}
+              withAssignee
+              placeholder="살 것 — 예: 물, 라면"
+              emptyText="살 것을 적고 담당 칸에 맡을 사람 이름을 써요"
+              onChange={(next) => onItineraryChange({ ...itinerary, shopping: next })}
+            />
+          </div>
+        </div>
       ),
     },
     {
       key: "agenda",
       Icon: ListChecks,
-      label: "회의 안건",
+      label: "회의",
       count: todoOf(agenda),
       body: () => (
         <ChecklistCard
@@ -165,15 +139,7 @@ export default function PreparePanel({
               <button
                 key={s.key}
                 type="button"
-                onClick={(e) => {
-                  setActive(s.key);
-                  // 반쯤 잘려 있던 칩을 누르면 줄이 그 칩을 가운데로 밀어 준다.
-                  e.currentTarget.scrollIntoView({
-                    inline: "center",
-                    block: "nearest",
-                    behavior: "smooth",
-                  });
-                }}
+                onClick={() => setActive(s.key)}
                 aria-pressed={on}
                 className={`prep-chip${on ? " active" : ""}`}
               >
