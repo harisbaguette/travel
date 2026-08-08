@@ -184,20 +184,28 @@ function HoursLine({ spec, lng }: { spec: string; lng: number }) {
 
 // 그 좌표에 뭐가 있는지 서버(/api/poi-at)에 조용히 물어봐 두는 재료 — 검색 표식 카드가 쓴다.
 function usePlaceDetails(lat: number, lng: number) {
-  const [details, setDetails] = useState<PoiInfo | null>(null);
+  // 어느 좌표의 답인지 꼬리표를 같이 붙여 둔다 — 좌표가 바뀌면 꼬리표가 어긋나
+  // 옛 답 대신 "아직 없음"이 돌아간다(지우는 일을 따로 하지 않아도 된다).
+  const [result, setResult] = useState<{
+    key: string;
+    poi: PoiInfo | null;
+  } | null>(null);
   useEffect(() => {
-    setDetails(null);
     const ac = new AbortController();
+    const key = `${lat},${lng}`;
     void fetch(`/api/poi-at?lat=${lat}&lng=${lng}`, { signal: ac.signal })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (!ac.signal.aborted)
-          setDetails((d as { poi?: PoiInfo | null } | null)?.poi ?? null);
+          setResult({
+            key,
+            poi: (d as { poi?: PoiInfo | null } | null)?.poi ?? null,
+          });
       })
       .catch(() => {});
     return () => ac.abort();
   }, [lat, lng]);
-  return details;
+  return result && result.key === `${lat},${lng}` ? result.poi : null;
 }
 
 // 두 자리 사이 거리(m) — 찾아온 정보가 정말 그 가게 것인지 가려낼 때 쓴다.

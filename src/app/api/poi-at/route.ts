@@ -172,8 +172,12 @@ export async function GET(request: Request): Promise<Response> {
   if (Number.isFinite(zoom)) {
     const tile = await findTilePoiAt(lat, lng, zoom);
     if (tile) {
-      // 여는 시간·전화 같은 속살은 OSM에서 같은 이름의 가게를 찾았을 때만 빌려 온다
-      const osm = await findNearbyPoi(tile.lat, tile.lng);
+      // 여는 시간·전화 같은 속살은 OSM에서 같은 이름의 가게를 찾았을 때만 빌려 온다.
+      // 가게는 이미 찾았으니 이 덧붙임 조회가 늦으면(2.5초) 그냥 없이 답한다 — 카드가 늦게 뜨는 것보다 낫다.
+      const osm = await Promise.race([
+        findNearbyPoi(tile.lat, tile.lng),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500)),
+      ]);
       const same = osm && namesOverlap(osm.name, tile.name) ? osm : null;
       const poi: PoiInfo = {
         kind: "poi",
