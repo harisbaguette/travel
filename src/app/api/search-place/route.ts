@@ -37,14 +37,15 @@ const BROWSER_HEADERS = {
   "Accept-Language": "ko",
 };
 
-// 좌표 항목 판별 — [식별자들, "/g/…"(구글 장소 번호), null, [위도*1e7, 경도*1e7], …] 꼴
+// 좌표 항목 판별 — [식별자들, 구글 장소 번호, null, [위도*1e7, 경도*1e7], …] 꼴.
+// 장소 번호는 가게면 "/g/…"나 "0x…", 도시·지역이면 "/m/…"로 온다 — 셋 다 인정한다.
 function isLocEntry(x: unknown): x is unknown[] {
   if (!Array.isArray(x)) return false;
   const gid = x[1];
   const coord = x[3];
   return (
     typeof gid === "string" &&
-    (gid.startsWith("/g/") || gid.startsWith("0x")) &&
+    (gid.startsWith("/g/") || gid.startsWith("/m/") || gid.startsWith("0x")) &&
     Array.isArray(coord) &&
     Number.isInteger(coord[0]) &&
     Number.isInteger(coord[1])

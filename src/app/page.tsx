@@ -22,7 +22,6 @@ import {
   X,
 } from "lucide-react";
 import {
-  findCity,
   resolveCity,
   suggestPlaces,
   type LatLng,
@@ -55,7 +54,6 @@ import {
   useRoomSync,
   useSaveStatus,
 } from "@/lib/sync";
-import AIPickSheet from "@/components/AIPickSheet";
 import AssistantPanel, { type AssistantMsg } from "@/components/AssistantPanel";
 import PinList from "@/components/PinList";
 import PinModal from "@/components/PinModal";
@@ -114,12 +112,11 @@ function saveView(room: string, view: SavedView): void {
   }
 }
 
-// 방에 맞는 첫 지도 위치: 보던 위치 > 방 이름이 도시면 그 도시 > 푸꾸옥
+// 방에 맞는 첫 지도 위치: 보던 위치 > 푸꾸옥(기본).
+// 방 이름이 도시면 지도가 뜬 뒤 구글에 물어 그리로 옮긴다(handleMapReady → flyToRoom).
 function initialViewFor(room: string): { center: LatLng; zoom: number } {
   const saved = loadView(room);
   if (saved) return { center: [saved.lat, saved.lng], zoom: saved.zoom };
-  const city = findCity(room);
-  if (city) return { center: city, zoom: DEFAULT_ZOOM };
   return { center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM };
 }
 
@@ -219,8 +216,6 @@ export default function Home() {
   } | null>(null);
   // + 를 눌러 "자리 고르기"를 켠 상태 — 지도 가운데 십자를 보여 준다.
   const [picking, setPicking] = useState(false);
-  // AI가 찾아온 후보들 — 고르는 시트가 열려 있는 동안만 들고 있는다.
-  const [aiFound, setAIFound] = useState<Pin[] | null>(null);
   const [tab, setTab] = useState<Tab>("map");
   // 리스트 화면에서 어떤 종류만 볼지 — 접힌 목록(드롭다운)으로 고른다.
   const [listType, setListType] = useState<PinType | "all">("all");
@@ -323,27 +318,13 @@ export default function Home() {
     void retryFailed();
   }, []);
 
-  const handleMapReady = useCallback((map: LeafletMap) => {
-    mapRef.current = map;
-    // 지도를 움직일 때마다 지금 방의 마지막 위치를 기억.
-    map.on("moveend", () => {
-      const c = map.getCenter();
-      saveView(roomRef.current, { lat: c.lat, lng: c.lng, zoom: map.getZoom() });
-    });
-  }, []);
-
-  // 방에 맞춰 지도 이동: 보던 위치 > 방 이름 도시 > 핀들이 다 보이게
-  const flyToRoom = useCallback((nextRoom: string, roomPins: Pin[]) => {
+  // 방에 맞춰 지도 이동: 보던 위치 > 핀들이 다 보이게 > 여행 이름을 구글에 물어 그 도시로
+  const flyToRoom = useCallback(async (nextRoom: string, roomPins: Pin[]) => {
     const map = mapRef.current;
     if (!map) return;
     const saved = loadView(nextRoom);
     if (saved) {
       map.setView([saved.lat, saved.lng], saved.zoom);
-      return;
-    }
-    const city = findCity(nextRoom);
-    if (city) {
-      map.setView(city, DEFAULT_ZOOM);
       return;
     }
     if (roomPins.length > 0) {
@@ -356,8 +337,28 @@ export default function Home() {
         ],
         { padding: [40, 40], maxZoom: 14 }
       );
+      return;
     }
+    // 좌표 표 없이 구글에 물어본다. 찾는 동안 다른 방으로 또 넘어갔으면 그대로 둔다.
+    const city = await resolveCity(nextRoom);
+    if (city && roomRef.current === nextRoom && mapRef.current === map)
+      map.setView(city, DEFAULT_ZOOM);
   }, []);
+
+  const handleMapReady = useCallback(
+    (map: LeafletMap) => {
+      mapRef.current = map;
+      // 지도를 움직일 때마다 지금 방의 마지막 위치를 기억.
+      map.on("moveend", () => {
+        const c = map.getCenter();
+        saveView(roomRef.current, { lat: c.lat, lng: c.lng, zoom: map.getZoom() });
+      });
+      // 이 기기에서 처음 보는 방이면(기억해 둔 위치 없음) 여행 이름을 구글에 물어 이동.
+      const cur = roomRef.current;
+      if (cur && !loadView(cur)) void flyToRoom(cur, loadPins(cur));
+    },
+    [flyToRoom]
+  );
 
   const switchRoom = useCallback(
     (value: string) => {
@@ -373,7 +374,7 @@ export default function Home() {
       setSugOpen(false);
       setPicking(false);
       setChat([]);
-      flyToRoom(value, nextPins);
+      void flyToRoom(value, nextPins);
     },
     [flyToRoom]
   );
@@ -415,7 +416,7 @@ export default function Home() {
     [closeSuggestions]
   );
 
-  // 엔터·이동 단추 — 후보가 아직 없을 때의 예비 검색(도시 표 → 주소 사전 순서)
+  // 엔터·이동 단추 — 후보가 아직 없을 때의 예비 검색(구글에 물어 첫 결과로 이동)
   const handleSearch = async () => {
     const q = query.trim();
     if (!q) return;
@@ -560,18 +561,18 @@ export default function Home() {
     map.setView([pin.lat, pin.lng], 16, { animate: true });
   }, []);
 
-  // 고른 후보만 지도에 꽂는다.
-  const handleAIAdd = useCallback(
+  // 비서 답변 카드에서 마음에 든 곳을 꽂는다 — 하나씩도, 모두 꽂기도 이 길을 쓴다.
+  // 채팅을 이어 갈 수 있게 화면은 그대로 두고, 위 알림 한 줄로만 알려 준다.
+  const handleAssistantPin = useCallback(
     (chosen: Pin[]) => {
-      setAIFound(null);
-      if (chosen.length === 0) return;
-      setPins((prev) => [...prev, ...chosen]);
-      for (const p of chosen) void pushPin(room, p);
-      setNotice(`${chosen.length}곳을 꽂았어요`);
-      // 꽂은 결과가 바로 보이게 지도로 넘어간다
-      setTab("map");
+      // 같은 카드를 두 번 눌러도 겹으로 꽂히지 않게 이미 있는 핀은 뺀다.
+      const fresh = chosen.filter((c) => !pins.some((p) => p.id === c.id));
+      if (fresh.length === 0) return;
+      setPins((prev) => [...prev, ...fresh.filter((c) => !prev.some((p) => p.id === c.id))]);
+      for (const p of fresh) void pushPin(room, p);
+      setNotice(fresh.length === 1 ? `${fresh[0].name}을(를) 꽂았어요` : `${fresh.length}곳을 꽂았어요`);
     },
-    [room]
+    [room, pins]
   );
 
   // 비서에게 한 마디 보내기 — 서버 AI가 조사해서 답 + 핀 후보를 돌려준다.
@@ -963,8 +964,9 @@ export default function Home() {
             <AssistantPanel
               messages={chat}
               loading={chatLoading}
+              pinnedIds={new Set(viewPins.map((p) => p.id))}
               onSend={handleAssistantSend}
-              onPickPins={(found) => setAIFound(found)}
+              onPin={handleAssistantPin}
             />
           </div>
         )}
@@ -1045,13 +1047,6 @@ export default function Home() {
         />
       )}
 
-      {aiFound && (
-        <AIPickSheet
-          found={aiFound}
-          onAdd={handleAIAdd}
-          onClose={() => setAIFound(null)}
-        />
-      )}
     </div>
   );
 }

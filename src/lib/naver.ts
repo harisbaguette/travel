@@ -1,5 +1,6 @@
 // 네이버 검색 — 서버에서만 부른다.
 //  - 블로그 검색: 사람들이 쓴 후기 글을 찾는다. 추천 근거(출처)로 쓴다.
+//  - 블로그 본문 읽기: 찾은 글을 열어 본문과, 글에 붙은 지도 카드(주소·좌표)를 꺼낸다.
 //  - 장소 검색: 가게 이름으로 주소·좌표를 확인한다(국내 전용, 열쇠가 있을 때만).
 //
 // 열쇠(NAVER_CLIENT_ID/SECRET)가 있으면 공식 창구를 쓰고, 없으면 네이버 블로그 홈이
@@ -26,26 +27,6 @@ export interface NaverBlogItem {
   snippet: string;
   blogger: string;
   postdate: string;
-  /** 돈 받고 쓴 티가 나는 글인지 — 추천 근거로 삼을 때 낮춰 보라는 표시 */
-  sponsored: boolean;
-}
-
-// 돈이나 물건을 받고 쓴 글에 거의 항상 들어가는 말들. 하나라도 걸리면 협찬 글로 본다.
-const SPONSOR_WORDS = [
-  "협찬",
-  "제공받아",
-  "제공 받아",
-  "원고료",
-  "소정의",
-  "무상으로 제공",
-  "체험단",
-  "서포터즈",
-  "광고를 포함",
-  "업체로부터",
-];
-
-function looksSponsored(text: string): boolean {
-  return SPONSOR_WORDS.some((w) => text.includes(w));
 }
 
 export interface NaverLocalItem {
@@ -135,7 +116,6 @@ async function blogByApi(
       snippet,
       blogger: clean(it.bloggername),
       postdate: toPostdate(it.postdate),
-      sponsored: looksSponsored(`${title} ${snippet}`),
     });
   }
   return out;
@@ -188,7 +168,6 @@ async function blogByOpenList(
       snippet,
       blogger: clean(it.nickName) || clean(it.blogName),
       postdate: toPostdate(it.addDate),
-      sponsored: looksSponsored(`${title} ${snippet}`),
     });
   }
   return out;
@@ -216,7 +195,6 @@ async function blogBySearchPage(query: string, display: number): Promise<NaverBl
       snippet: "",
       blogger: m[1],
       postdate: "",
-      sponsored: false,
     });
     if (out.length >= display) break;
   }
@@ -243,6 +221,132 @@ export async function searchNaverBlog(
   const viaOpen = await blogByOpenList(q, count, recent);
   if (viaOpen.length > 0) return viaOpen;
   return blogBySearchPage(q, count);
+}
+
+// ── 블로그 본문 읽기 ──────────────────────────────────────────────
+// 검색 결과는 요약 두 줄뿐이라, AI가 글을 제대로 판단하려면 본문을 읽어야 한다.
+// 네이버 블로그 글은 휴대폰용 주소로 열면 구조가 단순해서 글만 깨끗하게 뽑기 좋다.
+// 글쓴이가 붙여 둔 지도 카드(가게 이름·주소·좌표)와 구글 지도 링크도 같이 건진다.
+
+/** 글쓴이가 본문에 붙여 둔 지도 카드 — 좌표까지 정확해서 그대로 핀 자리로 쓸 수 있다. */
+export interface BlogPlaceCard {
+  name: string;
+  address: string;
+  lat: number;
+  lng: number;
+}
+
+export interface BlogPostBody {
+  url: string;
+  text: string;
+  places: BlogPlaceCard[];
+  mapLinks: string[];
+}
+
+/** 네이버 블로그 글 주소를 휴대폰용 주소로 바꾼다. 네이버 블로그가 아니면 null. */
+function toMobileBlogUrl(url: string): string | null {
+  try {
+    const u = new URL(url);
+    const host = u.hostname.toLowerCase();
+    if (host !== "blog.naver.com" && host !== "m.blog.naver.com") return null;
+    const blogId = u.searchParams.get("blogId");
+    const logNo = u.searchParams.get("logNo");
+    if (blogId && logNo) return `https://m.blog.naver.com/${blogId}/${logNo}`;
+    const m = u.pathname.match(/^\/([A-Za-z0-9_.-]+)\/(\d+)/);
+    if (m) return `https://m.blog.naver.com/${m[1]}/${m[2]}`;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** 본문 조각(HTML)에서 읽을 수 있는 글만 남긴다 — 줄바꿈은 살려서 문단이 뭉개지지 않게. */
+function htmlToText(fragment: string): string {
+  return fragment
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<(?:br|\/p|\/div|\/h[1-6]|\/li)[^>]*>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&(?:amp|lt|gt|quot|nbsp|#39);/g, (m) => ENTITY[m] ?? m)
+    .replace(/[ \t]+/g, " ")
+    .replace(/\s*\n\s*/g, "\n")
+    .trim();
+}
+
+/** 본문에 붙은 지도 카드에서 가게 이름·주소·좌표를 꺼낸다. 형식이 바뀌면 빈 목록(글은 그대로 읽힌다). */
+function extractPlaceCards(html: string): BlogPlaceCard[] {
+  const out: BlogPlaceCard[] = [];
+  for (const m of html.matchAll(/data-linkdata=(?:'([^']+)'|"([^"]+)")/g)) {
+    const raw = (m[1] ?? m[2] ?? "")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;|&#x27;/g, "'")
+      .replace(/&amp;/g, "&");
+    if (!raw.includes("latitude")) continue;
+    try {
+      const d = JSON.parse(raw) as Record<string, unknown>;
+      const lat = Number(d.latitude);
+      const lng = Number(d.longitude);
+      const name = typeof d.name === "string" ? d.name.trim() : "";
+      if (!name || !Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+      if (Math.abs(lat) > 90 || Math.abs(lng) > 180) continue;
+      if (out.some((p) => p.name === name && Math.abs(p.lat - lat) < 1e-6)) continue;
+      out.push({
+        name,
+        address: typeof d.address === "string" ? d.address.trim() : "",
+        lat,
+        lng,
+      });
+    } catch {
+      // 카드 하나가 깨져도 나머지는 계속 읽는다
+    }
+  }
+  return out.slice(0, 12);
+}
+
+/** 본문에 적어 둔 구글 지도·네이버 지도 링크 — 글쓴이가 위치를 직접 알려 준 셈이다. */
+function extractMapLinks(html: string): string[] {
+  const re =
+    /https?:\/\/(?:maps\.app\.goo\.gl|goo\.gl\/maps|(?:maps|www)\.google\.[a-z.]+\/maps|naver\.me|map\.naver\.com)[^\s"'<>\\)]*/g;
+  const seen = new Set<string>();
+  for (const m of html.matchAll(re)) {
+    seen.add(m[0].replace(/&amp;/g, "&"));
+    if (seen.size >= 5) break;
+  }
+  return [...seen];
+}
+
+/**
+ * 블로그 글 하나의 본문을 읽는다. 네이버 블로그 글이 아니거나 못 열면 null.
+ * maxChars 만큼만 잘라 돌려준다(AI에게 통째로 주면 느려지고 비싸진다).
+ */
+export async function fetchBlogPost(url: string, maxChars = 1800): Promise<BlogPostBody | null> {
+  const mobile = toMobileBlogUrl(url);
+  if (!mobile) return null;
+  let html = "";
+  try {
+    const res = await fetch(mobile, {
+      headers: BROWSER_HEADERS,
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    if (!res.ok) return null;
+    html = await res.text();
+  } catch {
+    return null;
+  }
+
+  // 본문 시작점: 새 편집기(se-main-container) → 옛 편집기(post_ct) → 못 찾으면 전체.
+  let start = html.indexOf("se-main-container");
+  if (start < 0) start = html.indexOf('id="post_ct'); // 옛 글 형식
+  const body = start >= 0 ? html.slice(start, start + 120_000) : html;
+  const text = htmlToText(body).slice(0, maxChars);
+  if (!text) return null;
+
+  return {
+    url,
+    text,
+    places: extractPlaceCards(html),
+    mapLinks: extractMapLinks(body),
+  };
 }
 
 /**

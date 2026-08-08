@@ -1,9 +1,17 @@
 import type { Pin, PinSource, PinType } from "@/lib/types";
-import { searchNaverBlog, searchNaverLocal, type NaverBlogItem } from "@/lib/naver";
+import {
+  fetchBlogPost,
+  searchNaverBlog,
+  searchNaverLocal,
+  type BlogPlaceCard,
+  type NaverBlogItem,
+} from "@/lib/naver";
 
-// 비서 API — 사용자가 채팅으로 부탁하면 AI가 네이버 블로그 후기를 뒤져 장소를 고르고,
-// 좌표를 확인한 뒤 핀 후보 목록을 만들어 돌려준다.
-// 후보는 바로 꽂히지 않고 클라이언트의 고르기 시트에서 사용자가 선택한다.
+// 비서 API — 퍼플렉시티 같은 AI 검색과 같은 방식으로 일한다:
+// ① 검색어 여러 개로 후기 목록을 찾고 → ② AI가 읽을 만한 글을 스스로 골라 본문을 읽고 →
+// ③ 읽은 내용을 근거로 장소를 골라, 답 한 편과 핀 후보를 함께 돌려준다.
+// 어느 글을 믿을지는 낱말 규칙이 아니라 AI의 판단에 맡긴다(광고 글도 정보가 좋으면 쓴다).
+// 후보는 바로 꽂히지 않고, 채팅 답변 카드에서 사용자가 마음에 드는 것만 꽂는다.
 // AI는 DeepSeek을 쓴다(OpenAI와 같은 형식이라 별도 꾸러미 없이 fetch로 부른다).
 
 // 열쇠는 두 갈래로 받는다. 딥시크에서 바로 받은 열쇠면 딥시크로, OpenRouter(여러 AI를 한 열쇠로
@@ -132,24 +140,22 @@ async function reverseAddress(lat: number, lng: number): Promise<string> {
 
 function buildSystem(context: AssistantContext): string {
   const lines = [
-    "당신은 여행 핀지도 앱의 비서입니다. 사용자가 맛집·관광지·카페·숙소를 찾아 달라고 하면 이 순서로 일합니다.",
-    "1. naver_blog_search 로 사람들이 쓴 후기를 찾는다. 한 번으로 끝내지 말고 검색어를 바꿔 2~4번 찾아, 여러 글을 겹쳐 보고 고른다.",
-    "2. propose_pins 로 후보 목록을 한 번에 제출한다.",
-    "웹 조사는 naver_blog_search 로만 합니다.",
+    "당신은 여행 핀지도 앱의 조사 비서입니다. 퍼플렉시티 같은 AI 검색처럼 '검색 → 읽을 글 고르기 → 본문 읽기 → 종합' 순서로 일합니다.",
+    "사용자가 맛집·관광지·카페·숙소를 찾아 달라고 하면:",
+    "1. naver_blog_search — 관점이 다른 검색어 2~3개를 한 차례에 같이 시킨다(예: '○○ 맛집 추천', '○○ 현지인 맛집', '○○ 3일 코스'). 하나씩 차례로 물으면 시간이 모자랍니다.",
+    "2. read_blog — 검색 결과의 제목·요약만 보고 정하지 말고, 정보가 많아 보이는 글 3~5개를 골라 본문을 한 번에 읽는다.",
+    "3. propose_pins — 읽은 내용을 근거로 장소를 골라 한 번에 제출한다.",
+    "어떤 글을 믿을지는 규칙이 아니라 당신의 판단입니다. 실제로 다녀온 티가 나는지, 정보가 구체적인지, 너무 오래된 글은 아닌지(postdate) 스스로 가려서 정하세요. 광고·협찬 글이어도 정보가 정확하고 쓸 만하면 근거로 써도 됩니다.",
     "지역 규칙(가장 중요): 사용자가 말한 지역·도시가 무조건 우선입니다. 검색어와 area 칸에는 사용자가 말한 지역 이름을 그대로 넣으세요. 사용자가 '다낭'이라고 하면 다낭만 찾습니다.",
-    "조사 품질 규칙:",
-    "- 검색어를 다르게 두세 가지로 만들어 한 차례에 같이 시키세요(예: '○○ 맛집 추천', '○○ 현지인 맛집 후기', '○○ 가볼만한 곳'). 하나씩 차례로 물으면 시간이 모자랍니다.",
-    "- 서로 다른 글 두 곳 이상에서 나온 가게를 먼저 고르세요. 한 글에만 나온 곳은 그 글이 자세할 때만 넣습니다.",
-    "- sponsored: true 인 글은 돈이나 물건을 받고 쓴 글입니다. 그런 글만 근거인 가게는 넣지 마세요.",
-    "- postdate(올린 날짜)가 오래된 글보다 최근 글을 믿으세요. 문 닫았을 수 있는 곳은 recent: true 로 한 번 더 확인하세요.",
-    "- 후기에 이름만 스쳐 지나가는 곳은 빼고, 실제로 다녀와서 쓴 티가 나는 곳만 고르세요.",
-    "- 같은 가게의 다른 지점을 섞지 말고, 후기에 나온 지점 이름을 그대로 쓰세요.",
-    "가게 좌표는 앱이 직접 찾으니 지어내지 마세요. 대신 area 에 지역 이름을, area_lat/area_lng 에 그 지역(도시·동네) 중심의 대략적인 좌표를 적으세요. 예: 다낭 16.05/108.21, 방콕 13.75/100.50, 서울 성수동 37.544/127.056. 이 값은 앱이 '가게가 그 동네에 있는지' 재는 잣대로만 씁니다.",
-    "memo에는 블로그 후기에서 본 내용을 근거로 추천 이유를 한 줄 적으세요(예: 후기에서 육수가 진하다고 칭찬한 국밥집).",
-    "sources에는 반드시 naver_blog_search 결과로 받은 링크만 그대로 붙여 넣으세요. 링크나 제목을 지어내면 그 후보는 버려집니다.",
-    "출처가 없는 장소는 제출하지 마세요. 후보는 3~8곳이 적당합니다.",
+    "위치 정보는 읽은 글에서 그대로 가져옵니다:",
+    "- 본문에 지도 카드(장소 이름·주소·좌표)가 붙어 있으면 그 값을 그대로 씁니다 — address 에 주소를, lat/lng 에 카드의 좌표 숫자를 그대로 복사하세요.",
+    "- 본문 글 속에 주소만 적혀 있으면 address 에 그 주소를 옮겨 적으세요(블로그 글에는 구글 지도 주소를 적어 두는 경우가 많습니다).",
+    "- 본문에 없는 좌표를 지어내는 것은 금지입니다. 없으면 lat/lng 를 비워 두세요 — 앱이 직접 찾습니다.",
+    "area 에는 지역 이름을, area_lat/area_lng 에는 그 지역(도시·동네) 중심의 대략적인 좌표를 적으세요. 예: 다낭 16.05/108.21, 서울 성수동 37.544/127.056. 이 값은 앱이 '가게가 그 동네에 있는지' 재는 잣대로만 씁니다.",
+    "memo에는 읽은 후기에서 본 추천 이유를 한 줄 적으세요(예: 후기마다 육수가 진하다고 칭찬한 국밥집).",
+    "sources에는 반드시 검색 결과로 받은 링크만 그대로 붙여 넣으세요. 링크를 지어내면 그 후보는 버려집니다. 후보는 3~8곳이 적당합니다.",
     "장소 추천이 아닌 일반 질문에는 도구 없이 한국어로 짧게 답하세요.",
-    "최종 답변은 한국어로 2~4문장. 목록 나열은 앱 화면에서 보여 주므로 반복하지 마세요.",
+    "최종 답변은 퍼플렉시티처럼: 조사하며 알게 된 것을 한국어 2~5문장으로 자연스럽게 정리하세요 — 어떤 분위기의 곳들을 골랐는지, 후기들에서 눈에 띈 점, 참고할 팁. 장소 이름을 하나하나 나열하는 것은 화면 카드가 대신하므로 반복하지 마세요.",
   ];
   if (context.room) lines.push(`현재 여행 이름: ${context.room}`);
   if (context.center)
@@ -168,7 +174,7 @@ const TOOLS = [
     function: {
       name: "naver_blog_search",
       description:
-        "네이버 블로그에서 후기 글을 찾는다. 이 앱에서 웹 조사는 오직 이 도구로만 한다. 지역과 종류를 함께 넣으면 좋다(예: '다낭 로컬 맛집 후기'). 한 번에 여러 검색어를 동시에 시켜도 된다. 돌려주는 링크는 추천 근거(sources)로 그대로 써야 한다. 결과의 sponsored 는 협찬 글 표시, postdate 는 올린 날짜다.",
+        "네이버 블로그에서 후기 글 목록을 찾는다(제목·요약 두 줄·글쓴이·postdate). 지역과 종류를 함께 넣으면 좋다(예: '다낭 로컬 맛집 후기'). 한 번에 여러 검색어를 동시에 시켜도 된다. 돌려주는 링크는 read_blog 로 읽거나 추천 근거(sources)로 그대로 쓴다.",
       parameters: {
         type: "object",
         properties: {
@@ -185,9 +191,28 @@ const TOOLS = [
   {
     type: "function",
     function: {
+      name: "read_blog",
+      description:
+        "검색으로 찾은 블로그 글의 본문을 읽는다. 한 번에 3~5개 링크를 같이 넣는 게 빠르다. 본문 글(text)과, 글쓴이가 붙여 둔 지도 카드(places: 가게 이름·주소·정확한 좌표), 본문 속 지도 링크(map_links)를 돌려준다. 지도 카드의 주소·좌표는 propose_pins 에 그대로 복사해서 쓴다.",
+      parameters: {
+        type: "object",
+        properties: {
+          urls: {
+            type: "array",
+            description: "읽을 글 링크 — naver_blog_search 가 돌려준 링크만 넣는다(최대 5개)",
+            items: { type: "string" },
+          },
+        },
+        required: ["urls"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "propose_pins",
       description:
-        "확정한 추천 장소 목록을 앱에 제출한다. 사용자에게 고르기 시트로 보여지므로 마지막에 한 번만 호출한다. 좌표는 앱이 이름과 지역으로 직접 찾으니 넣지 않는다. sources는 반드시 naver_blog_search 결과 링크를 쓴다.",
+        "확정한 추천 장소 목록을 앱에 제출한다. 사용자에게 카드로 보여지므로 마지막에 한 번만 호출한다. 주소·좌표는 read_blog 로 읽은 글에 있으면 그대로 복사하고, 없으면 비워 둔다(앱이 직접 찾는다). sources는 반드시 검색 결과 링크를 쓴다.",
       parameters: {
         type: "object",
         properties: {
@@ -216,6 +241,18 @@ const TOOLS = [
                 memo: {
                   type: "string",
                   description: "후기에서 본 추천 이유 한 줄",
+                },
+                address: {
+                  type: "string",
+                  description: "읽은 글(본문·지도 카드)에서 본 주소 — 글에 없으면 비워 둔다",
+                },
+                lat: {
+                  type: "number",
+                  description: "읽은 글의 지도 카드에 있던 위도 숫자 그대로 — 카드가 없으면 넣지 않는다",
+                },
+                lng: {
+                  type: "number",
+                  description: "읽은 글의 지도 카드에 있던 경도 숫자 그대로 — 카드가 없으면 넣지 않는다",
                 },
                 sources: {
                   type: "array",
@@ -260,6 +297,9 @@ interface ProposedPin {
   area_lng?: unknown;
   type?: unknown;
   memo?: unknown;
+  address?: unknown;
+  lat?: unknown;
+  lng?: unknown;
   sources?: unknown;
 }
 
@@ -309,6 +349,9 @@ export async function POST(request: Request): Promise<Response> {
   // 이번 대화에서 네이버가 실제로 돌려준 블로그 글 — 지어낸 출처를 걸러내는 기준이자
   // 화면 "출처" 줄에 쓰는 목록이다.
   const blogSeen = new Map<string, NaverBlogItem>();
+  // AI가 본문까지 읽은 글과, 그 글에 붙어 있던 지도 카드 — 좌표 검증과 출처 순서에 쓴다.
+  const readUrls = new Set<string>();
+  const cardsSeen: BlogPlaceCard[] = [];
 
   let reply = "";
   let proposed: Pin[] = [];
@@ -397,7 +440,6 @@ export async function POST(request: Request): Promise<Response> {
                 snippet: b.snippet.slice(0, 160),
                 blogger: b.blogger,
                 postdate: b.postdate,
-                sponsored: b.sponsored,
               }));
               result =
                 slim.length > 0
@@ -406,18 +448,50 @@ export async function POST(request: Request): Promise<Response> {
             } catch {
               result = "블로그 검색이 잠시 응답하지 않아요. 다른 검색어로 시도해 보세요.";
             }
+          } else if (name === "read_blog") {
+            // 검색이 실제로 돌려준 링크만 읽는다 — AI가 아무 주소나 열게 두면 위험하다.
+            const asked = (Array.isArray(args.urls) ? args.urls : [])
+              .filter((u): u is string => typeof u === "string")
+              .map((u) => blogSeen.get(normalizeUrl(u)))
+              .filter((b): b is NaverBlogItem => Boolean(b))
+              .slice(0, 5);
+            if (asked.length === 0) {
+              result = "읽을 수 있는 링크가 없어요. naver_blog_search 결과의 링크를 그대로 넣으세요.";
+            } else {
+              const bodies = await Promise.all(
+                asked.map((b) => fetchBlogPost(b.url).catch(() => null))
+              );
+              const readable = bodies
+                .map((body, idx) => {
+                  if (!body) return null;
+                  readUrls.add(normalizeUrl(asked[idx].url));
+                  cardsSeen.push(...body.places);
+                  return {
+                    url: body.url,
+                    title: asked[idx].title,
+                    text: body.text,
+                    places: body.places,
+                    map_links: body.mapLinks,
+                  };
+                })
+                .filter(Boolean);
+              result =
+                readable.length > 0
+                  ? JSON.stringify(readable)
+                  : "본문을 열지 못했어요. 검색 결과의 요약만으로 판단하거나 다른 글을 읽어 보세요.";
+            }
           } else if (name === "propose_pins") {
             const list = Array.isArray(args.pins) ? (args.pins as ProposedPin[]) : [];
-            const { pins, droppedNoSource, droppedNoMention, droppedNoSpot } = await buildPins(
+            const { pins, droppedNoSource, droppedNoSpot } = await buildPins(
               list,
               blogSeen,
+              cardsSeen,
               context.center,
               request.url
             );
             proposed = pins;
             const buts = [
               droppedNoSource > 0 ? `출처가 확인되지 않은 ${droppedNoSource}곳` : "",
-              droppedNoMention > 0 ? `근거 글에 이름이 없는 ${droppedNoMention}곳` : "",
               droppedNoSpot > 0 ? `위치를 못 찾은 ${droppedNoSpot}곳` : "",
             ].filter(Boolean);
             result =
@@ -464,11 +538,15 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  const sources = [...blogSeen.values()].slice(0, MAX_REPLY_SOURCES).map((b) => ({
-    title: b.title,
-    url: b.url,
-    blogger: b.blogger,
-  }));
+  // 출처 줄에는 AI가 본문까지 읽은 글을 먼저 보여 준다 — 답의 진짜 근거이기 때문.
+  const sources = [...blogSeen.entries()]
+    .sort(([a], [b]) => Number(readUrls.has(b)) - Number(readUrls.has(a)))
+    .slice(0, MAX_REPLY_SOURCES)
+    .map(([, b]) => ({
+      title: b.title,
+      url: b.url,
+      blogger: b.blogger,
+    }));
 
   return Response.json({
     ok: true,
@@ -484,20 +562,6 @@ function squeeze(s: string): string {
   return s.replace(/[\s()[\]·・.,'"`’”“\-_/]/g, "").toLowerCase();
 }
 
-/**
- * 그 가게 이름이 근거로 댄 글 안에 실제로 나오는지 본다.
- * AI가 검색 결과에 없던 가게를 지어내고 아무 링크나 붙이는 것을 막는 마지막 관문이다.
- */
-function mentionsName(name: string, hits: NaverBlogItem[]): boolean {
-  const n = squeeze(name);
-  if (n.length < 2) return false;
-  const texts = hits.map((h) => squeeze(`${h.title} ${h.snippet}`));
-  if (texts.some((t) => t.includes(n))) return true;
-  // 이름이 길면 앞 네 글자만이라도 글에 나오는지 본다("업사이드커피 성수 본점" → "업사이드").
-  const head = n.slice(0, Math.min(4, n.length));
-  return head.length >= 2 && texts.some((t) => t.includes(head));
-}
-
 /** 두 지점이 얼마나 떨어져 있는지 대충 재는 값(도 단위) — 엉뚱한 나라 좌표를 걸러내는 용도. */
 function roughFar(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
   return Math.abs(a.lat - b.lat) + Math.abs(a.lng - b.lng);
@@ -509,11 +573,11 @@ function roughFar(a: { lat: number; lng: number }, b: { lat: number; lng: number
  */
 async function locate(
   name: string,
-  area: string,
+  hint: string,
   anchor: { lat: number; lng: number } | undefined,
   base: string
 ): Promise<{ lat: number; lng: number; address: string } | null> {
-  const q = [name, area].filter(Boolean).join(" ").trim();
+  const q = [name, hint].filter(Boolean).join(" ").trim();
   if (!q) return null;
   const [byNaver, byDict, byMap] = await Promise.all([
     // 네이버 장소 창구는 열쇠가 있을 때만 답한다(없으면 빈 목록)
@@ -554,27 +618,29 @@ async function locate(
 /**
  * AI가 낸 후보를 핀으로 바꾼다.
  * 출처는 네이버가 실제로 돌려준 글 목록에 있는 것만 인정하고, 하나도 남지 않으면 그 곳은 버린다.
- * 좌표는 AI를 믿지 않고 여기서 직접 찾는다(여러 곳을 동시에 찾아 시간을 아낀다).
+ * 자리는 세 갈래로 정한다 — ① 읽은 글의 지도 카드 좌표(글쓴이가 직접 붙인 값이라 가장 정확),
+ * ② 글에서 본 주소로 찾기, ③ 이름+지역으로 찾기. ①은 실제 읽은 카드와 맞을 때만 믿는다.
  */
 async function buildPins(
   list: ProposedPin[],
   blogSeen: Map<string, NaverBlogItem>,
+  cardsSeen: BlogPlaceCard[],
   near: { lat: number; lng: number } | undefined,
   base: string
 ): Promise<{
   pins: Pin[];
   droppedNoSource: number;
-  droppedNoMention: number;
   droppedNoSpot: number;
 }> {
   const now = Date.now();
   let droppedNoSource = 0;
-  let droppedNoMention = 0;
 
   // 1단계 — 이름과 출처가 멀쩡한 후보만 남긴다
   const kept: {
     name: string;
     area: string;
+    address: string;
+    card?: BlogPlaceCard;
     anchor?: { lat: number; lng: number };
     type: PinType;
     memo: string;
@@ -589,7 +655,6 @@ async function buildPins(
     }
 
     const sources: PinSource[] = [];
-    const hits: NaverBlogItem[] = [];
     const seenHere = new Set<string>();
     for (const raw of Array.isArray(p.sources) ? p.sources : []) {
       if (sources.length >= MAX_SOURCES_PER_PIN) break;
@@ -598,17 +663,11 @@ async function buildPins(
       const hit = blogSeen.get(key);
       if (!hit || seenHere.has(key)) continue;
       seenHere.add(key);
-      hits.push(hit);
       // 제목도 검색 결과 것을 쓴다 — 지어낸 제목이 화면에 나가지 않게.
       sources.push({ title: hit.title, url: hit.url });
     }
     if (sources.length === 0) {
       droppedNoSource++;
-      continue;
-    }
-    // 근거로 댄 글에 그 가게 이름이 아예 안 나오면, 지어낸 곳으로 보고 버린다.
-    if (!mentionsName(name, hits)) {
-      droppedNoMention++;
       continue;
     }
 
@@ -626,9 +685,20 @@ async function buildPins(
         ? { lat: aLat, lng: aLng }
         : undefined;
 
+    // AI가 옮겨 적은 좌표는 실제로 읽은 글의 지도 카드와 맞을 때만 믿는다
+    // (300m 안이면 같은 카드로 본다). 안 맞으면 지어낸 값으로 보고 버린다.
+    const pLat = Number(p.lat);
+    const pLng = Number(p.lng);
+    const card =
+      Number.isFinite(pLat) && Number.isFinite(pLng)
+        ? cardsSeen.find((c) => Math.abs(c.lat - pLat) + Math.abs(c.lng - pLng) < 0.003)
+        : undefined;
+
     kept.push({
       name,
       area: typeof p.area === "string" ? p.area : "",
+      address: typeof p.address === "string" ? p.address.trim() : "",
+      card,
       anchor,
       type,
       memo: typeof p.memo === "string" ? p.memo : "",
@@ -636,14 +706,29 @@ async function buildPins(
     });
   }
 
-  // 2단계 — 남은 후보의 좌표를 한꺼번에 찾는다.
-  // 잣대는 AI가 적어 준 그 동네 중심 좌표이고, 없으면 지금 보는 지도 위치를 쓴다.
+  // 2단계 — 남은 후보의 자리를 한꺼번에 정한다.
+  // 지도 카드가 있으면 찾기 없이 바로 쓴다(가장 정확하고 가장 빠르다).
+  // 없으면 주소(글에서 본 것) 먼저, 그래도 안 되면 지역 이름으로 찾는다.
   // 한꺼번에 우르르 물으면 장소 사전이 "너무 잦다"며 몇 건을 흘려버려 주소가 빈 채로 남는다.
   // 0.15초씩 시차를 두고 보내면 다 받아 준다(전체는 여전히 1초 남짓).
   const spots = await Promise.all(
     kept.map(async (k, i) => {
+      const anchor = k.anchor ?? near;
+      // 카드 좌표도 그 동네 안일 때만 쓴다 — 여러 도시를 다룬 글에서 엉뚱한 도시 카드를
+      // 옮겨 적는 실수를 거른다. 동네를 벗어나면 아래의 찾기 길로 내려간다.
+      if (k.card && (!anchor || roughFar(k.card, anchor) < 2)) {
+        return {
+          lat: k.card.lat,
+          lng: k.card.lng,
+          address: k.address || k.card.address,
+        };
+      }
       await new Promise((r) => setTimeout(r, i * 150));
-      return locate(k.name, k.area, k.anchor ?? near, base);
+      if (k.address) {
+        const byAddress = await locate(k.name, k.address, anchor, base);
+        if (byAddress) return { ...byAddress, address: byAddress.address || k.address };
+      }
+      return locate(k.name, k.area, anchor, base);
     })
   );
 
@@ -670,5 +755,5 @@ async function buildPins(
     });
   });
 
-  return { pins, droppedNoSource, droppedNoMention, droppedNoSpot };
+  return { pins, droppedNoSource, droppedNoSpot };
 }
