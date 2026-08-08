@@ -712,11 +712,38 @@ export default function Home() {
   const listPins =
     listType === "all" ? viewPins : viewPins.filter((p) => p.type === listType);
   const listing = tab === "map" && mapMode === "list";
+  // 지도가 화면을 꽉 채우고 있는 상태 — 이때만 위 알약 줄과 아래 메뉴의 바탕을 비워
+  // 지도가 그 뒤까지 그대로 보이게 한다.
+  const mapFull = tab === "map" && !listing;
 
   return (
     <div className="app-shell">
-      {/* 머리 — 여행 고르는 알약 한 줄. 남는 세로는 전부 지도에 준다. */}
-      <header className="relative z-[1050] shrink-0 px-4 pb-2 pt-2">
+      {/* 지도 — 화면 전체에 깔린다(위 알약 줄과 아래 메뉴 뒤까지). 탭을 바꿔도 그대로 남아
+          있다(다시 그리면 느리다). 다만 덮여 있는 동안에는 지도 핀들이 키보드 순서에 끼어
+          있어, 탭키로 비서·여행 화면에 닿기 전에 보이지도 않는 핀 수십 개를 지나가게 된다.
+          inert로 덮인 동안만 통째로 건너뛰게 한다. */}
+      <div className="map-layer" inert={tab !== "map" || listing}>
+        <MapView
+          onReady={handleMapReady}
+          pins={viewPins}
+          currentUserId={viewUserId}
+          initialCenter={initialView.center}
+          initialZoom={initialView.zoom}
+          onPinDelete={handlePinDelete}
+          onPinDragEnd={handlePinDragEnd}
+          searchTarget={searchTarget}
+          onSearchTargetAdd={handleSearchTargetAdd}
+          onSearchTargetClose={() => setSearchTarget(null)}
+          className="h-full w-full"
+        />
+      </div>
+
+      {/* 머리 — 여행 고르는 알약 한 줄 + 지도/리스트 전환. 지도 위에 떠 있다. */}
+      <header
+        className={`relative z-[1050] shrink-0 px-4 pb-2 pt-2${
+          mapFull ? "" : " bg-[var(--bg)]"
+        }`}
+      >
         <div className="flex items-center gap-2">
           <ProjectSwitcher
             rooms={viewRooms}
@@ -864,16 +891,41 @@ export default function Home() {
             </button>
           </div>
         )}
+
+        {/* 지도 | 리스트 전환 — 여행 고르는 줄 바로 아래, 가로 한 줄을 다 쓴다. */}
+        {tab === "map" && (
+          <div className="map-seg mt-2" role="group" aria-label="지도 보기 방식">
+            <button
+              type="button"
+              onClick={() => setMapMode("map")}
+              aria-pressed={!listing}
+              className={`map-seg-item${listing ? "" : " active"}`}
+            >
+              지도
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMapMode("list");
+                setPicking(false);
+              }}
+              aria-pressed={listing}
+              className={`map-seg-item${listing ? " active" : ""}`}
+            >
+              리스트
+            </button>
+          </div>
+        )}
       </header>
 
       {notice && (
-        <div className="shrink-0 bg-[var(--accent-bg)] px-4 py-2 text-sm font-medium text-[var(--accent)]">
+        <div className="relative z-[1030] shrink-0 bg-[var(--accent-bg)] px-4 py-2 text-sm font-medium text-[var(--accent)]">
           {notice}
         </div>
       )}
 
       {!syncEnabled && (
-        <div className="shrink-0 bg-[var(--surface-hover)] px-4 py-1.5 text-xs text-[var(--text-muted)]">
+        <div className="relative z-[1030] shrink-0 bg-[var(--surface-hover)] px-4 py-1.5 text-xs text-[var(--text-muted)]">
           지금은 이 기기에만 저장돼요 — 친구와 같이 보려면 서버 연결이 필요해요.
         </div>
       )}
@@ -881,7 +933,7 @@ export default function Home() {
       {/* 저장 알림 — 잘 갔는지 눈으로 확인. 실패는 누를 때까지 사라지지 않는다. */}
       {syncEnabled && saveStatus !== "idle" && (
         <div
-          className={`flex shrink-0 items-center gap-2 px-4 py-1.5 text-xs font-semibold ${
+          className={`relative z-[1030] flex shrink-0 items-center gap-2 px-4 py-1.5 text-xs font-semibold ${
             saveStatus === "failed"
               ? "bg-[var(--danger)] text-white"
               : "bg-[var(--surface-hover)] text-[var(--text-muted)]"
@@ -907,52 +959,36 @@ export default function Home() {
         </div>
       )}
 
-      {/* 몸통 — 지도 위에 여행 화면이 통째로 덮인다 */}
-      <div className="relative min-h-0 flex-1 overflow-hidden">
-        {/* 지도는 탭을 바꿔도 그대로 남아 있다(다시 그리면 느리다). 다만 덮여 있는 동안에는
-            지도 핀들이 키보드 순서에 끼어 있어, 탭키로 비서·여행 화면에 닿기 전에 보이지도 않는
-            핀 수십 개를 지나가게 된다. inert로 덮인 동안만 통째로 건너뛰게 한다. */}
-        <div className="absolute inset-0" inert={tab !== "map" || listing}>
-          <MapView
-            onReady={handleMapReady}
-            pins={viewPins}
-            currentUserId={viewUserId}
-            initialCenter={initialView.center}
-            initialZoom={initialView.zoom}
-            onPinDelete={handlePinDelete}
-            onPinDragEnd={handlePinDragEnd}
-            searchTarget={searchTarget}
-            onSearchTargetAdd={handleSearchTargetAdd}
-            onSearchTargetClose={() => setSearchTarget(null)}
-            className="h-full w-full"
-          />
+      {/* 첫 안내 — 핀이 하나도 없을 때만. 지도가 화면 전체에 깔려 있으니 화면 정중앙에 둔다.
+          검색 중이거나 자리를 고르는 중엔 가리지 않게 숨긴다. */}
+      {mapFull && viewPins.length === 0 && !searchTarget && !picking && (
+        <div className="pointer-events-none absolute inset-x-8 top-1/2 z-[999] -translate-y-1/2 rounded-[16px] bg-[var(--surface)] px-5 py-4 text-center shadow-[var(--shadow-2)]">
+          <p className="dw-display text-[1.25rem] text-[var(--text)]">
+            아래 가운데 + 를 눌러 보세요
+          </p>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">
+            지도를 움직여 자리를 맞추면 핀이 꽂혀요
+          </p>
         </div>
+      )}
 
-        {/* 첫 안내 — 핀이 하나도 없을 때만. 검색 중이거나 자리를 고르는 중엔 가리지 않게 숨긴다. */}
-        {tab === "map" && !listing && viewPins.length === 0 && !searchTarget && !picking && (
-          <div className="pointer-events-none absolute inset-x-8 top-1/2 z-[999] -translate-y-1/2 rounded-[16px] bg-[var(--surface)] px-5 py-4 text-center shadow-[var(--shadow-2)]">
-            <p className="dw-display text-[1.25rem] text-[var(--text)]">
-              아래 가운데 + 를 눌러 보세요
-            </p>
-            <p className="mt-1 text-xs text-[var(--text-muted)]">
-              지도를 움직여 자리를 맞추면 핀이 꽂혀요
-            </p>
-          </div>
-        )}
+      {/* 자리 고르기 — 가운데 십자. 지도 한가운데가 곧 화면 한가운데라야 십자가 가리키는
+          곳에 핀이 꽂힌다. 손가락 입력은 그대로 지도로 통과시킨다. */}
+      {mapFull && picking && (
+        <div
+          className="pointer-events-none absolute inset-0 z-[1000] flex items-center justify-center"
+          aria-hidden
+        >
+          <span className="map-crosshair" />
+        </div>
+      )}
 
-        {/* 자리 고르기 — 가운데 십자. 손가락 입력은 그대로 지도로 통과시킨다. */}
-        {tab === "map" && picking && (
-          <div
-            className="pointer-events-none absolute inset-0 z-[1000] flex items-center justify-center"
-            aria-hidden
-          >
-            <span className="map-crosshair" />
-          </div>
-        )}
-
+      {/* 몸통 — 지도 위에 여행 화면이 통째로 덮인다. 아무것도 덮이지 않은 자리는 손가락
+          입력을 뒤 지도로 흘려보낸다(pointer-events-none). 덮개마다 다시 켜 준다. */}
+      <div className="pointer-events-none relative min-h-0 flex-1 overflow-hidden">
         {/* 지도 위 떠 있는 막대 — 자리를 고르는 중에만. 핀 추가 단추는 아래 메뉴 가운데로 옮겼다. */}
         {tab === "map" && picking && (
-          <div className="absolute inset-x-4 bottom-4 z-[1001] flex items-center gap-2">
+          <div className="pointer-events-auto absolute inset-x-4 bottom-4 z-[1001] flex items-center gap-2">
             <button
               type="button"
               onClick={() => setPicking(false)}
@@ -972,7 +1008,7 @@ export default function Home() {
 
         {/* 목록으로 보기 — 지도를 덮는 판. 종류 칩으로 걸러 보고, 지도 단추를 누르면 지도로 돌아간다. */}
         {listing && (
-          <div className="absolute inset-0 z-[1005] flex flex-col bg-[var(--bg)] pt-[72px]">
+          <div className="pointer-events-auto absolute inset-0 z-[1005] flex flex-col bg-[var(--bg)] pt-2">
             <div className="shrink-0 overflow-x-auto px-4 pb-2">
               <div className="flex w-max items-center gap-2">
                 <button
@@ -1029,36 +1065,9 @@ export default function Home() {
           </div>
         )}
 
-        {/* 지도 | 리스트 전환 — 지도 탭 상단 가운데에 떠 있다(덮개 위로). */}
-        {tab === "map" && (
-          <div className="absolute left-1/2 top-3 z-[1006] -translate-x-1/2">
-            <div className="map-seg" role="group" aria-label="지도 보기 방식">
-              <button
-                type="button"
-                onClick={() => setMapMode("map")}
-                aria-pressed={!listing}
-                className={`map-seg-item${listing ? "" : " active"}`}
-              >
-                지도
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setMapMode("list");
-                  setPicking(false);
-                }}
-                aria-pressed={listing}
-                className={`map-seg-item${listing ? " active" : ""}`}
-              >
-                리스트
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* 비서 — AI에게 말로 시키는 화면. 대화는 페이지가 들고 있어 탭을 오가도 남는다. */}
         {tab === "assistant" && (
-          <div className="absolute inset-0 z-[1010] bg-[var(--bg)]">
+          <div className="pointer-events-auto absolute inset-0 z-[1010] bg-[var(--bg)]">
             <AssistantPanel
               messages={chat}
               loading={chatLoading}
@@ -1072,7 +1081,7 @@ export default function Home() {
 
         {/* 준비 — 떠나기 전에 채우는 칸(항공·날짜·숙소·집합·짐·장보기·안건) */}
         {tab === "prepare" && (
-          <div className="absolute inset-0 z-[1010] bg-[var(--bg)]">
+          <div className="pointer-events-auto absolute inset-0 z-[1010] bg-[var(--bg)]">
             <PreparePanel
               pins={viewPins}
               itinerary={viewItinerary}
@@ -1084,7 +1093,7 @@ export default function Home() {
 
         {/* 일정 — 현지에서 꺼내 보는 화면(고치는 칸 없음) */}
         {tab === "schedule" && (
-          <div className="absolute inset-0 z-[1010] bg-[var(--bg)]">
+          <div className="pointer-events-auto absolute inset-0 z-[1010] bg-[var(--bg)]">
             <SchedulePanel
               pins={viewPins}
               itinerary={viewItinerary}
@@ -1094,8 +1103,12 @@ export default function Home() {
         )}
       </div>
 
-      {/* 하단 독 — Doweek 문법: 유리판 네 칸 + 가운데로 튀어나온 파란 + 단추(FAB) */}
-      <nav className="dock-nav" aria-label="화면 이동">
+      {/* 하단 독 — Doweek 문법: 유리판 네 칸 + 가운데로 튀어나온 파란 + 단추(FAB).
+          지도를 볼 때는 바탕을 비워 유리판 옆·뒤로 지도가 그대로 보이게 한다. */}
+      <nav
+        className={`dock-nav${mapFull ? " dock-nav--float" : ""}`}
+        aria-label="화면 이동"
+      >
         <div className="dock-wrap">
           <div className="dock-glass dock-glass--4">
             {DOCK_ITEMS.map((item) => {
@@ -1127,7 +1140,7 @@ export default function Home() {
             aria-label="핀 추가"
             className={`dock-fab${picking || listing ? " dock-fab--hidden" : ""}`}
           >
-            <Plus size={24} strokeWidth={2.5} aria-hidden />
+            <Plus size={22} strokeWidth={2.5} aria-hidden />
           </button>
         </div>
       </nav>

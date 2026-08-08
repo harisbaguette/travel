@@ -184,10 +184,13 @@ body {
   align-items: center;
   min-height: var(--dock-height);
   padding: 9px 6px 8px;
-  /* 고정값: 알파를 1 아래로 내리지 말 것 — dock-nav가 이미 불투명(var(--bg))이라
-     반투명해서 얻는 배경은 없고, 대신 뒤에 겹친 + 단추(z-index:1) 파란색이
-     비쳐 보이는 부작용만 생긴다(사용자 08-08 지적). 흐림 효과도 같은 이유로 뺐다. */
-  background: #fff;
+  /* 지도가 이 뒤까지 깔리는 뜬 모드(.dock-nav--float)에서 흐릿하게 지도가 비치라고
+     일부러 반투명(0.95)+흐림을 쓴다 — Doweek 원본 값. 완전 불투명으로 바꾸면
+     뜬 모드에서 지도가 안 비쳐 떠 있는 느낌이 사라지니 건드리지 말 것.
+     + 단추가 이 뒤로 비쳐 보이는 문제는 아래 .dock-nav--float .dock-fab에서 따로 막는다. */
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: saturate(180%) blur(24px);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
   border-radius: 24px;
   border: 1px solid rgba(255, 255, 255, 0.8);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 0 0 0.5px rgba(0, 0, 0, 0.04),
@@ -333,6 +336,12 @@ body {
 .dock-fab--hidden {
   opacity: 0;
   pointer-events: none;
+}
+/* 지도가 그대로 비치는 뜬 모드에서는 반투명 유리 뒤로 + 단추 파란색이 섞여 보여
+   지저분해 보인다(사용자 08-08 지적). 이때만 단추를 유리판 앞으로 꺼내 또렷하게
+   보이게 한다 — 평소(불투명 막대)엔 그대로 뒤로 걸치는 모습을 유지한다. */
+.dock-nav--float .dock-fab {
+  z-index: 3;
 }
 
 /* ── 상단 여행 전환 알약 — Doweek ProjectSwitcher 이식 ── */
