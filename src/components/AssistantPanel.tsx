@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, ExternalLink, Sparkles } from "lucide-react";
+import { ArrowUp, ExternalLink } from "lucide-react";
 import type { Pin } from "@/lib/types";
 
 // 비서 화면 — AI에게 채팅으로 시키는 곳.
@@ -30,16 +30,7 @@ interface AssistantPanelProps {
   loading: boolean;
   onSend: (text: string) => void;
   onPickPins: (pins: Pin[]) => void;
-  /** 지도 화면 범위에서 바로 음식점을 긁어오는 예전 기능 — AI 열쇠 없이도 동작 */
-  onQuickFood: () => void;
-  quickLoading: boolean;
 }
-
-const EXAMPLES = [
-  "이 근처 현지인 맛집 5곳 찾아줘",
-  "아이랑 가기 좋은 관광지 추천해줘",
-  "분위기 좋은 카페 알려줘",
-];
 
 const MAX_SHOWN_SOURCES = 6;
 
@@ -48,8 +39,6 @@ export default function AssistantPanel({
   loading,
   onSend,
   onPickPins,
-  onQuickFood,
-  quickLoading,
 }: AssistantPanelProps) {
   const [draft, setDraft] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -70,40 +59,6 @@ export default function AssistantPanel({
   return (
     <div className="flex h-full flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-3">
-        {messages.length === 0 && (
-          <div className="mx-auto mt-12 max-w-[300px]">
-            <Sparkles size={22} strokeWidth={1.5} className="text-[var(--text-faint)]" aria-hidden />
-            <p className="mt-3 text-sm leading-relaxed text-[var(--text-muted)]">
-              찾고 싶은 곳을 말로 부탁하면 네이버 블로그 후기를 찾아 핀 후보를 만들어 와요.
-            </p>
-            <div className="mt-5 flex flex-col gap-2">
-              {EXAMPLES.map((ex) => (
-                <button
-                  key={ex}
-                  type="button"
-                  onClick={() => {
-                    onSend(ex);
-                    // 예시를 누르면 이 안내가 통째로 사라진다 — 눌린 단추와 함께 커서가
-                    // 갈 곳을 잃으므로, 이어서 말할 수 있게 입력칸으로 옮겨 준다.
-                    inputRef.current?.focus();
-                  }}
-                  className="rounded-[var(--radius-control)] border border-[var(--border-strong)] px-3.5 py-2.5 text-left text-sm text-[var(--text)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"
-                >
-                  {ex}
-                </button>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={onQuickFood}
-              disabled={quickLoading}
-              className="mt-1 inline-flex min-h-11 items-center text-xs text-[var(--text-muted)] underline underline-offset-2 transition-colors hover:text-[var(--accent)] disabled:opacity-60"
-            >
-              {quickLoading ? "지도에서 찾는 중…" : "지도 화면 안 음식점 바로 긁어오기"}
-            </button>
-          </div>
-        )}
-
         <ul className="flex flex-col gap-2.5 pb-3">
           {messages.map((m, i) => (
             <li key={i} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>

@@ -12,6 +12,8 @@ import type { Map as LeafletMap } from "leaflet";
 import {
   Bot,
   CalendarDays,
+  ChevronDown,
+  List,
   Luggage,
   Map as MapIcon,
   MapPin,
@@ -26,7 +28,7 @@ import {
   type LatLng,
   type PlaceSuggestion,
 } from "@/lib/cities";
-import type { Itinerary, Pin, PinType, MapBounds } from "@/lib/types";
+import type { Itinerary, Pin, PinType } from "@/lib/types";
 import { PIN_TYPES, PIN_TYPE_LIST } from "@/lib/pinTypes";
 import { loadPins, savePins } from "@/lib/pinStorage";
 import {
@@ -164,18 +166,17 @@ function useHydrated(): boolean {
   );
 }
 
-// 화면은 넷 — 손으로 꽂는 지도, AI에게 시키는 비서, 떠나기 전에 채우는 준비, 현지에서 보는 일정.
+// 아래 메뉴 넷 — 손으로 꽂는 지도, 꽂아 둔 곳을 줄줄이 보는 리스트, 떠나기 전에 채우는 준비,
+// 현지에서 보는 일정. 가운데 튀어나온 + 단추가 두 번째·세 번째 칸 사이 빈 자리에 앉으므로
+// 칸은 짝수여야 한다(홀수면 + 가 가운데 칸 위에 겹친다). 그래서 비서는 위 줄 단추로 뺐다.
 const DOCK_ITEMS = [
   { key: "map", icon: MapIcon, label: "지도" },
-  { key: "assistant", icon: Bot, label: "비서" },
+  { key: "list", icon: List, label: "리스트" },
   { key: "prepare", icon: Luggage, label: "준비" },
   { key: "schedule", icon: CalendarDays, label: "일정" },
 ] as const;
 
-type Tab = (typeof DOCK_ITEMS)[number]["key"];
-
-// 지도 탭 안에서 지도로 볼지 목록으로 볼지.
-type MapMode = "map" | "list";
+type Tab = (typeof DOCK_ITEMS)[number]["key"] | "assistant";
 
 export default function Home() {
   const hydrated = useHydrated();
@@ -217,12 +218,10 @@ export default function Home() {
   } | null>(null);
   // + 를 눌러 "자리 고르기"를 켠 상태 — 지도 가운데 십자를 보여 준다.
   const [picking, setPicking] = useState(false);
-  const [aiLoading, setAILoading] = useState(false);
   // AI가 찾아온 후보들 — 고르는 시트가 열려 있는 동안만 들고 있는다.
   const [aiFound, setAIFound] = useState<Pin[] | null>(null);
   const [tab, setTab] = useState<Tab>("map");
-  // 지도 탭의 두 얼굴 — 지도로 보기 / 목록으로 보기. 목록은 종류로 걸러 본다.
-  const [mapMode, setMapMode] = useState<MapMode>("map");
+  // 리스트 화면에서 어떤 종류만 볼지 — 접힌 목록(드롭다운)으로 고른다.
   const [listType, setListType] = useState<PinType | "all">("all");
   // 비서 채팅 — 여행(방)을 바꾸면 비운다(다른 도시 이야기가 섞이지 않게).
   const [chat, setChat] = useState<AssistantMsg[]>([]);
@@ -392,7 +391,6 @@ export default function Home() {
       closeSuggestions();
       setNotice("");
       setTab("map");
-      setMapMode("map");
       setSearchTarget({ lat: s.lat, lng: s.lng, name: s.name });
       const map = mapRef.current;
       if (!map) return;
@@ -410,7 +408,6 @@ export default function Home() {
       setQuery(p.name);
       closeSuggestions();
       setTab("map");
-      setMapMode("map");
       const map = mapRef.current;
       if (map) map.setView([p.lat, p.lng], 16, { animate: true });
     },
@@ -431,7 +428,6 @@ export default function Home() {
         return;
       }
       setTab("map");
-      setMapMode("map");
       setSearchTarget({ lat: coords[0], lng: coords[1], name: q });
       const map = mapRef.current;
       if (!map) return;
@@ -488,7 +484,6 @@ export default function Home() {
   // 원하는 곳을 맞춘 다음 확인을 눌러야 핀이 꽂힌다(지도를 눌러선 꽂히지 않는다).
   const handleFab = useCallback(() => {
     setTab("map");
-    setMapMode("map");
     setPicking(true);
   }, []);
 
@@ -559,57 +554,10 @@ export default function Home() {
   // 목록에서 지도 단추를 눌렀을 때만 지도로 넘어간다(이름만 눌러선 안 튕김).
   const handleShowOnMap = useCallback((pin: Pin) => {
     setTab("map");
-    setMapMode("map");
     const map = mapRef.current;
     if (!map) return;
     map.setView([pin.lat, pin.lng], 16, { animate: true });
   }, []);
-
-  const handleAISearch = useCallback(async () => {
-    const map = mapRef.current;
-    if (!map) return;
-    const b = map.getBounds();
-    const bounds: MapBounds = {
-      north: b.getNorth(),
-      south: b.getSouth(),
-      east: b.getEast(),
-      west: b.getWest(),
-    };
-    setAILoading(true);
-    setNotice("");
-    try {
-      const res = await fetch("/api/search-food", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(bounds),
-      });
-      const data = (await res.json()) as {
-        ok: boolean;
-        pins?: Pin[];
-        error?: string;
-      };
-      if (!data.ok || !data.pins) {
-        setNotice(data.error ?? "맛집 검색에 실패했어요");
-        return;
-      }
-      const fresh = data.pins.filter(
-        (np) =>
-          !pins.some(
-            (ep) => distanceMeters(ep.lat, ep.lng, np.lat, np.lng) < 50
-          )
-      );
-      if (fresh.length === 0) {
-        setNotice("새로운 맛집을 찾지 못했어요");
-        return;
-      }
-      // 바로 꽂지 않고 먼저 보여준다 — 고른 것만 지도에 들어간다.
-      setAIFound(fresh);
-    } catch {
-      setNotice("맛집 검색 중 문제가 생겼어요");
-    } finally {
-      setAILoading(false);
-    }
-  }, [pins]);
 
   // 고른 후보만 지도에 꽂는다.
   const handleAIAdd = useCallback(
@@ -621,7 +569,6 @@ export default function Home() {
       setNotice(`${chosen.length}곳을 꽂았어요`);
       // 꽂은 결과가 바로 보이게 지도로 넘어간다
       setTab("map");
-      setMapMode("map");
     },
     [room]
   );
@@ -708,17 +655,17 @@ export default function Home() {
   const viewUserId = hydrated ? userId : "";
   const viewPins = hydrated ? pins : EMPTY_PINS;
   const viewItinerary = hydrated ? itinerary : EMPTY_ITINERARY;
-  // 목록으로 볼 때 종류 칩으로 걸러진 핀 — 거르기는 여기(부모)에서 끝낸다.
+  // 리스트 화면에서 고른 종류만 남긴 핀 — 거르기는 여기(부모)에서 끝낸다.
   const listPins =
     listType === "all" ? viewPins : viewPins.filter((p) => p.type === listType);
-  const listing = tab === "map" && mapMode === "list";
+  const listing = tab === "list";
   // 지도가 화면을 꽉 채우고 있는 상태 — 이때만 위 알약 줄과 아래 메뉴의 바탕을 비워
   // 지도가 그 뒤까지 그대로 보이게 한다.
-  const mapFull = tab === "map" && !listing;
+  const mapFull = tab === "map";
 
   return (
     <div className="app-shell">
-      {/* 머리 — 여행 고르는 알약 한 줄 + 지도/리스트 전환. 지도 위에 떠 있다. */}
+      {/* 머리 — 여행 고르는 알약 한 줄 + 비서 부르기 + 장소 검색. 지도 위에 떠 있다. */}
       <header
         className={`relative z-[1050] shrink-0 px-4 pb-2 pt-2${
           mapFull ? "" : " bg-[var(--bg)]"
@@ -730,6 +677,24 @@ export default function Home() {
             currentId={viewRoom || DEFAULT_ROOM.id}
             onSelect={switchRoom}
           />
+          {/* 비서 부르기 — 아래 메뉴 칸이 짝수여야 해서 이 줄로 올렸다.
+              열려 있을 때 한 번 더 누르면 지도로 돌아간다. */}
+          <button
+            type="button"
+            onClick={() => {
+              setPicking(false);
+              setTab((cur) => (cur === "assistant" ? "map" : "assistant"));
+            }}
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-[12px] shadow-[var(--shadow-1)] transition-colors ${
+              tab === "assistant"
+                ? "bg-[var(--accent)] text-white"
+                : "bg-[var(--surface)] text-[var(--text-muted)]"
+            }`}
+            aria-label={tab === "assistant" ? "비서 닫기" : "비서에게 물어보기"}
+            aria-pressed={tab === "assistant"}
+          >
+            <Bot size={19} strokeWidth={2.2} />
+          </button>
           <button
             type="button"
             onClick={() => setSearchOpen((o) => !o)}
@@ -871,42 +836,11 @@ export default function Home() {
             </button>
           </div>
         )}
-
-        {/* 지도 | 리스트 전환 — 여행 고르는 줄 바로 아래, 가로 한 줄을 다 쓴다. */}
-        {tab === "map" && (
-          <div className="map-seg mt-2" role="group" aria-label="지도 보기 방식">
-            <button
-              type="button"
-              onClick={() => setMapMode("map")}
-              aria-pressed={!listing}
-              className={`map-seg-item${listing ? "" : " active"}`}
-            >
-              지도
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setMapMode("list");
-                setPicking(false);
-              }}
-              aria-pressed={listing}
-              className={`map-seg-item${listing ? " active" : ""}`}
-            >
-              리스트
-            </button>
-          </div>
-        )}
       </header>
 
       {notice && (
         <div className="relative z-[1030] shrink-0 bg-[var(--accent-bg)] px-4 py-2 text-sm font-medium text-[var(--accent)]">
           {notice}
-        </div>
-      )}
-
-      {!syncEnabled && (
-        <div className="relative z-[1030] shrink-0 bg-[var(--surface-hover)] px-4 py-1.5 text-xs text-[var(--text-muted)]">
-          지금은 이 기기에만 저장돼요 — 친구와 같이 보려면 서버 연결이 필요해요.
         </div>
       )}
 
@@ -939,19 +873,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* 첫 안내 — 핀이 하나도 없을 때만. 지도가 화면 전체에 깔려 있으니 화면 정중앙에 둔다.
-          검색 중이거나 자리를 고르는 중엔 가리지 않게 숨긴다. */}
-      {mapFull && viewPins.length === 0 && !searchTarget && !picking && (
-        <div className="pointer-events-none absolute inset-x-8 top-1/2 z-[999] -translate-y-1/2 rounded-[16px] bg-[var(--surface)] px-5 py-4 text-center shadow-[var(--shadow-2)]">
-          <p className="dw-display text-[1.25rem] text-[var(--text)]">
-            아래 가운데 + 를 눌러 보세요
-          </p>
-          <p className="mt-1 text-xs text-[var(--text-muted)]">
-            지도를 움직여 자리를 맞추면 핀이 꽂혀요
-          </p>
-        </div>
-      )}
-
       {/* 자리 고르기 — 가운데 십자. 지도 한가운데가 곧 화면 한가운데라야 십자가 가리키는
           곳에 핀이 꽂힌다. 손가락 입력은 그대로 지도로 통과시킨다. */}
       {mapFull && picking && (
@@ -967,7 +888,7 @@ export default function Home() {
           탭키를 누르면 위 단추들을 먼저 지나고 그다음 지도 핀에 닿는다). 탭을 바꿔도 그대로
           남아 있다(다시 그리면 느리다). 다만 덮여 있는 동안에는 보이지도 않는 핀 수십 개가
           키보드 순서에 끼어 있어, inert로 덮인 동안만 통째로 건너뛰게 한다. */}
-      <div className="map-layer" inert={tab !== "map" || listing}>
+      <div className="map-layer" inert={tab !== "map"}>
         <MapView
           onReady={handleMapReady}
           pins={viewPins}
@@ -1006,46 +927,34 @@ export default function Home() {
           </div>
         )}
 
-        {/* 목록으로 보기 — 지도를 덮는 판. 종류 칩으로 걸러 보고, 지도 단추를 누르면 지도로 돌아간다. */}
+        {/* 리스트 — 지도를 덮는 판. 종류는 접힌 목록에서 하나 골라 걸러 보고,
+            지도 단추를 누르면 그 자리로 지도가 넘어간다. */}
         {listing && (
           <div className="pointer-events-auto absolute inset-0 z-[1005] flex flex-col bg-[var(--bg)] pt-2">
-            <div className="shrink-0 overflow-x-auto px-4 pb-2">
-              <div className="flex w-max items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setListType("all")}
-                  aria-pressed={listType === "all"}
-                  className={`flex h-[30px] shrink-0 items-center rounded-full px-3 text-xs font-bold ${
-                    listType === "all"
-                      ? "bg-[var(--accent)] text-white"
-                      : "bg-[var(--surface)] text-[var(--text)] shadow-[var(--shadow-1)]"
-                  }`}
+            <div className="shrink-0 px-4 pb-2">
+              <div className="relative inline-flex items-center">
+                <select
+                  value={listType}
+                  onChange={(e) =>
+                    setListType(e.target.value as PinType | "all")
+                  }
+                  className="list-filter"
+                  aria-label="볼 종류 고르기"
                 >
-                  전체
-                </button>
-                {PIN_TYPE_LIST.map((cfg) => {
-                  const on = listType === cfg.type;
-                  return (
-                    <button
-                      key={cfg.type}
-                      type="button"
-                      onClick={() => setListType(cfg.type)}
-                      aria-pressed={on}
-                      className={`flex h-[30px] shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-bold ${
-                        on
-                          ? "bg-[var(--accent)] text-white"
-                          : "bg-[var(--surface)] text-[var(--text)] shadow-[var(--shadow-1)]"
-                      }`}
-                    >
-                      <span
-                        className="h-2 w-2 shrink-0 rounded-full"
-                        style={{ background: on ? "#fff" : cfg.color }}
-                        aria-hidden
-                      />
-                      {cfg.label}
-                    </button>
-                  );
-                })}
+                  <option value="all">전체 ({viewPins.length})</option>
+                  {PIN_TYPE_LIST.map((cfg) => (
+                    <option key={cfg.type} value={cfg.type}>
+                      {cfg.emoji} {cfg.label} (
+                      {viewPins.filter((p) => p.type === cfg.type).length})
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown
+                  size={16}
+                  strokeWidth={2.2}
+                  className="pointer-events-none absolute right-3 text-[var(--text-muted)]"
+                  aria-hidden
+                />
               </div>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
@@ -1073,8 +982,6 @@ export default function Home() {
               loading={chatLoading}
               onSend={handleAssistantSend}
               onPickPins={(found) => setAIFound(found)}
-              onQuickFood={handleAISearch}
-              quickLoading={aiLoading}
             />
           </div>
         )}
