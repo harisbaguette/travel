@@ -26,6 +26,26 @@ export interface NaverBlogItem {
   snippet: string;
   blogger: string;
   postdate: string;
+  /** 돈 받고 쓴 티가 나는 글인지 — 추천 근거로 삼을 때 낮춰 보라는 표시 */
+  sponsored: boolean;
+}
+
+// 돈이나 물건을 받고 쓴 글에 거의 항상 들어가는 말들. 하나라도 걸리면 협찬 글로 본다.
+const SPONSOR_WORDS = [
+  "협찬",
+  "제공받아",
+  "제공 받아",
+  "원고료",
+  "소정의",
+  "무상으로 제공",
+  "체험단",
+  "서포터즈",
+  "광고를 포함",
+  "업체로부터",
+];
+
+function looksSponsored(text: string): boolean {
+  return SPONSOR_WORDS.some((w) => text.includes(w));
 }
 
 export interface NaverLocalItem {
@@ -89,10 +109,18 @@ function toPostdate(value: unknown): string {
 }
 
 /** 공식 창구(열쇠 필요) */
-async function blogByApi(query: string, display: number): Promise<NaverBlogItem[]> {
+async function blogByApi(
+  query: string,
+  display: number,
+  recent: boolean
+): Promise<NaverBlogItem[]> {
   const items = await callNaverApi(
     BLOG_API_URL,
-    new URLSearchParams({ query, display: String(display), sort: "sim" })
+    new URLSearchParams({
+      query,
+      display: String(display),
+      sort: recent ? "date" : "sim",
+    })
   );
   const out: NaverBlogItem[] = [];
   for (const raw of items) {
@@ -100,25 +128,31 @@ async function blogByApi(query: string, display: number): Promise<NaverBlogItem[
     const url = typeof it.link === "string" ? it.link : "";
     const title = clean(it.title);
     if (!url || !title) continue;
+    const snippet = clean(it.description).slice(0, 300);
     out.push({
       title,
       url,
-      snippet: clean(it.description),
+      snippet,
       blogger: clean(it.bloggername),
       postdate: toPostdate(it.postdate),
+      sponsored: looksSponsored(`${title} ${snippet}`),
     });
   }
   return out;
 }
 
 /** 열쇠 없는 길 ① — 블로그 홈이 검색 결과를 채울 때 쓰는 공개 목록(제목·글쓴이·날짜까지 나온다) */
-async function blogByOpenList(query: string, display: number): Promise<NaverBlogItem[]> {
+async function blogByOpenList(
+  query: string,
+  display: number,
+  recent: boolean
+): Promise<NaverBlogItem[]> {
   const params = new URLSearchParams({
     countPerPage: String(display),
     currentPage: "1",
     endDate: "",
     keyword: query,
-    orderBy: "sim",
+    orderBy: recent ? "recentdate" : "sim",
     startDate: "",
     type: "post",
   });
@@ -147,12 +181,14 @@ async function blogByOpenList(query: string, display: number): Promise<NaverBlog
     const url = typeof it.postUrl === "string" ? it.postUrl : "";
     const title = clean(it.noTagTitle ?? it.title);
     if (!url || !title) continue;
+    const snippet = clean(it.contents).slice(0, 300);
     out.push({
       title,
       url,
-      snippet: clean(it.contents).slice(0, 200),
+      snippet,
       blogger: clean(it.nickName) || clean(it.blogName),
       postdate: toPostdate(it.addDate),
+      sponsored: looksSponsored(`${title} ${snippet}`),
     });
   }
   return out;
@@ -180,26 +216,31 @@ async function blogBySearchPage(query: string, display: number): Promise<NaverBl
       snippet: "",
       blogger: m[1],
       postdate: "",
+      sponsored: false,
     });
     if (out.length >= display) break;
   }
   return out;
 }
 
-/** 블로그 후기 검색 — 열쇠가 있으면 공식 창구, 없으면 공개 목록을 읽는다. */
+/**
+ * 블로그 후기 검색 — 열쇠가 있으면 공식 창구, 없으면 공개 목록을 읽는다.
+ * recent=true 면 최신 글 순으로 본다(가게가 문 닫았는지, 요즘도 좋은지 확인용).
+ */
 export async function searchNaverBlog(
   query: string,
-  display = 5
+  display = 8,
+  recent = false
 ): Promise<NaverBlogItem[]> {
   const q = query.trim();
   if (!q) return [];
-  const count = Math.min(Math.max(Math.trunc(display) || 5, 1), 20);
+  const count = Math.min(Math.max(Math.trunc(display) || 8, 1), 20);
 
   if (isNaverConfigured()) {
-    const viaApi = await blogByApi(q, count);
+    const viaApi = await blogByApi(q, count, recent);
     if (viaApi.length > 0) return viaApi;
   }
-  const viaOpen = await blogByOpenList(q, count);
+  const viaOpen = await blogByOpenList(q, count, recent);
   if (viaOpen.length > 0) return viaOpen;
   return blogBySearchPage(q, count);
 }
@@ -211,10 +252,7 @@ export async function searchNaverBlog(
 export async function searchNaverLocal(query: string): Promise<NaverLocalItem[]> {
   const q = query.trim();
   if (!q || !isNaverConfigured()) return [];
-  const items = await callNaverApi(
-    LOCAL_API_URL,
-    new URLSearchParams({ query: q, display: "5" })
-  );
+  const items = await callNaverApi(LOCAL_API_URL, new URLSearchParams({ query: q, display: "5" }));
   const out: NaverLocalItem[] = [];
   for (const raw of items) {
     const it = raw as Record<string, unknown>;

@@ -19,6 +19,8 @@ export interface Pin {
   createdAt: number;
   // 누가 찍었는지 구분(같이 편집). 없으면 본인이 찍은 것으로 간주.
   createdBy?: string;
+  // 비서가 찾아 준 도로명 주소 — 없을 수도 있다(해외 등).
+  address?: string;
   // 추천 근거 링크(최대 3개). 옛 저장본에는 없으므로 선택 사항.
   sources?: PinSource[];
 }

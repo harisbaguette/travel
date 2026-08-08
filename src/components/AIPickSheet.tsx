@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Check, ExternalLink } from "lucide-react";
 import type { Pin } from "@/lib/types";
 import { PIN_TYPES } from "@/lib/pinTypes";
+import { googleMapsUrl } from "@/lib/mapLinks";
 import { useSheet } from "@/lib/useSheet";
 
 interface AIPickSheetProps {
@@ -50,9 +51,6 @@ export default function AIPickSheet({ found, onAdd, onClose }: AIPickSheetProps)
             {allOn ? "전체 해제" : "전체 선택"}
           </button>
         </div>
-        <p className="mb-3 text-xs text-[var(--text-muted)]">
-          마음에 드는 곳만 골라서 꽂으세요
-        </p>
 
         <ul className="mb-4 flex max-h-[46vh] flex-col gap-1.5 overflow-y-auto">
           {found.map((pin) => {
@@ -91,23 +89,35 @@ export default function AIPickSheet({ found, onAdd, onClose }: AIPickSheetProps)
                     <span className="truncate text-sm font-semibold text-[var(--text)]">
                       {pin.name}
                     </span>
-                    <span className="text-xs text-[var(--text-muted)]">{cfg.label}</span>
+                    <span className="truncate text-xs text-[var(--text-muted)]">
+                      {pin.address || cfg.label}
+                    </span>
                   </span>
                 </button>
-                {src && (
+                <div className="flex items-center gap-3 border-t border-[var(--border)] px-3 py-2">
+                  {src && (
+                    <a
+                      href={src.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex min-w-0 flex-1 items-center gap-1.5 text-xs text-[var(--text-muted)] transition-colors hover:text-[var(--accent)]"
+                    >
+                      <span className="min-w-0 truncate underline underline-offset-2">
+                        {src.title}
+                      </span>
+                      <ExternalLink size={11} className="shrink-0" aria-hidden />
+                    </a>
+                  )}
                   <a
-                    href={src.url}
+                    href={googleMapsUrl(pin)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="flex items-center gap-1.5 border-t border-[var(--border)] px-3 py-2 text-xs text-[var(--text-muted)] transition-colors hover:text-[var(--accent)]"
+                    className="ml-auto flex shrink-0 items-center gap-1 text-xs text-[var(--text-muted)] underline underline-offset-2 transition-colors hover:text-[var(--accent)]"
                   >
-                    <span className="min-w-0 truncate underline underline-offset-2">
-                      {src.title}
-                    </span>
-                    <ExternalLink size={11} className="shrink-0" aria-hidden />
+                    구글 지도
+                    <ExternalLink size={11} aria-hidden />
                   </a>
-                )}
+                </div>
               </li>
             );
           })}

@@ -25,6 +25,7 @@ interface PinRow {
   created_by: string;
   deleted: boolean;
   sources: unknown; // jsonb — [{title, url}]
+  address: string;
   updated_ms: number | string; // extract(epoch from updated_at) * 1000
 }
 
@@ -62,6 +63,7 @@ function rowToPin(r: PinRow): Pin & { updatedAt: number; deleted: boolean } {
     // 주인 없음으로 취급해야 모든 기기에서 "친구 핀"(회색 점선)으로 오인되지 않는다.
     createdBy: !r.created_by || r.created_by === "AI" ? undefined : r.created_by,
     sources: cleanSources(r.sources),
+    address: typeof r.address === "string" ? r.address : "",
     updatedAt: Math.round(Number(r.updated_ms)),
     deleted: Boolean(r.deleted),
   };
@@ -94,7 +96,8 @@ function validPin(pin: unknown): pin is Pin {
     (p.emoji === undefined || (typeof p.emoji === "string" && p.emoji.length <= 8)) &&
     (p.createdBy === undefined || (typeof p.createdBy === "string" && p.createdBy.length <= 100)) &&
     // 근거 링크는 배열이기만 하면 받고, 항목별 어긋남은 cleanSources가 골라 버린다.
-    (p.sources === undefined || Array.isArray(p.sources))
+    (p.sources === undefined || Array.isArray(p.sources)) &&
+    (p.address === undefined || (typeof p.address === "string" && p.address.length <= 300))
   );
 }
 
@@ -112,7 +115,7 @@ export async function GET(request: Request): Promise<Response> {
   try {
     const rows = (await sql`
       select id, room_id, lat, lng, type, name, memo, emoji, is_ai,
-             created_at, created_by, deleted, sources,
+             created_at, created_by, deleted, sources, address,
              extract(epoch from updated_at) * 1000 as updated_ms,
              extract(epoch from now()) * 1000 as server_now
       from pins
@@ -156,15 +159,15 @@ export async function POST(request: Request): Promise<Response> {
   const p = body.pin;
   try {
     const rows = (await sql`
-      insert into pins (id, room_id, lat, lng, type, name, memo, emoji, is_ai, created_at, created_by, deleted, sources)
+      insert into pins (id, room_id, lat, lng, type, name, memo, emoji, is_ai, created_at, created_by, deleted, sources, address)
       values (${p.id}, ${room}, ${p.lat}, ${p.lng}, ${p.type}, ${p.name},
               ${p.memo ?? ""}, ${p.emoji ?? ""}, ${Boolean(p.isAI)},
               ${Number(p.createdAt) || Date.now()}, ${p.createdBy === "AI" ? "" : p.createdBy ?? ""}, false,
-              ${JSON.stringify(cleanSources(p.sources))}::jsonb)
+              ${JSON.stringify(cleanSources(p.sources))}::jsonb, ${typeof p.address === "string" ? p.address.slice(0, 300) : ""})
       on conflict (id) do update set
         lat = excluded.lat, lng = excluded.lng, type = excluded.type,
         name = excluded.name, memo = excluded.memo, emoji = excluded.emoji,
-        sources = excluded.sources,
+        sources = excluded.sources, address = excluded.address,
         deleted = false, updated_at = now()
       returning extract(epoch from updated_at) * 1000 as updated_ms
     `) as { updated_ms: number | string }[];

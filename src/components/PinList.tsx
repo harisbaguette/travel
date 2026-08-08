@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { ExternalLink, Map as MapIcon, Trash2 } from "lucide-react";
 import type { Pin } from "@/lib/types";
 import { PIN_TYPES } from "@/lib/pinTypes";
+import { googleMapsUrl } from "@/lib/mapLinks";
 
 interface PinListProps {
   pins: Pin[];
@@ -35,7 +36,7 @@ export default function PinList({
   if (sortedPins.length === 0) {
     return (
       <p className="px-1 py-2 text-sm text-[var(--text-muted)]">
-        아직 꽂아 둔 곳이 없어요 — 지도에서 + 를 눌러 꽂아 보세요
+        아직 꽂아 둔 곳이 없어요
       </p>
     );
   }
@@ -136,6 +137,18 @@ export default function PinList({
                   <p className="whitespace-pre-wrap text-xs leading-relaxed text-[var(--text-muted)]">
                     {pin.memo || "적어 둔 메모가 없어요"}
                   </p>
+                  {pin.address && (
+                    <p className="mt-1.5 text-xs text-[var(--text-faint)]">{pin.address}</p>
+                  )}
+                  <a
+                    href={googleMapsUrl(pin)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-1.5 flex items-center gap-1 text-xs text-[var(--text-faint)] transition-colors hover:text-[var(--accent)]"
+                  >
+                    <span className="underline underline-offset-2">구글 지도에서 열기</span>
+                    <ExternalLink size={11} className="shrink-0" aria-hidden />
+                  </a>
                   {pin.sources?.[0] && (
                     <a
                       href={pin.sources[0].url}
