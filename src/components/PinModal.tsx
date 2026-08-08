@@ -11,10 +11,15 @@ interface PinModalProps {
   onClose: () => void;
 }
 
+// 바닥에서 올라오는 입력 시트 — Doweek add-modal 문법.
+// 종류는 미끄러지는 알약 탭, 입력칸은 종이 위 흰 카드 톤.
 export default function PinModal({ lat, lng, onAdd, onClose }: PinModalProps) {
   const [type, setType] = useState<PinType>("food");
   const [name, setName] = useState("");
   const [memo, setMemo] = useState("");
+
+  const activeIdx = PIN_TYPE_LIST.findIndex((c) => c.type === type);
+  const activeColor = PIN_TYPE_LIST[activeIdx]?.color;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,103 +29,75 @@ export default function PinModal({ lat, lng, onAdd, onClose }: PinModalProps) {
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[1100] flex items-center justify-center bg-[#2f2b23]/35 p-4"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-label="새 핀 추가"
-    >
-      <div
-        className="w-full max-w-md rounded-lg border border-[var(--border)] bg-[var(--surface)] p-5 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-5 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-[var(--text)]">핀 추가</h2>
+    <>
+      <div className="sheet-backdrop" onClick={onClose} />
+      <div className="sheet" role="dialog" aria-modal="true" aria-label="새 핀 추가">
+        <div className="sheet-handle" />
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-base font-bold text-[var(--text)]">핀 추가</h2>
           <span className="text-xs tabular-nums text-[var(--text-muted)]">
             {lat.toFixed(4)}, {lng.toFixed(4)}
           </span>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-          {/* 핀 종류 — 큰 이모지 + 1줄 라벨 */}
-          <div>
-            <label className="mb-2 block text-sm font-medium text-[var(--text)]">종류</label>
-            <div className="grid grid-cols-5 gap-2">
-              {PIN_TYPE_LIST.map((cfg) => {
-                const selected = type === cfg.type;
-                return (
-                  <button
-                    key={cfg.type}
-                    type="button"
-                    onClick={() => setType(cfg.type)}
-                    className="flex flex-col items-center gap-1 rounded-lg border-2 px-1 py-3 transition-colors"
-                    style={{
-                      borderColor: selected ? cfg.color : "var(--border)",
-                      background: selected ? `${cfg.color}14` : "var(--surface)",
-                    }}
-                    aria-pressed={selected}
-                  >
-                    <span className="text-2xl leading-none">{cfg.emoji}</span>
-                    <span
-                      className="text-xs font-medium"
-                      style={{ color: selected ? cfg.color : "var(--text)" }}
-                    >
-                      {cfg.label}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+        <form onSubmit={handleSubmit}>
+          <div
+            className="cat-tabs"
+            style={
+              {
+                "--active-idx": activeIdx,
+                "--tab-count": PIN_TYPE_LIST.length,
+                "--slider-bg": activeColor,
+              } as React.CSSProperties
+            }
+          >
+            {PIN_TYPE_LIST.map((cfg) => (
+              <button
+                key={cfg.type}
+                type="button"
+                onClick={() => setType(cfg.type)}
+                className={`cat-chip${type === cfg.type ? " active" : ""}`}
+                style={{ "--chip-color": cfg.color } as React.CSSProperties}
+                aria-pressed={type === cfg.type}
+              >
+                <span className="cat-chip-dot" aria-hidden />
+                {cfg.label}
+              </button>
+            ))}
           </div>
 
-          <div>
-            <label htmlFor="pin-name" className="mb-2 block text-sm font-medium text-[var(--text)]">
-              이름
-            </label>
+          <div className="flex flex-col gap-3">
             <input
               id="pin-name"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="예: 이치란 라멘"
+              placeholder="장소 이름"
               autoFocus
-              className="h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-soft)]"
+              className="dw-input"
+              aria-label="이름"
             />
-          </div>
-
-          <div>
-            <label htmlFor="pin-memo" className="mb-2 block text-sm font-medium text-[var(--text)]">
-              메모
-            </label>
             <textarea
               id="pin-memo"
               value={memo}
               onChange={(e) => setMemo(e.target.value)}
-              placeholder="예: 토네코로 스페셜 추천"
-              rows={3}
-              className="w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-soft)]"
+              placeholder="메모"
+              rows={2}
+              className="dw-input resize-none"
+              aria-label="메모"
             />
           </div>
 
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="h-11 rounded-lg border border-[var(--border)] px-5 text-sm font-medium text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)]"
-            >
+          <div className="mt-4 flex justify-end gap-2">
+            <button type="button" onClick={onClose} className="dw-btn-ghost">
               취소
             </button>
-            <button
-              type="submit"
-              disabled={!name.trim()}
-              className="h-11 rounded-lg bg-[var(--accent)] px-5 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-40"
-            >
+            <button type="submit" disabled={!name.trim()} className="dw-btn-primary min-w-[72px]">
               추가
             </button>
           </div>
         </form>
       </div>
-    </div>
+    </>
   );
 }

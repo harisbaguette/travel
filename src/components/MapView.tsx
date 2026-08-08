@@ -2,6 +2,7 @@
 
 import { forwardRef, useEffect, useRef, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from "react-leaflet";
+import { LocateFixed } from "lucide-react";
 import L, { type Map as LeafletMap } from "leaflet";
 import "@maplibre/maplibre-gl-leaflet";
 import type { Pin } from "@/lib/types";
@@ -182,7 +183,7 @@ function LocateButton() {
           radius: 8,
           color: "#ffffff",
           weight: 3,
-          fillColor: "#1d6ce0",
+          fillColor: "#3d79c0",
           fillOpacity: 1,
         }).addTo(map);
         map.setView(ll, Math.max(map.getZoom(), 15), { animate: true });
@@ -201,7 +202,12 @@ function LocateButton() {
       className="map-locate-btn"
       aria-label="내 위치로 이동"
     >
-      {busy ? "⌛" : "📍"}
+      <LocateFixed
+        size={19}
+        strokeWidth={2.2}
+        className={`mx-auto text-[var(--accent-ink)] ${busy ? "animate-spin" : ""}`}
+        aria-hidden
+      />
     </button>
   );
 }

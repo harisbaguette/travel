@@ -9,6 +9,15 @@ import {
 } from "react";
 import dynamic from "next/dynamic";
 import type { Map as LeafletMap } from "leaflet";
+import {
+  CalendarDays,
+  Link2,
+  Map as MapIcon,
+  MapPin,
+  Plane,
+  Plus,
+  Search,
+} from "lucide-react";
 import { findCity, resolveCity, type LatLng } from "@/lib/cities";
 import type { Itinerary, Pin, PinType, MapBounds } from "@/lib/types";
 import { PIN_TYPES } from "@/lib/pinTypes";
@@ -142,6 +151,13 @@ function useHydrated(): boolean {
   );
 }
 
+const DOCK_ITEMS = [
+  { key: "map", icon: MapIcon, label: "지도" },
+  { key: "pins", icon: MapPin, label: "핀" },
+  { key: "itinerary", icon: CalendarDays, label: "일정" },
+  { key: "info", icon: Plane, label: "기록" },
+] as const;
+
 export default function Home() {
   const hydrated = useHydrated();
   const mapRef = useRef<LeafletMap | null>(null);
@@ -161,8 +177,8 @@ export default function Home() {
   );
   const [aiLoading, setAILoading] = useState(false);
   const [copied, setCopied] = useState(false);
-  // 모바일 하단 탭 — 지도가 기본. 핀/일정/기록은 화면을 통째로 쓴다(1화면 1기능).
-  const [mobileTab, setMobileTab] = useState<"map" | SidebarTab>("map");
+  // 하단 독 — 지도가 기본. 핀/일정/기록은 화면을 통째로 쓴다(1화면 1기능).
+  const [tab, setTab] = useState<"map" | SidebarTab>("map");
 
   // 로그인 없이 브라우저를 구분하는 ID — 렌더에도 쓰이므로 state(첫 렌더에 한 번만 계산).
   const [userId] = useState<string>(() => getUserId());
@@ -276,7 +292,7 @@ export default function Home() {
         setNotice(`"${q}"를 찾을 수 없어요`);
         return;
       }
-      setMobileTab("map");
+      setTab("map");
       const map = mapRef.current;
       if (!map) return;
       map.setView(coords as LatLng, 12, { animate: true });
@@ -293,6 +309,15 @@ export default function Home() {
 
   const handleMapClick = useCallback((lat: number, lng: number) => {
     setModalCoord({ lat, lng });
+  }, []);
+
+  // 독 가운데 + 단추 — 지금 보고 있는 지도 한가운데에 핀을 추가한다.
+  const handleFab = useCallback(() => {
+    setTab("map");
+    const map = mapRef.current;
+    if (!map) return;
+    const c = map.getCenter();
+    setModalCoord({ lat: c.lat, lng: c.lng });
   }, []);
 
   const handleAddPin = (data: {
@@ -344,7 +369,7 @@ export default function Home() {
   );
 
   const handlePinClick = useCallback((pin: Pin) => {
-    setMobileTab("map");
+    setTab("map");
     const map = mapRef.current;
     if (!map) return;
     map.setView([pin.lat, pin.lng], 16, { animate: true });
@@ -387,7 +412,7 @@ export default function Home() {
         setNotice("새로운 맛집을 찾지 못했어요");
         return;
       }
-      setNotice(`맛집 ${fresh.length}개를 찾았어요 🍜`);
+      setNotice(`맛집 ${fresh.length}개를 찾았어요`);
       setPins((prev) => [...prev, ...fresh]);
       for (const p of fresh) void pushPin(room, p);
     } catch {
@@ -437,162 +462,157 @@ export default function Home() {
   const viewPins = hydrated ? pins : EMPTY_PINS;
   const viewItinerary = hydrated ? itinerary : EMPTY_ITINERARY;
 
-  const sidebarProps = {
-    pins: viewPins,
-    itinerary: viewItinerary,
-    currentUserId: viewUserId,
-    aiLoading,
-    onAISearch: handleAISearch,
-    onPinClick: handlePinClick,
-    onPinDelete: handlePinDelete,
-    onItineraryChange: handleItineraryChange,
-  };
-
   return (
-    <div className="flex h-dvh flex-col bg-[var(--bg)] text-[var(--text)]">
-      {/* 상단 바 — 방·검색·초대만. 모바일에선 로고 생략 */}
-      <header className="flex h-14 shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--surface)] px-3 md:h-16 md:gap-3 md:px-4">
-        <h1 className="hidden whitespace-nowrap text-lg font-bold tracking-tight text-[var(--text)] md:block">
-          🗺️ 여행 핀 지도
-        </h1>
+    <div className="app-shell">
+      {/* 머리 — 손글씨 앱 이름 + 방 + 검색 */}
+      <header className="shrink-0 px-4 pb-3 pt-3">
+        <div className="mb-2.5 flex items-center gap-2">
+          <h1 className="dw-display min-w-0 flex-1 truncate text-[1.5625rem] leading-tight text-[var(--text)]">
+            여행 핀 지도
+          </h1>
+          <select
+            value={viewRoom}
+            onChange={(e) => handleRoomChange(e.target.value)}
+            className="h-11 max-w-[8.5rem] shrink-0 rounded-[12px] bg-[var(--surface)] px-3 text-sm font-semibold text-[var(--text)] shadow-[var(--shadow-1)] focus:outline-none"
+            aria-label="여행 방 선택"
+          >
+            {!viewRoom && <option value="">방 선택</option>}
+            {ROOMS.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+            {viewRoom && !ROOMS.includes(viewRoom) && (
+              <option value={viewRoom}>{viewRoom}</option>
+            )}
+            <option value="__new__">+ 새 방 만들기</option>
+          </select>
+          <button
+            type="button"
+            onClick={handleCopyInvite}
+            disabled={!viewRoom}
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-[12px] shadow-[var(--shadow-1)] transition-colors disabled:opacity-40 ${
+              copied
+                ? "bg-[var(--accent)] text-white"
+                : "bg-[var(--surface)] text-[var(--text-muted)]"
+            }`}
+            aria-label={copied ? "초대 링크 복사됨" : "초대 링크 복사"}
+          >
+            <Link2 size={19} strokeWidth={2.2} />
+          </button>
+        </div>
 
-        <select
-          value={viewRoom}
-          onChange={(e) => handleRoomChange(e.target.value)}
-          className="h-11 w-[6.5rem] shrink-0 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 text-sm font-medium text-[var(--text)] focus:border-[var(--accent)] focus:outline-none md:w-auto md:min-w-[8rem]"
-          aria-label="여행 방 선택"
-        >
-          {!viewRoom && <option value="">방 선택</option>}
-          {ROOMS.map((r) => (
-            <option key={r} value={r}>
-              {r}
-            </option>
-          ))}
-          {/* URL/랜덤 방이 드롭다운 목록에 없으면 보여줌 */}
-          {viewRoom && !ROOMS.includes(viewRoom) && (
-            <option value={viewRoom}>{viewRoom}</option>
-          )}
-          <option value="__new__">+ 새 방 만들기</option>
-        </select>
-
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="어디로 갈까요?"
-            className="h-11 w-full min-w-0 max-w-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none"
-          />
+        <div className="flex items-center gap-2">
+          <div className="relative min-w-0 flex-1">
+            <Search
+              size={17}
+              strokeWidth={2.2}
+              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"
+              aria-hidden
+            />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="어디로 갈까요?"
+              className="dw-input dw-input--sm dw-input--icon"
+            />
+          </div>
           <button
             type="button"
             onClick={handleSearch}
             disabled={searching}
-            className="h-11 shrink-0 rounded-lg bg-[var(--accent)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-50"
+            className="dw-btn-primary h-11 min-h-0 shrink-0 px-4 text-sm"
           >
             {searching ? "…" : "이동"}
           </button>
         </div>
-
-        <button
-          type="button"
-          onClick={handleCopyInvite}
-          disabled={!viewRoom}
-          className="h-11 shrink-0 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-medium text-[var(--text)] transition-colors hover:bg-[var(--surface-hover)] disabled:opacity-40"
-          aria-label="초대 링크 복사"
-        >
-          🔗 <span className="hidden sm:inline">{copied ? "복사됨" : "초대"}</span>
-        </button>
       </header>
 
       {notice && (
-        <div className="shrink-0 bg-[var(--accent-soft)] px-4 py-2 text-sm font-medium text-[var(--accent-hover)]">
+        <div className="shrink-0 bg-[var(--accent-bg)] px-4 py-2 text-sm font-medium text-[var(--accent)]">
           {notice}
         </div>
       )}
 
-      {/* DB 미연결 안내 — 작게 */}
       {!syncEnabled && (
         <div className="shrink-0 bg-[var(--surface-hover)] px-4 py-1.5 text-xs text-[var(--text-muted)]">
           아직 혼자만 사용 중 — 함께 편집하려면 서버 데이터베이스(Neon) 연결이 필요해요.
         </div>
       )}
 
-      <div className="relative flex min-h-0 flex-1 overflow-hidden">
-        <div className="h-full w-full md:w-[64%] lg:w-[70%]">
-          <MapView
-            onReady={handleMapReady}
-            pins={viewPins}
-            currentUserId={viewUserId}
-            initialCenter={initialView.center}
-            initialZoom={initialView.zoom}
-            onPinDelete={handlePinDelete}
-            onPinDragEnd={handlePinDragEnd}
-            onMapClick={handleMapClick}
-            className="h-full w-full"
-          />
-          {/* 모바일 지도 위 플로팅 — AI 맛집 */}
-          <button
-            type="button"
-            onClick={handleAISearch}
-            disabled={aiLoading}
-            className="absolute bottom-4 left-1/2 z-[1000] flex h-12 -translate-x-1/2 items-center gap-2 rounded-full bg-[var(--accent)] px-5 text-sm font-bold text-white shadow-lg disabled:opacity-60 md:hidden"
-          >
-            {aiLoading ? (
-              <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-            ) : (
-              "🤖"
-            )}
-            AI 맛집 찾기
-          </button>
-        </div>
+      {/* 몸통 — 지도 위에 패널이 통째로 덮인다 */}
+      <div className="relative min-h-0 flex-1 overflow-hidden">
+        <MapView
+          onReady={handleMapReady}
+          pins={viewPins}
+          currentUserId={viewUserId}
+          initialCenter={initialView.center}
+          initialZoom={initialView.zoom}
+          onPinDelete={handlePinDelete}
+          onPinDragEnd={handlePinDragEnd}
+          onMapClick={handleMapClick}
+          className="h-full w-full"
+        />
 
-        <aside className="hidden h-full flex-1 border-l border-[var(--border)] md:block">
-          <Sidebar {...sidebarProps} />
-        </aside>
+        {/* 지도 위 플로팅 — AI 맛집 */}
+        <button
+          type="button"
+          onClick={handleAISearch}
+          disabled={aiLoading}
+          className="dw-btn-primary absolute bottom-4 left-1/2 z-[1000] -translate-x-1/2 rounded-full px-5 shadow-[var(--shadow-2)] disabled:opacity-60"
+        >
+          {aiLoading ? (
+            <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+          ) : (
+            <Search size={16} strokeWidth={2.4} aria-hidden />
+          )}
+          AI 맛집 찾기
+        </button>
 
-        {/* 모바일 — 하단 탭이 고른 화면(핀/일정/기록)이 지도를 통째로 덮는다 */}
-        {mobileTab !== "map" && (
-          <div className="absolute inset-0 z-[1010] bg-[var(--surface)] md:hidden">
+        {tab !== "map" && (
+          <div className="absolute inset-0 z-[1010] bg-[var(--bg)]">
             <Sidebar
-              {...sidebarProps}
-              tab={mobileTab}
-              onTabChange={(t) => setMobileTab(t)}
-              hideTabs
+              pins={viewPins}
+              itinerary={viewItinerary}
+              currentUserId={viewUserId}
+              onPinClick={handlePinClick}
+              onPinDelete={handlePinDelete}
+              onItineraryChange={handleItineraryChange}
+              tab={tab}
             />
           </div>
         )}
       </div>
 
-      {/* 모바일 하단 탭 — 지도/핀/일정/기록 */}
-      <nav
-        className="flex shrink-0 border-t border-[var(--border)] bg-[var(--surface)] pb-[env(safe-area-inset-bottom)] md:hidden"
-        aria-label="화면 이동"
-      >
-        {(
-          [
-            { key: "map", emoji: "🗺️", label: "지도" },
-            { key: "pins", emoji: "📌", label: "핀" },
-            { key: "itinerary", emoji: "📅", label: "일정" },
-            { key: "info", emoji: "✈️", label: "기록" },
-          ] as const
-        ).map((t) => {
-          const active = mobileTab === t.key;
-          return (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => setMobileTab(t.key)}
-              className={`flex h-14 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-medium ${
-                active ? "text-[var(--accent)]" : "text-[var(--text-muted)]"
-              }`}
-              aria-pressed={active}
-            >
-              <span className="text-lg leading-none">{t.emoji}</span>
-              {t.label}
-            </button>
-          );
-        })}
+      {/* 하단 독 — Doweek 문법: 유리판 + 가운데 추가 단추 */}
+      <nav className="dock-nav" aria-label="화면 이동">
+        <div className="dock-wrap">
+          <button type="button" className="dock-fab" onClick={handleFab} aria-label="핀 추가">
+            <span className="fab-glyph flex">
+              <Plus size={22} strokeWidth={2.5} />
+            </span>
+          </button>
+          <div className="dock-glass">
+            {DOCK_ITEMS.map((item) => {
+              const Icon = item.icon;
+              const active = tab === item.key;
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  className={`dock-item${active ? " active" : ""}`}
+                  onClick={() => setTab(item.key)}
+                  aria-current={active ? "page" : undefined}
+                >
+                  <Icon size={21} strokeWidth={active ? 2.5 : 1.5} />
+                  <span className="dock-label">{item.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </nav>
 
       {modalCoord && (
