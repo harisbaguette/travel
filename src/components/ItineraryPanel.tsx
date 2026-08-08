@@ -145,20 +145,16 @@ export default function ItineraryPanel({
             </span>
           )}
         </div>
+        {/* 날짜를 아직 안 골랐을 때 — 아래로 항공·숙소 칸이 이어지므로 한 줄 안내만 둔다. */}
+        {dayList.length === 0 && (
+          <p className="px-1 pt-1.5 text-xs text-[var(--text-muted)]">
+            시작일과 종료일을 고르면 날짜별 계획표가 만들어져요
+          </p>
+        )}
       </div>
 
       {/* Day 카드 — 세로 타임라인 */}
-      <div>
-        {dayList.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-1.5 py-6 text-center">
-            <span className="dw-display text-[1.375rem] text-[var(--text)]">
-              언제 떠나나요?
-            </span>
-            <span className="text-sm text-[var(--text-muted)]">
-              시작일과 종료일을 고르면 날짜별 계획표가 만들어져요
-            </span>
-          </div>
-        ) : (
+      {dayList.length > 0 && (
           <ul className="flex flex-col gap-3">
             {dayList.map((day, i) => (
               <li key={day.date} className="dw-card p-3">
@@ -271,8 +267,7 @@ export default function ItineraryPanel({
               </li>
             ))}
           </ul>
-        )}
-      </div>
+      )}
     </div>
   );
 }
