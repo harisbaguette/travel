@@ -296,7 +296,8 @@ export default function AssistantPanel({
         </div>
       )}
 
-      <div className="shrink-0 border-t border-[var(--border)] bg-[var(--surface)] px-4 pb-3 pt-2.5">
+      {/* 종이 바닥 위에 흰 알약 입력칸만 — 위 여행 알약과 같은 문법이라 배경이 끊기지 않는다 */}
+      <div className="shrink-0 px-4 pb-3 pt-2.5">
         <div className="flex items-center gap-2">
           <input
             ref={inputRef}
@@ -308,7 +309,7 @@ export default function AssistantPanel({
               if (e.key === "Enter" && !e.nativeEvent.isComposing) submit();
             }}
             placeholder="비서에게 부탁하기…"
-            className="dw-input dw-input--sm min-w-0 flex-1"
+            className="dw-input dw-input--sm dw-input--pill min-w-0 flex-1"
             aria-label="비서에게 보낼 말"
           />
           <button
