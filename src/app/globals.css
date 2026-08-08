@@ -63,6 +63,13 @@
   --shadow-2: 0 8px 16px rgba(0, 0, 0, 0.06);
   --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.04);
   --ease: cubic-bezier(0.23, 1, 0.32, 1);
+  /* 움직임 곡선 — out은 "빠르게 시작해 부드럽게 멈춤", spring은 끝에서 살짝 튕김 */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --dur-press: 0.12s;
+  --dur-hover: 0.2s;
+  --dur-enter: 0.32s;
+  --shadow-lift: 0 10px 24px -8px rgba(36, 30, 25, 0.16), 0 2px 6px rgba(36, 30, 25, 0.05);
   --app-max-width: 440px;
 }
 
@@ -658,9 +665,14 @@ body {
   margin: 0 auto 18px;
 }
 
-/* 종류 고르기 — 미끄러지는 알약 탭(Doweek modal-cats) */
+/* 종류 고르기 — 미끄러지는 알약 탭(Doweek modal-cats).
+   원본은 한 줄 5칸이었지만 종류가 10개로 늘어 5칸×2줄 격자로 폈다 —
+   알약(::before)은 가로(--active-col)·세로(--active-row) 두 방향으로 미끄러진다.
+   줄 높이 48px은 원본 칸 최소 높이 44px + 위아래 숨통이다. */
 .cat-tabs {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(var(--tab-cols, 5), minmax(0, 1fr));
+  grid-auto-rows: 48px;
   background: var(--dw-paper-100);
   border-radius: 14px;
   padding: 4px;
@@ -670,18 +682,18 @@ body {
 .cat-tabs::before {
   content: "";
   position: absolute;
-  top: 4px;
-  bottom: 4px;
+  top: calc(4px + var(--active-row, 0) * 48px);
+  height: 48px;
   border-radius: 10px;
   background: var(--slider-bg, var(--accent));
-  left: calc(4px + var(--active-idx, 0) * (100% - 8px) / var(--tab-count, 5));
-  width: calc((100% - 8px) / var(--tab-count, 5));
-  transition: left 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.22s ease;
+  left: calc(4px + var(--active-col, 0) * (100% - 8px) / var(--tab-cols, 5));
+  width: calc((100% - 8px) / var(--tab-cols, 5));
+  transition: left 0.28s cubic-bezier(0.34, 1.56, 0.64, 1),
+    top 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.22s ease;
   pointer-events: none;
   z-index: 0;
 }
 .cat-chip {
-  flex: 1;
   min-height: 44px;
   display: flex;
   flex-direction: column;
@@ -807,6 +819,178 @@ body {
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-1);
 }
+
+/* ── 줄 목록 — 카드 하나 안에 줄을 쌓는다 ──
+   낱장 카드를 45장 늘어놓으면 화면이 흰 띠 밭이 되고 한 화면에 8줄밖에 안 들어간다.
+   그래서 "떠 있는 것은 카드 하나뿐, 그 안의 줄은 머리카락 굵기 선으로만 나눈다"로 바꿨다.
+   (2026-08-08 실측: 같은 폰 화면에 8줄 → 13줄) */
+.dw-list {
+  background: var(--surface);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+}
+.dw-list > * + * {
+  border-top: 1px solid var(--border);
+}
+.dw-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 56px;
+  padding: 9px 8px 9px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.14s var(--ease);
+}
+.dw-row:active {
+  background: var(--surface-hover);
+}
+/* 이름 — 길면 두 줄까지 늘어난다(가운데서 잘라 버리면 어느 가게인지 알 수 없다) */
+.dw-row-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  min-width: 0;
+  flex: 1;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.4;
+  word-break: break-word;
+}
+/* 이름 뒤에 글줄처럼 흘러 붙는 아주 작은 표시(AI·친구) */
+.dw-tag {
+  display: inline-block;
+  margin-left: 5px;
+  padding: 0 5px;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.625rem;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1.5;
+  vertical-align: 2px;
+  white-space: nowrap;
+}
+.dw-tag--muted {
+  background: var(--surface-hover);
+  color: var(--text-faint);
+}
+
+/* 종류 표식 — 종류 색을 옅게 깐 네모 안에 그 종류 그림.
+   45줄 내내 진한 원을 반복하면 화면이 시끄러워서, 색은 옅게 깔고 그림에만 색을 남겼다. */
+.dw-swatch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--sw, var(--accent)) 13%, transparent);
+  color: var(--sw, var(--accent));
+}
+/* 친구가 꽂은 것 — 같은 색 테두리를 한 겹 둘러 내 것과 구분 */
+.dw-swatch--other {
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--sw, var(--accent)) 40%, transparent);
+}
+
+/* 줄 오른쪽 작은 단추 — 평소엔 연한 회색, 누를 때만 색이 든다 */
+.dw-row-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border: none;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: background 0.14s var(--ease), color 0.14s var(--ease);
+}
+.dw-row-btn:active {
+  background: var(--surface-hover);
+  color: var(--accent);
+}
+.dw-row-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+@media (hover: hover) and (pointer: fine) {
+  .dw-row-btn:hover {
+    background: var(--surface-hover);
+    color: var(--accent);
+  }
+  .dw-row-btn--danger:hover {
+    color: var(--danger);
+  }
+}
+
+/* ── 빈 화면 — 글로 설명하는 대신 그림 하나와 한 줄, 그리고 바로 누를 거리 ── */
+.dw-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 32px 24px;
+  text-align: center;
+}
+.dw-empty-art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 22px;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+.dw-empty-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.dw-empty-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+.dw-empty-chip {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.14s var(--ease), color 0.14s var(--ease);
+}
+.dw-empty-chip:active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+@media (hover: hover) and (pointer: fine) {
+  .dw-empty-chip:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+}
+
 
 /* ── 지도 위 컨트롤 ── */
 .leaflet-container {
@@ -947,6 +1131,21 @@ body {
 .pin-icon > span > i > svg {
   display: block;
 }
+/* 자리 옮기는 중 — 핀이 두근두근 커졌다 작아져 "지금은 끌 수 있다"를 눈으로 알려 준다.
+   바깥 칸은 Leaflet이 위치 잡기(transform)에 쓰므로 안쪽 칸만 움직인다. */
+.pin-icon--moving > span {
+  animation: pin-moving 0.9s ease-in-out infinite;
+  box-shadow: 0 8px 18px rgba(36, 30, 25, 0.45);
+}
+@keyframes pin-moving {
+  0%,
+  100% {
+    transform: rotate(-45deg) scale(1);
+  }
+  50% {
+    transform: rotate(-45deg) scale(1.18);
+  }
+}
 
 /* 검색 결과 표식 — 파란 점 둘레로 물결이 퍼진다 */
 .search-target-icon {
@@ -997,6 +1196,21 @@ body {
   margin: 12px 14px;
   font-family: var(--font-sans);
 }
+/* 지도 위 짧은 안내 쪽지(툴팁) — 카드와 같은 흰 종이 톤 */
+.leaflet-tooltip {
+  background: var(--surface);
+  color: var(--text);
+  border: none;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(36, 30, 25, 0.2);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 9px;
+}
+.leaflet-tooltip-top::before {
+  border-top-color: var(--surface);
+}
 .leaflet-container a.leaflet-popup-close-button {
   color: var(--text-faint);
 }
@@ -1006,9 +1220,689 @@ body {
   background: transparent;
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   움직임(모션) 체계 — 눌림 · 떠오름 · 나타남
+   원칙 셋:
+   ① 짧게 — 누르는 반응 0.12초, 손을 올렸을 때 0.2초, 처음 나타날 때 0.32초.
+   ② 부드럽게 — 뚝 끊기지 않게 --ease-out(빠르게 시작해 살며시 멈춤)을 쓴다.
+   ③ 손가락 기기에는 hover 없음 — 마우스가 있는 기기(@media hover)에서만 켠다.
+      안 그러면 폰에서 한 번 누른 자리에 hover 자국이 남아 계속 떠 있다.
+   맨 아래 "움직임 줄이기" 설정을 켠 사람에게는 여기 전부가 자동으로 꺼진다.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 나타나는 방식들 ── */
+@keyframes dw-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes dw-rise-sm {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes dw-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes dw-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  62% {
+    opacity: 1;
+    transform: scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+/* 접힌 칸이 펼쳐질 때 — 위에서 아래로 커튼이 걷히듯 드러난다 */
+@keyframes dw-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+    clip-path: inset(0 0 100% 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    clip-path: inset(0 0 0 0);
+  }
+}
+/* 기다리는 칸 위로 지나가는 빛줄기 */
+@keyframes dw-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+/* 지도 핀이 톡 튀어나오는 모양 — 물방울은 -45도 돌아 있으니 그 각도를 유지한 채 커진다 */
+@keyframes dw-pin-in {
+  0% {
+    opacity: 0;
+    transform: rotate(-45deg) scale(0.2);
+  }
+  64% {
+    opacity: 1;
+    transform: rotate(-45deg) scale(1.14);
+  }
+  100% {
+    opacity: 1;
+    transform: rotate(-45deg) scale(1);
+  }
+}
+/* 과녁 둘레로 하얀 테가 천천히 번졌다 잦아든다 — 크기는 그대로 두고 빛만 움직인다
+   (자리를 가리키는 표식이라 크기가 흔들리면 어디를 가리키는지 헷갈린다) */
+@keyframes dw-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9), 0 0 0 4px rgba(61, 121, 192, 0);
+  }
+  50% {
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9), 0 0 0 9px rgba(61, 121, 192, 0.16);
+  }
+}
+
+/* ── 어디서나 쓰는 움직임 딱지 ──
+   fill-mode를 backwards로 두는 게 중요하다: 다 끝난 뒤에는 원래 모습으로 돌아가야
+   손을 올렸을 때의 떠오름(hover)이 덮이지 않는다. */
+.anim-rise {
+  animation: dw-rise var(--dur-enter) var(--ease-out) backwards;
+}
+.anim-rise-sm {
+  animation: dw-rise-sm 0.24s var(--ease-out) backwards;
+}
+.anim-drop {
+  animation: dw-drop 0.22s var(--ease-out) backwards;
+}
+.anim-pop {
+  animation: dw-pop 0.26s var(--ease-spring) backwards;
+}
+.anim-reveal {
+  animation: dw-reveal 0.28s var(--ease-out) backwards;
+}
+/* 한 자리에서 그림이 바뀔 때 — 돋보기 ↔ X처럼. 살짝 돌면서 나타나 "같은 단추"로 읽힌다 */
+@keyframes dw-swap {
+  from {
+    opacity: 0;
+    transform: rotate(-70deg);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(0);
+  }
+}
+.anim-swap {
+  animation: dw-swap 0.24s var(--ease-out) backwards;
+}
+/* 주고받는 말풍선 — 내 말은 오른쪽에서, 비서 말은 왼쪽에서 미끄러져 들어온다 */
+@keyframes dw-msg-me {
+  from {
+    opacity: 0;
+    transform: translate(10px, 6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes dw-msg-ai {
+  from {
+    opacity: 0;
+    transform: translate(-10px, 6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.msg-in-me {
+  animation: dw-msg-me 0.28s var(--ease-out) backwards;
+}
+.msg-in-ai {
+  animation: dw-msg-ai 0.28s var(--ease-out) backwards;
+}
+/* 목록이 위에서부터 차례로 한 장씩 넘어오듯 뜬다 — 한 칸마다 0.035초씩 늦게 */
+.stagger > * {
+  animation: dw-rise 0.34s var(--ease-out) backwards;
+}
+.stagger > *:nth-child(1) {
+  animation-delay: 0.03s;
+}
+.stagger > *:nth-child(2) {
+  animation-delay: 0.065s;
+}
+.stagger > *:nth-child(3) {
+  animation-delay: 0.1s;
+}
+.stagger > *:nth-child(4) {
+  animation-delay: 0.135s;
+}
+.stagger > *:nth-child(5) {
+  animation-delay: 0.17s;
+}
+.stagger > *:nth-child(6) {
+  animation-delay: 0.205s;
+}
+.stagger > *:nth-child(7) {
+  animation-delay: 0.24s;
+}
+.stagger > *:nth-child(8) {
+  animation-delay: 0.275s;
+}
+/* 아홉 번째부터는 더 늦추지 않는다 — 목록이 길어도 끝까지 기다리게 하지 않으려고 */
+.stagger > *:nth-child(n + 9) {
+  animation-delay: 0.3s;
+}
+/* 누르면 살짝 들어가는 느낌 — 자기 자리를 옮기는 단추에는 쓰지 말 것 */
+.press {
+  transition: transform var(--dur-press) var(--ease-out);
+}
+.press:not(:disabled):active {
+  transform: scale(0.96);
+}
+
+/* ── 화면 갈아타기 — 아래 메뉴로 화면을 바꾸면 새 화면이 살짝 떠오르며 들어온다 ── */
+@keyframes dw-screen-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.screen-in {
+  animation: dw-screen-in 0.28s var(--ease-out) backwards;
+}
+
+/* ── 알림 한 줄 — 위에서 미끄러져 내려온다 ── */
+.notice-bar {
+  animation: dw-drop 0.24s var(--ease-out) backwards;
+}
+
+/* ══ 여기서부터는 이미 있는 부품에 손맛을 붙이는 부분 ══ */
+
+/* 흰 카드 — 손을 올리면 종이가 한 장 떠오른다(떠오름을 원하는 카드에만 --lift) */
+.dw-card {
+  transition: box-shadow var(--dur-hover) var(--ease-out),
+    transform var(--dur-hover) var(--ease-out);
+}
+/* 목록 한 줄로 쓰인 카드(li)는 누를 수 있는 것이므로 자동으로 떠오름을 갖는다.
+   가만히 읽기만 하는 카드(적는 칸이 든 div)는 그대로 둔다 — 글씨를 고치는 중에
+   판이 들썩이면 산만하다. 따로 떠오르게 하고 싶은 카드에는 --lift를 붙인다. */
+@media (hover: hover) and (pointer: fine) {
+  li.dw-card:hover,
+  .dw-card--lift:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lift);
+  }
+}
+li.dw-card:active,
+.dw-card--lift:active {
+  transform: translateY(0);
+  box-shadow: var(--shadow-1);
+  transition-duration: var(--dur-press);
+}
+/* 목록 카드는 위에서부터 차례로 한 장씩 넘어오듯 뜬다 */
+li.dw-card {
+  animation: dw-rise 0.34s var(--ease-out) backwards;
+}
+li.dw-card:nth-child(1) {
+  animation-delay: 0.03s;
+}
+li.dw-card:nth-child(2) {
+  animation-delay: 0.065s;
+}
+li.dw-card:nth-child(3) {
+  animation-delay: 0.1s;
+}
+li.dw-card:nth-child(4) {
+  animation-delay: 0.135s;
+}
+li.dw-card:nth-child(5) {
+  animation-delay: 0.17s;
+}
+li.dw-card:nth-child(6) {
+  animation-delay: 0.205s;
+}
+li.dw-card:nth-child(n + 7) {
+  animation-delay: 0.24s;
+}
+
+/* 채움 단추 — 올리면 살짝 뜨고 그림자가 진해진다 */
+.dw-btn-primary {
+  transition: background var(--dur-hover) var(--ease-out),
+    transform var(--dur-press) var(--ease-out), box-shadow var(--dur-hover) var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .dw-btn-primary:not(:disabled):hover {
+    background: var(--accent-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px -6px color-mix(in srgb, var(--accent) 70%, transparent);
+  }
+}
+.dw-btn-primary:not(:disabled):active {
+  transform: translateY(0) scale(0.97);
+  box-shadow: none;
+}
+.dw-btn-primary:disabled {
+  transform: none;
+}
+
+/* 빈 단추 */
+.dw-btn-ghost {
+  transition: background var(--dur-hover) var(--ease-out),
+    color var(--dur-hover) var(--ease-out), transform var(--dur-press) var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .dw-btn-ghost:hover {
+    background: var(--border-strong);
+    color: var(--text);
+  }
+}
+.dw-btn-ghost:active {
+  transform: scale(0.96);
+}
+
+/* 입력칸 — 손을 올리면 테두리가 또렷해지고, 글을 쓸 땐 파란 테가 부드럽게 번진다 */
+.dw-input {
+  transition: border-color 0.18s var(--ease-out), background 0.18s var(--ease-out),
+    box-shadow 0.18s var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .dw-input:hover:not(:focus) {
+    border-color: var(--dw-ink-400);
+  }
+}
+.dw-input:focus {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.dw-input::placeholder {
+  transition: opacity 0.18s var(--ease-out);
+}
+.dw-input:focus::placeholder {
+  opacity: 0.5;
+}
+
+/* 종류 고르는 접힌 목록 */
+.list-filter {
+  transition: box-shadow var(--dur-hover) var(--ease-out),
+    transform var(--dur-press) var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .list-filter:hover {
+    box-shadow: var(--shadow-2);
+  }
+}
+.list-filter:active {
+  transform: scale(0.98);
+}
+
+/* 접이식 구역 머리(1일차·2일차 카드) */
+.trip-section-head {
+  transition: box-shadow var(--dur-hover) var(--ease-out),
+    transform var(--dur-hover) var(--ease-out), background var(--dur-hover) var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .trip-section-head:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-lift);
+  }
+  .trip-section-head:hover .trip-section-chevron {
+    color: var(--accent);
+  }
+}
+.trip-section-head:active {
+  transform: translateY(0) scale(0.99);
+  transition-duration: var(--dur-press);
+}
+/* 펼쳐진 속은 커튼이 걷히듯 드러난다 */
+.trip-section-body {
+  animation: dw-reveal 0.28s var(--ease-out) backwards;
+}
+
+/* 준비 화면 알약 줄 */
+.prep-chip {
+  transition: background 0.18s var(--ease), color 0.18s var(--ease),
+    transform var(--dur-press) var(--ease-out);
+}
+.prep-chip:active {
+  transform: scale(0.95);
+}
+.prep-chip-badge {
+  transition: background 0.18s var(--ease-out), color 0.18s var(--ease-out);
+}
+/* 고른 묶음의 속 내용 — 칩을 바꿀 때마다 새로 떠오른다 */
+.prep-body {
+  animation: dw-rise-sm 0.26s var(--ease-out) backwards;
+}
+
+/* 핀 종류 고르는 알약 탭 */
+.cat-chip {
+  transition: color 0.18s, transform var(--dur-press) var(--ease-out);
+}
+.cat-chip:active {
+  transform: scale(0.94);
+}
+.cat-chip-ico {
+  transition: color 0.18s var(--ease-out), transform 0.22s var(--ease-spring);
+}
+.cat-chip.active .cat-chip-ico {
+  transform: translateY(-2px);
+}
+
+/* 위 여행 알약 */
+.ps-pill {
+  transition: transform var(--dur-press) var(--ease-out),
+    box-shadow var(--dur-hover) var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .ps-pill:hover {
+    box-shadow: var(--shadow-lift);
+    transform: translateY(-1px);
+  }
+  .ps-pill:hover .ps-chevron {
+    color: var(--accent);
+  }
+}
+.ps-pill:active {
+  transform: translateY(0) scale(0.98);
+}
+.ps-dot {
+  transition: transform 0.22s var(--ease-spring), box-shadow 0.22s var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .ps-pill:hover .ps-dot {
+    transform: scale(1.25);
+  }
+}
+/* 펼친 목록 줄들도 차례로 내려온다 */
+.ps-menu .ps-item {
+  animation: dw-drop 0.2s var(--ease-out) backwards;
+}
+.ps-menu .ps-item:nth-child(2) {
+  animation-delay: 0.03s;
+}
+.ps-menu .ps-item:nth-child(3) {
+  animation-delay: 0.06s;
+}
+.ps-menu .ps-item:nth-child(n + 4) {
+  animation-delay: 0.09s;
+}
+.ps-check {
+  animation: dw-pop 0.26s var(--ease-spring) backwards;
+}
+
+/* 아래 메뉴 칸 — 누르면 칸 전체가 살짝 들어간다(자리를 옮기지 않는 단추라 안전) */
+.dock-item {
+  transition: color 0.18s, transform var(--dur-press) var(--ease-out);
+}
+.dock-item:active {
+  transform: scale(0.94);
+}
+.dock-label {
+  transition: font-weight 0.18s var(--ease-out);
+}
+
+/* 내 위치 단추 */
+.map-locate-btn {
+  transition: transform var(--dur-hover) var(--ease-spring),
+    box-shadow var(--dur-hover) var(--ease-out), background var(--dur-hover) var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .map-locate-btn:not(:disabled):hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lift);
+  }
+}
+.map-locate-btn:not(:disabled):active {
+  transform: translateY(0) scale(0.94);
+  transition-duration: var(--dur-press);
+}
+
+/* 자리 고르기 과녁 — 나타날 때 톡 커지고, 그 뒤로는 천천히 숨을 쉰다 */
+.map-crosshair {
+  animation: dw-pop 0.3s var(--ease-spring) backwards,
+    dw-breathe 2.6s ease-in-out 0.3s infinite;
+}
+
+/* 지도 핀 — 꽂히는 순간 톡 튀어나오고, 손을 올리면 살짝 커진다 */
+.pin-icon > span {
+  /* fill-mode를 두지 않는다 — 끝난 뒤 원래 모습으로 돌아가야 아래 hover가 먹는다 */
+  animation: dw-pin-in 0.42s var(--ease-out);
+  transition: transform 0.22s var(--ease-spring), box-shadow 0.22s var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .pin-icon:hover > span {
+    transform: rotate(-45deg) scale(1.16);
+    box-shadow: 0 6px 16px rgba(36, 30, 25, 0.42);
+  }
+}
+
+/* 지도 말풍선 — 톡 하고 열린다 */
+.leaflet-popup-content-wrapper {
+  animation: dw-pop 0.22s var(--ease-out) backwards;
+  transition: box-shadow var(--dur-hover) var(--ease-out);
+}
+.leaflet-container a.leaflet-popup-close-button {
+  transition: color 0.18s var(--ease-out), transform 0.18s var(--ease-spring);
+}
+.leaflet-container a.leaflet-popup-close-button:hover {
+  color: var(--text);
+  transform: scale(1.15);
+}
+
+/* 시트(바닥에서 올라오는 입력창) 손잡이 — 손을 올리면 진해진다 */
+.sheet-handle {
+  transition: background var(--dur-hover) var(--ease-out), width var(--dur-hover) var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .sheet:hover .sheet-handle {
+    background: var(--dw-ink-400);
+    width: 40px;
+  }
+}
+
+/* 링크 글씨 — 색이 스르르 바뀐다 */
+.app-shell a {
+  transition: color 0.18s var(--ease-out), opacity 0.18s var(--ease-out);
+}
+
+/* 준비 화면 속 줄들(체크리스트 한 줄, 숙소 한 장) — 차례로 뜨고, 손을 올리면 바탕이 밝아진다.
+   줄마다 딱지를 붙이는 대신 "준비 화면 안의 목록 줄"이라는 자리로 찾는다 —
+   화면을 새로 짜도 이 자리는 그대로라 손볼 곳이 한 군데로 모인다. */
+.prep-body ul > li {
+  animation: dw-rise-sm 0.28s var(--ease-out) backwards;
+  transition: background var(--dur-hover) var(--ease-out),
+    box-shadow var(--dur-hover) var(--ease-out);
+}
+.prep-body ul > li:nth-child(1) {
+  animation-delay: 0.02s;
+}
+.prep-body ul > li:nth-child(2) {
+  animation-delay: 0.05s;
+}
+.prep-body ul > li:nth-child(3) {
+  animation-delay: 0.08s;
+}
+.prep-body ul > li:nth-child(4) {
+  animation-delay: 0.11s;
+}
+.prep-body ul > li:nth-child(n + 5) {
+  animation-delay: 0.14s;
+}
+@media (hover: hover) and (pointer: fine) {
+  .prep-body ul > li:hover {
+    background: var(--surface-hover);
+  }
+}
+
+/* 체크 동그라미 — 체크되는 순간 톡 하고 채워진다 */
+@keyframes dw-check-in {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.prep-body button[aria-pressed] {
+  transition: background var(--dur-hover) var(--ease-out),
+    border-color var(--dur-hover) var(--ease-out), transform var(--dur-press) var(--ease-out);
+}
+.prep-body button[aria-pressed]:active {
+  transform: scale(0.88);
+}
+.prep-body button[aria-pressed="true"] > svg {
+  animation: dw-check-in 0.3s var(--ease-spring) backwards;
+}
+
+/* 하루 타임라인 한 줄 — 손을 올리면 그 줄만 밝아져 어디를 보고 있는지 또렷해진다 */
+.trip-section-body ol > li {
+  border-radius: 10px;
+  transition: background var(--dur-hover) var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .trip-section-body ol > li:hover {
+    background: var(--surface-hover);
+  }
+}
+
+/* 줄 목록(핀 목록 같은 것) — 위에서부터 한 줄씩 차례로 내려앉는다 */
+.dw-list > li {
+  animation: dw-rise-sm 0.3s var(--ease-out) backwards;
+}
+.dw-list > li:nth-child(1) {
+  animation-delay: 0.02s;
+}
+.dw-list > li:nth-child(2) {
+  animation-delay: 0.045s;
+}
+.dw-list > li:nth-child(3) {
+  animation-delay: 0.07s;
+}
+.dw-list > li:nth-child(4) {
+  animation-delay: 0.095s;
+}
+.dw-list > li:nth-child(5) {
+  animation-delay: 0.12s;
+}
+.dw-list > li:nth-child(6) {
+  animation-delay: 0.145s;
+}
+.dw-list > li:nth-child(n + 7) {
+  animation-delay: 0.17s;
+}
+/* 줄을 눌러 펼친 속(메모·주소·출처)은 커튼이 걷히듯 드러난다 —
+   줄 안의 둘째 칸이 그 자리다(첫 칸은 항상 보이는 이름 줄). */
+.dw-list > li > div ~ div {
+  animation: dw-reveal 0.26s var(--ease-out) backwards;
+}
+/* 줄 왼쪽 종류 표식 — 줄에 손을 올리면 색이 한 겹 진해진다 */
+.dw-swatch {
+  transition: background var(--dur-hover) var(--ease-out),
+    box-shadow var(--dur-hover) var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .dw-list > li > div:hover .dw-swatch {
+    background: color-mix(in srgb, var(--sw, var(--accent)) 22%, transparent);
+  }
+}
+/* 줄 오른쪽 작은 단추 — 누르면 쏙 들어간다 */
+.dw-row-btn {
+  transition: background 0.14s var(--ease), color 0.14s var(--ease),
+    transform var(--dur-press) var(--ease-out);
+}
+.dw-row-btn:not(:disabled):active {
+  transform: scale(0.9);
+}
+/* 이름 뒤 작은 표시(AI·친구) — 줄이 뜰 때 한 박자 늦게 톡 붙는다 */
+.dw-tag {
+  animation: dw-pop 0.3s var(--ease-spring) 0.12s backwards;
+}
+
+/* 아무것도 없는 화면 — 그림이 톡 뜨고, 제목과 예시 알약이 차례로 따라 올라온다.
+   빈 화면은 사용자가 가장 오래 들여다보는 자리라 여기가 심심하면 앱 전체가 심심해 보인다. */
+.dw-empty-art {
+  animation: dw-pop 0.42s var(--ease-spring) backwards;
+}
+.dw-empty-title {
+  animation: dw-rise 0.36s var(--ease-out) 0.06s backwards;
+}
+.dw-empty-chips > * {
+  animation: dw-rise 0.36s var(--ease-out) backwards;
+}
+.dw-empty-chips > *:nth-child(1) {
+  animation-delay: 0.12s;
+}
+.dw-empty-chips > *:nth-child(2) {
+  animation-delay: 0.17s;
+}
+.dw-empty-chips > *:nth-child(3) {
+  animation-delay: 0.22s;
+}
+.dw-empty-chips > *:nth-child(n + 4) {
+  animation-delay: 0.27s;
+}
+.dw-empty-chip {
+  transition: border-color 0.14s var(--ease), color 0.14s var(--ease),
+    background var(--dur-hover) var(--ease-out), box-shadow var(--dur-hover) var(--ease-out),
+    transform var(--dur-press) var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .dw-empty-chip:hover {
+    background: var(--surface-hover);
+    box-shadow: var(--shadow-lift);
+    transform: translateY(-2px);
+  }
+}
+
+/* 기다리는 자리 — 회색 판 위로 빛줄기가 지나간다 */
+.skeleton {
+  background: linear-gradient(
+    100deg,
+    var(--surface-hover) 20%,
+    var(--dw-paper-25) 40%,
+    var(--surface-hover) 60%
+  );
+  background-size: 220% 100%;
+  animation: dw-shimmer 1.4s linear infinite;
+  border-radius: var(--radius-card);
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
 }
