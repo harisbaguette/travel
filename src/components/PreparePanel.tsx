@@ -97,7 +97,6 @@ export default function PreparePanel({
             <ChecklistCard
               items={packing}
               placeholder="챙길 것 — 예: 여권, 선크림"
-              emptyText="챙길 짐을 하나씩 적어 보세요 — 챙기면 동그라미를 눌러요"
               onChange={(next) => onItineraryChange({ ...itinerary, packing: next })}
             />
           </div>
@@ -107,7 +106,6 @@ export default function PreparePanel({
               items={shopping}
               withAssignee
               placeholder="살 것 — 예: 물, 라면"
-              emptyText="살 것을 적고 담당 칸에 맡을 사람 이름을 써요"
               onChange={(next) => onItineraryChange({ ...itinerary, shopping: next })}
             />
           </div>
@@ -123,7 +121,6 @@ export default function PreparePanel({
         <ChecklistCard
           items={agenda}
           placeholder="이야기할 것 — 예: 예산 정하기"
-          emptyText="같이 정할 것들을 적어 두면 회의 때 빠뜨리지 않아요"
           onChange={(next) => onItineraryChange({ ...itinerary, agenda: next })}
         />
       ),

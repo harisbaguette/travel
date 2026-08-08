@@ -117,39 +117,31 @@ export default function ItineraryPanel({
   return (
     <div className="flex flex-col gap-3">
       {/* 날짜 고르기 — 흰 카드 */}
-      <div>
-        <div className="dw-card flex items-end gap-2 p-3">
-          <label className="flex min-w-0 flex-1 flex-col gap-1">
-            <span className="text-[11px] font-semibold text-[var(--text-muted)]">시작일</span>
-            <input
-              type="date"
-              value={itinerary.startDate}
-              max={itinerary.endDate || undefined}
-              onChange={(e) => setRange({ startDate: e.target.value })}
-              className="dw-input dw-input--sm"
-            />
-          </label>
-          <label className="flex min-w-0 flex-1 flex-col gap-1">
-            <span className="text-[11px] font-semibold text-[var(--text-muted)]">종료일</span>
-            <input
-              type="date"
-              value={itinerary.endDate}
-              min={itinerary.startDate || undefined}
-              onChange={(e) => setRange({ endDate: e.target.value })}
-              className="dw-input dw-input--sm"
-            />
-          </label>
-          {nights > 0 && (
-            <span className="mb-2 shrink-0 whitespace-nowrap rounded-full bg-[var(--accent-bg)] px-2.5 py-1 text-xs font-bold text-[var(--accent)]">
-              {nights}박 {nights + 1}일
-            </span>
-          )}
-        </div>
-        {/* 날짜를 아직 안 골랐을 때 — 아래로 항공·숙소 칸이 이어지므로 한 줄 안내만 둔다. */}
-        {dayList.length === 0 && (
-          <p className="px-1 pt-1.5 text-xs text-[var(--text-muted)]">
-            시작일과 종료일을 고르면 날짜별 계획표가 만들어져요
-          </p>
+      <div className="dw-card flex items-end gap-2 p-3">
+        <label className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="text-[11px] font-semibold text-[var(--text-muted)]">시작일</span>
+          <input
+            type="date"
+            value={itinerary.startDate}
+            max={itinerary.endDate || undefined}
+            onChange={(e) => setRange({ startDate: e.target.value })}
+            className="dw-input dw-input--sm"
+          />
+        </label>
+        <label className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="text-[11px] font-semibold text-[var(--text-muted)]">종료일</span>
+          <input
+            type="date"
+            value={itinerary.endDate}
+            min={itinerary.startDate || undefined}
+            onChange={(e) => setRange({ endDate: e.target.value })}
+            className="dw-input dw-input--sm"
+          />
+        </label>
+        {nights > 0 && (
+          <span className="mb-2 shrink-0 whitespace-nowrap rounded-full bg-[var(--accent-bg)] px-2.5 py-1 text-xs font-bold text-[var(--accent)]">
+            {nights}박 {nights + 1}일
+          </span>
         )}
       </div>
 
@@ -259,9 +251,7 @@ export default function ItineraryPanel({
                   </select>
                 ) : (
                   day.pinIds.length === 0 && (
-                    <p className="text-xs text-[var(--text-muted)]">
-                      배정할 핀이 없어요 — 지도에 핀을 먼저 꽂아보세요
-                    </p>
+                    <p className="text-xs text-[var(--text-muted)]">배정할 핀이 없어요</p>
                   )
                 )}
               </li>

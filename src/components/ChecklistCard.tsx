@@ -9,8 +9,6 @@ interface ChecklistCardProps {
   onChange: (items: ChecklistItem[]) => void;
   /** 새 항목 입력칸에 보여줄 예시 글 */
   placeholder: string;
-  /** 아직 아무것도 없을 때 보여줄 안내 글 */
-  emptyText: string;
   /** 항목마다 담당자 칸을 붙일지 — 장보기에서 사용 */
   withAssignee?: boolean;
 }
@@ -21,7 +19,6 @@ export default function ChecklistCard({
   items,
   onChange,
   placeholder,
-  emptyText,
   withAssignee = false,
 }: ChecklistCardProps) {
   const [draft, setDraft] = useState("");
@@ -72,9 +69,7 @@ export default function ChecklistCard({
         </button>
       </div>
 
-      {items.length === 0 ? (
-        <p className="text-xs text-[var(--text-muted)]">{emptyText}</p>
-      ) : (
+      {items.length > 0 && (
         <ul className="flex flex-col gap-1.5">
           {items.map((item) => (
             <li

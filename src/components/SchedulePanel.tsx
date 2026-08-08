@@ -70,9 +70,6 @@ export default function SchedulePanel({
         <span className="dw-display text-[1.375rem] text-[var(--text)]">
           아직 일정이 없어요
         </span>
-        <span className="text-sm text-[var(--text-muted)]">
-          준비에서 비행기나 날짜를 넣으면 일차가 생겨요
-        </span>
       </div>
     );
   }

@@ -134,12 +134,8 @@ export default function TravelInfoPanel({ itinerary, onChange, part }: TravelInf
                       <X size={16} strokeWidth={2.2} />
                     </button>
                   </div>
-                  {/* 묵는 날은 여행 날짜 중에서만 고른다 — 날짜를 아직 안 정했으면 먼저 정하라고 알린다. */}
-                  {tripDays.length === 0 ? (
-                    <p className="mb-2 text-[11px] text-[var(--text-muted)]">
-                      위 여행 일정에서 날짜를 먼저 골라 주세요
-                    </p>
-                  ) : (
+                  {/* 묵는 날은 여행 날짜 중에서만 고른다 — 여행 날짜가 아직 없으면 칸 자체를 감춘다. */}
+                  {tripDays.length > 0 && (
                     <div className="mb-2 flex items-center gap-2">
                       <label className="flex min-w-0 flex-1 flex-col gap-1">
                         <span className="text-[11px] font-semibold text-[var(--text-muted)]">
