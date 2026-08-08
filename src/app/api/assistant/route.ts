@@ -278,7 +278,10 @@ export async function POST(request: Request): Promise<Response> {
 
   try {
     for (let i = 0; i < MAX_TURNS; i++) {
-      if (Date.now() - startedAt > TOTAL_BUDGET_MS) break;
+      // 남은 시간이 없으면 새로 부르지 않는다. 한 번 부를 때도 남은 시간을 넘기지 않게 잘라 준다
+      // — 그래야 Vercel이 60초에 끊기 전에 우리가 먼저 정리하고 답을 돌려줄 수 있다.
+      const left = TOTAL_BUDGET_MS - (Date.now() - startedAt);
+      if (left < 3000) break;
 
       const res = await fetch(API_URL, {
         method: "POST",
@@ -291,9 +294,9 @@ export async function POST(request: Request): Promise<Response> {
           messages,
           tools: TOOLS,
           tool_choice: "auto",
-          max_tokens: 2000,
+          max_tokens: 4000,
         }),
-        signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
+        signal: AbortSignal.timeout(Math.min(CALL_TIMEOUT_MS, left)),
       });
 
       if (res.status === 401 || res.status === 403) {
@@ -388,10 +391,13 @@ export async function POST(request: Request): Promise<Response> {
       }
     }
   } catch {
-    return Response.json(
-      { ok: false, error: "AI 응답 중 문제가 생겼어요. 잠시 뒤 다시 시도해 주세요." },
-      { status: 502 }
-    );
+    // 마지막 왕복에서 시간이 끊겨도, 앞에서 이미 찾아 둔 곳이 있으면 버리지 않고 그것만 돌려준다.
+    if (proposed.length === 0 && !reply) {
+      return Response.json(
+        { ok: false, error: "AI 응답 중 문제가 생겼어요. 잠시 뒤 다시 시도해 주세요." },
+        { status: 502 }
+      );
+    }
   }
 
   if (!reply && proposed.length === 0) {

@@ -53,6 +53,7 @@ export default function AssistantPanel({
 }: AssistantPanelProps) {
   const [draft, setDraft] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // 새 말이 붙으면 맨 아래로 따라 내려간다
   useEffect(() => {
@@ -80,7 +81,12 @@ export default function AssistantPanel({
                 <button
                   key={ex}
                   type="button"
-                  onClick={() => onSend(ex)}
+                  onClick={() => {
+                    onSend(ex);
+                    // 예시를 누르면 이 안내가 통째로 사라진다 — 눌린 단추와 함께 커서가
+                    // 갈 곳을 잃으므로, 이어서 말할 수 있게 입력칸으로 옮겨 준다.
+                    inputRef.current?.focus();
+                  }}
                   className="rounded-[var(--radius-control)] border border-[var(--border-strong)] px-3.5 py-2.5 text-left text-sm text-[var(--text)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"
                 >
                   {ex}
@@ -169,6 +175,7 @@ export default function AssistantPanel({
       <div className="shrink-0 px-4 pb-3 pt-1.5">
         <div className="flex items-center gap-2">
           <input
+            ref={inputRef}
             type="text"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
