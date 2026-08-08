@@ -55,13 +55,6 @@ export function saveRooms(rooms: Room[]): void {
   }
 }
 
-// 여행 이름 바꾸기 — 초대 링크로 들어와 이름이 암호처럼 보이는 여행을 알아보기 쉽게.
-export function renameRoom(rooms: Room[], id: string, label: string): Room[] {
-  const name = label.trim();
-  if (!name) return rooms;
-  return rooms.map((r) => (r.id === id ? { ...r, label: name } : r));
-}
-
 // 처음 보는 여행이면 목록에 넣는다(초대 링크로 들어온 경우 포함).
 export function addRoom(rooms: Room[], id: string, label?: string): Room[] {
   if (!id || OLD_ROOMS.includes(id) || rooms.some((r) => r.id === id)) return rooms;
@@ -69,8 +62,4 @@ export function addRoom(rooms: Room[], id: string, label?: string): Room[] {
     ...rooms,
     { id, label: label?.trim() || id, color: COLORS[rooms.length % COLORS.length] },
   ];
-}
-
-export function findRoom(rooms: Room[], id: string): Room {
-  return rooms.find((r) => r.id === id) ?? DEFAULT_ROOM;
 }

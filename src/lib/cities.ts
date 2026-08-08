@@ -5,7 +5,7 @@ import { GOOGLE_MAPS_KEY, hasGoogleKey } from "./googleMaps";
 
 export type LatLng = [number, number];
 
-export const CITIES: Record<string, LatLng> = {
+const CITIES: Record<string, LatLng> = {
   // 베트남
   푸꾸옥: [10.2899, 103.984],
   푸쿠옥: [10.2899, 103.984],
@@ -65,7 +65,7 @@ export function findCity(query: string): LatLng | null {
 
 // Nominatim API로 장소 검색 — 테이블에 없을 때. 도시뿐 아니라 관광지·가게 이름도 찾는다.
 // simplify: 첫 결과만 사용. 에러 시 null 반환.
-export async function searchCity(query: string): Promise<LatLng | null> {
+async function searchCity(query: string): Promise<LatLng | null> {
   const q = query.trim();
   if (!q) return null;
   try {

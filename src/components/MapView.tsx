@@ -17,8 +17,6 @@ import { PIN_TYPES, pinMarkerSvg } from "@/lib/pinTypes";
 import { googleMapsUrl } from "@/lib/mapLinks";
 import { hasGoogleKey, loadGoogleMaps, onGoogleAuthFailure } from "@/lib/googleMaps";
 
-export type MapViewHandle = LeafletMap | null;
-
 interface MapViewProps {
   onReady?: (map: LeafletMap) => void;
   pins?: Pin[];

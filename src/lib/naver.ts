@@ -78,7 +78,7 @@ function clean(raw: unknown): string {
 }
 
 /** 열쇠가 준비돼 있는지 — 공식 창구를 쓸 수 있는지 판단할 때만 쓴다. */
-export function isNaverConfigured(): boolean {
+function isNaverConfigured(): boolean {
   return Boolean(process.env.NAVER_CLIENT_ID && process.env.NAVER_CLIENT_SECRET);
 }
 

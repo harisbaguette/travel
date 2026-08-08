@@ -22,7 +22,3 @@ export function getDb(): NeonQueryFunction<false, false> | null {
     return null;
   }
 }
-
-export function isDbReady(): boolean {
-  return getDb() !== null;
-}

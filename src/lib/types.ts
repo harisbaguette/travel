@@ -25,21 +25,6 @@ export interface Pin {
   sources?: PinSource[];
 }
 
-// Overpass API 검색용 화면 범위 — Leaflet getBounds() 그대로 매핑
-export interface MapBounds {
-  north: number;
-  south: number;
-  east: number;
-  west: number;
-}
-
-// /api/search-food 응답 형태
-export interface SearchFoodResponse {
-  ok: boolean;
-  pins?: Pin[];
-  error?: string;
-}
-
 // 여행 일정 — 날짜별 핀 배정. simplify: 날짜 범위만 저장, 날짜 카드는 자동 생성.
 export interface DayPlan {
   date: string; // YYYY-MM-DD

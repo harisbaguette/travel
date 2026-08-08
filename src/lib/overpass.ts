@@ -12,7 +12,7 @@ export interface OverpassElement {
   tags?: Record<string, string>;
 }
 
-export const OVERPASS_MIRRORS = [
+const OVERPASS_MIRRORS = [
   "https://overpass-api.de/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
   "https://overpass.private.coffee/api/interpreter",
@@ -20,7 +20,7 @@ export const OVERPASS_MIRRORS = [
 ];
 
 // 서버 하나당 8초 안에 답이 없으면 다음 서버로 넘어간다 (전체가 늦어지지 않게)
-export const PER_MIRROR_TIMEOUT_SEC = 8;
+const PER_MIRROR_TIMEOUT_SEC = 8;
 
 async function fetchFromMirror(
   url: string,
