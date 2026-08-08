@@ -11,8 +11,12 @@ import {
 // 후보는 바로 꽂히지 않고 클라이언트의 고르기 시트에서 사용자가 선택한다.
 // AI는 DeepSeek을 쓴다(OpenAI와 같은 형식이라 별도 꾸러미 없이 fetch로 부른다).
 
-const API_URL = "https://api.deepseek.com/chat/completions";
-const MODEL = "deepseek-v4-flash";
+// 열쇠는 두 갈래로 받는다. 딥시크에서 바로 받은 열쇠면 딥시크로, OpenRouter(여러 AI를 한 열쇠로
+// 골라 쓰는 중개소)에서 받은 열쇠(sk-or- 로 시작)면 중개소로 보낸다. 둘 다 부르는 방식은 같다.
+const DIRECT_URL = "https://api.deepseek.com/chat/completions";
+const DIRECT_MODEL = "deepseek-v4-flash";
+const ROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+const ROUTER_MODEL = "deepseek/deepseek-v4-flash-0731"; // 2026-07-31 정식판
 const MAX_TURNS = 6; // 도구 호출 왕복 상한 — 무한 반복 방지
 const MAX_PINS = 10;
 const MAX_SOURCES_PER_PIN = 3;
@@ -24,7 +28,7 @@ const TOTAL_BUDGET_MS = 50_000;
 export const maxDuration = 60;
 
 const NO_AI_KEY =
-  "AI 접속 정보가 아직 없어요 — 서버에 DEEPSEEK_API_KEY를 넣어야 비서가 일할 수 있어요(.env.example 참고).";
+  "AI 접속 정보가 아직 없어요 — 서버에 DEEPSEEK_API_KEY나 OPENROUTER_API_KEY 중 하나를 넣어야 비서가 일할 수 있어요(.env.example 참고).";
 const NO_NAVER_KEY =
   "네이버 검색 열쇠가 아직 없어요 — 서버에 NAVER_CLIENT_ID와 NAVER_CLIENT_SECRET을 넣어야 비서가 후기를 찾아올 수 있어요(.env.example 참고).";
 
@@ -238,10 +242,13 @@ function parseArgs(raw: string): Record<string, unknown> {
 }
 
 export async function POST(request: Request): Promise<Response> {
-  const apiKey = process.env.DEEPSEEK_API_KEY;
+  const apiKey = process.env.DEEPSEEK_API_KEY || process.env.OPENROUTER_API_KEY || "";
   if (!apiKey) {
     return Response.json({ ok: false, error: NO_AI_KEY }, { status: 503 });
   }
+  const viaRouter = apiKey.startsWith("sk-or-");
+  const apiUrl = viaRouter ? ROUTER_URL : DIRECT_URL;
+  const model = viaRouter ? ROUTER_MODEL : DIRECT_MODEL;
   // 네이버 열쇠가 없으면 어차피 후기를 못 찾는다 — AI를 부르기 전에 먼저 끝낸다(헛돈 방지).
   if (!isNaverConfigured()) {
     return Response.json({ ok: false, error: NO_NAVER_KEY }, { status: 503 });
@@ -283,14 +290,14 @@ export async function POST(request: Request): Promise<Response> {
       const left = TOTAL_BUDGET_MS - (Date.now() - startedAt);
       if (left < 3000) break;
 
-      const res = await fetch(API_URL, {
+      const res = await fetch(apiUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: MODEL,
+          model,
           messages,
           tools: TOOLS,
           tool_choice: "auto",
