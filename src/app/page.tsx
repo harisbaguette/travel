@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -29,6 +30,9 @@ import {
 } from "@/lib/cities";
 import type { Itinerary, Pin, PinType } from "@/lib/types";
 import { PIN_TYPES, PIN_TYPE_LIST } from "@/lib/pinTypes";
+import { isShortMapLink, parseGoogleMapsUrl } from "@/lib/mapLinks";
+import { daysBetween } from "@/lib/dates";
+import type { DayRoute } from "@/components/MapView";
 import { loadPins, savePins } from "@/lib/pinStorage";
 import {
   loadItinerary,
@@ -75,6 +79,17 @@ const DEFAULT_ZOOM = 11;
 
 const EMPTY_PINS: Pin[] = [];
 const INITIAL_ROOMS: Room[] = [DEFAULT_ROOM];
+
+// 일자별 동선 색 — 핀과 같은 잉크 팔레트를 돌려 쓴다(1일차부터 차례로).
+const ROUTE_COLORS = [
+  "#df4b46",
+  "#3d79c0",
+  "#006f6c",
+  "#93550f",
+  "#a05a97",
+  "#5b7c99",
+  "#88837c",
+];
 
 // 방마다 마지막으로 보던 지도 위치를 기억해 둔다.
 interface SavedView {
@@ -164,8 +179,9 @@ function useHydrated(): boolean {
 }
 
 // 아래 메뉴 다섯 — 손으로 꽂는 지도, 꽂아 둔 곳을 줄줄이 보는 리스트, AI에게 시키는 비서,
-// 떠나기 전에 채우는 준비, 현지에서 보는 일정. 다섯 칸을 다 쓰므로 + 단추는 칸 사이에
-// 끼워 넣지 못하고, 막대 바로 위에 떠 있다(globals.css의 .dock-fab 설명 참고).
+// 떠나기 전에 채우는 준비, 현지에서 보는 일정. 다섯 칸을 다 쓰지만 + 단추는 가운데 칸 위로
+// 솟아 있고 아래쪽만 막대 뒤에 물린다 — 막대가 단추보다 앞이라 비서 칸은 가려지지 않는다
+// (globals.css의 .dock-fab 설명 참고).
 const DOCK_ITEMS = [
   { key: "map", icon: MapIcon, label: "지도" },
   { key: "list", icon: List, label: "리스트" },
@@ -651,12 +667,119 @@ export default function Home() {
     [room]
   );
 
+  // 일정 화면에 붙여넣은 구글 지도 링크 — 자리를 읽어 핀으로 꽂고 그 날짜에 넣는다.
+  // 이미 그 자리(50m 안)에 핀이 있으면 새로 만들지 않고 그 핀을 넣는다.
+  const handleScheduleLinkAdd = useCallback(
+    async (date: string, raw: string): Promise<boolean> => {
+      let link = raw.trim();
+      if (!link) return false;
+      try {
+        // 앱 "공유"로 만든 짧은 링크는 서버가 원래 긴 주소로 펴 준다
+        if (isShortMapLink(link)) {
+          const res = await fetch(`/api/expand-link?url=${encodeURIComponent(link)}`);
+          const data = (await res.json()) as { ok?: boolean; url?: string };
+          if (data.ok && data.url) link = data.url;
+        }
+      } catch {
+        // 못 펴면 아래에서 원래 링크 그대로 읽기를 시도한다
+      }
+      const parsed = parseGoogleMapsUrl(link);
+      let lat = parsed?.lat;
+      let lng = parsed?.lng;
+      let name = parsed?.name ?? "";
+      // 링크에 좌표 없이 이름만 있으면 장소 사전에 물어 좌표를 찾는다
+      if ((lat === undefined || lng === undefined) && name) {
+        try {
+          const c = mapRef.current?.getCenter();
+          const found = await suggestPlaces(name, c ? [c.lat, c.lng] : undefined);
+          if (found[0]) {
+            lat = found[0].lat;
+            lng = found[0].lng;
+            if (!name) name = found[0].name;
+          }
+        } catch {
+          // 찾기 실패 — 아래 공통 안내로 떨어진다
+        }
+      }
+      if (lat === undefined || lng === undefined) {
+        setNotice("링크에서 위치를 읽지 못했어요 — 구글 지도 공유 링크를 붙여넣어 주세요");
+        return false;
+      }
+
+      const la = lat;
+      const ln = lng;
+      const near = pins.find((p) => distanceMeters(p.lat, p.lng, la, ln) < 50);
+      let pinId: string;
+      if (near) {
+        pinId = near.id;
+        if (!name) name = near.name;
+      } else {
+        const newPin: Pin = {
+          id: `pin-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          lat: la,
+          lng: ln,
+          type: "etc",
+          name: name || "구글맵 장소",
+          memo: "",
+          emoji: PIN_TYPES.etc.emoji,
+          isAI: false,
+          createdAt: Date.now(),
+          createdBy: userId || undefined,
+        };
+        setPins((prev) => [...prev, newPin]);
+        void pushPin(room, newPin);
+        pinId = newPin.id;
+        if (!name) name = newPin.name;
+      }
+
+      // 그 날짜 카드에 핀을 넣는다(이미 있으면 그대로)
+      const days = [...itinerary.days];
+      const idx = days.findIndex((d) => d.date === date);
+      if (idx === -1) days.push({ date, pinIds: [pinId] });
+      else if (!days[idx].pinIds.includes(pinId))
+        days[idx] = { ...days[idx], pinIds: [...days[idx].pinIds, pinId] };
+      const nextIt = { ...itinerary, days };
+      setItinerary(nextIt);
+      pushItinerary(room, nextIt);
+      setNotice(`${name}을(를) 일정에 넣었어요`);
+      return true;
+    },
+    [pins, itinerary, room, userId]
+  );
+
   // 이어받기 전(서버가 그린 첫 화면)에는 저장값 대신 빈 상태를 그린다.
   const viewRoom = hydrated ? room : "";
   const viewRooms = hydrated ? rooms : INITIAL_ROOMS;
   const viewUserId = hydrated ? userId : "";
   const viewPins = hydrated ? pins : EMPTY_PINS;
   const viewItinerary = hydrated ? itinerary : EMPTY_ITINERARY;
+  // 일자별 동선 — 일정에서 두 곳 이상 넣은 날마다, 방문 순서대로 핀을 이은 선.
+  const dayRoutes = useMemo<DayRoute[]>(() => {
+    const byId = new Map(viewPins.map((p) => [p.id, p]));
+    return viewItinerary.days
+      .map((d) => ({
+        date: d.date,
+        points: d.pinIds
+          .map((id) => byId.get(id))
+          .filter((p): p is Pin => Boolean(p))
+          .map((p) => [p.lat, p.lng] as [number, number]),
+      }))
+      .filter((d) => d.points.length >= 2)
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map((d, i) => {
+        // 며칠째인지는 여행 시작일에서 센다 — 시작일이 없으면 순서대로 센다.
+        const nth = viewItinerary.startDate
+          ? daysBetween(viewItinerary.startDate, d.date)
+          : i;
+        const day = nth >= 0 ? nth : i;
+        return {
+          date: d.date,
+          label: `${day + 1}일차`,
+          color: ROUTE_COLORS[day % ROUTE_COLORS.length],
+          points: d.points,
+        };
+      });
+  }, [viewItinerary, viewPins]);
   // 리스트 화면에서 고른 종류만 남긴 핀 — 거르기는 여기(부모)에서 끝낸다.
   const listPins =
     listType === "all" ? viewPins : viewPins.filter((p) => p.type === listType);
@@ -876,6 +999,7 @@ export default function Home() {
         <MapView
           onReady={handleMapReady}
           pins={viewPins}
+          dayRoutes={dayRoutes}
           currentUserId={viewUserId}
           initialCenter={initialView.center}
           initialZoom={initialView.zoom}
@@ -989,12 +1113,14 @@ export default function Home() {
               itinerary={viewItinerary}
               onChange={handleItineraryChange}
               onShowOnMap={handleShowOnMap}
+              onAddFromLink={handleScheduleLinkAdd}
             />
           </div>
         )}
       </div>
 
-      {/* 하단 독 — Doweek 문법: 유리판 네 칸 + 가운데로 튀어나온 파란 + 단추(FAB).
+      {/* 하단 독 — Doweek 문법: 유리판 다섯 칸 + 가운데로 튀어나온 파란 + 단추(FAB).
+          단추 아래쪽은 유리판 뒤에 물려 있어 막대에서 솟아난 것처럼 보인다.
           지도를 볼 때는 바탕을 비워 유리판 옆·뒤로 지도가 그대로 보이게 한다. */}
       <nav
         className={`dock-nav${mapFull ? " dock-nav--float" : ""}`}
@@ -1023,7 +1149,7 @@ export default function Home() {
               );
             })}
           </div>
-          {/* 지도를 볼 때만 보여 준다 — 이 단추는 메뉴 막대 위에 떠 있어서, 다른 화면에서는
+          {/* 지도를 볼 때만 보여 준다 — 이 단추는 메뉴 막대 위로 솟아 있어서, 다른 화면에서는
               적는 칸(준비 화면의 날짜 칸 같은 것)을 가려 버린다. 자리를 고르는 중에도 숨긴다
               (지도 위 확인/취소 막대가 같은 자리를 쓴다). */}
           <button

@@ -1,5 +1,12 @@
 // 핀(지도 마커) 데이터 모델 — 모든 핀 기능의 중심 타입
-export type PinType = "food" | "spot" | "cafe" | "stay" | "etc";
+export type PinType =
+  | "food"
+  | "spot"
+  | "cafe"
+  | "stay"
+  | "massage"
+  | "airport"
+  | "etc";
 
 // 이 핀을 왜 추천했는지 보여 주는 근거 글(네이버 블로그 후기) 링크.
 export interface PinSource {

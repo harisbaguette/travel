@@ -1,10 +1,18 @@
 import type { LucideIcon } from "lucide-react";
-import { BedDouble, Camera, Coffee, MapPin, Utensils } from "lucide-react";
+import {
+  BedDouble,
+  Camera,
+  Coffee,
+  Flower2,
+  MapPin,
+  Plane,
+  Utensils,
+} from "lucide-react";
 import type { PinType } from "./types";
 
 // 핀 타입별 표시 설정 — 아이콘(Lucide, ISC) + 색 + 한국어 이름
 // emoji는 DB 저장·<option> 같은 글자만 되는 자리용으로 남긴다.
-// simplify: 5개 고정. 사용자 정의 타입은 나중.
+// simplify: 7개 고정. 사용자 정의 타입은 나중.
 export interface PinTypeConfig {
   type: PinType;
   label: string;
@@ -54,6 +62,24 @@ export const PIN_TYPES: Record<PinType, PinTypeConfig> = {
     iconPaths:
       '<path d="M2 20v-8a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v8"/><path d="M4 10V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v4"/><path d="M12 4v6"/><path d="M2 18h20"/>',
   },
+  massage: {
+    type: "massage",
+    label: "마사지",
+    emoji: "💆",
+    color: "#a05a97",
+    Icon: Flower2,
+    iconPaths:
+      '<path d="M12 5a3 3 0 1 1 3 3m-3-3a3 3 0 1 0-3 3m3-3v1M9 8a3 3 0 1 0 3 3M9 8h1m5 0a3 3 0 1 1-3 3m3-3h-1m-2 3v-1"/><circle cx="12" cy="8" r="2"/><path d="M12 10v12"/><path d="M12 22c4.2 0 7-1.667 7-5-4.2 0-7 1.667-7 5Z"/><path d="M12 22c-4.2 0-7-1.667-7-5 4.2 0 7 1.667 7 5Z"/>',
+  },
+  airport: {
+    type: "airport",
+    label: "공항",
+    emoji: "✈️",
+    color: "#5b7c99",
+    Icon: Plane,
+    iconPaths:
+      '<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>',
+  },
   etc: {
     type: "etc",
     label: "기타",
@@ -70,6 +96,8 @@ export const PIN_TYPE_LIST: PinTypeConfig[] = [
   PIN_TYPES.spot,
   PIN_TYPES.cafe,
   PIN_TYPES.stay,
+  PIN_TYPES.massage,
+  PIN_TYPES.airport,
   PIN_TYPES.etc,
 ];
 

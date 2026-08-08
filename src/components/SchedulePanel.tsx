@@ -20,6 +20,8 @@ interface SchedulePanelProps {
   onChange: (it: Itinerary) => void;
   /** 지도로 옮겨 가서 그 자리를 보여준다. */
   onShowOnMap: (pin: Pin) => void;
+  /** 구글 지도 링크를 읽어 핀으로 꽂고 그 날짜에 넣는다. 성공하면 true. */
+  onAddFromLink: (date: string, url: string) => Promise<boolean>;
 }
 
 // 날짜 범위가 실수로 너무 길어져도 카드가 무한히 생기지 않도록 막는 상한.
@@ -37,6 +39,7 @@ export default function SchedulePanel({
   itinerary,
   onChange,
   onShowOnMap,
+  onAddFromLink,
 }: SchedulePanelProps) {
   const pinById = useMemo(() => new Map(pins.map((p) => [p.id, p])), [pins]);
 
@@ -320,6 +323,9 @@ export default function SchedulePanel({
                       </ol>
                     )}
 
+                    {/* 구글 지도에서 "공유"로 복사한 링크를 붙여넣으면 핀으로 꽂히고 이 날짜에 들어간다 */}
+                    <LinkAddRow date={day.date} onAdd={onAddFromLink} />
+
                     {unassigned.length > 0 ? (
                       <select
                         value=""
@@ -353,6 +359,58 @@ export default function SchedulePanel({
           })}
         </ul>
       )}
+    </div>
+  );
+}
+
+// 구글 지도 링크 붙여넣기 한 줄 — 링크의 자리를 핀으로 꽂고 이 날짜에 넣는다.
+function LinkAddRow({
+  date,
+  onAdd,
+}: {
+  date: string;
+  onAdd: (date: string, url: string) => Promise<boolean>;
+}) {
+  const [value, setValue] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    const v = value.trim();
+    if (!v || busy) return;
+    setBusy(true);
+    try {
+      const ok = await onAdd(date, v);
+      if (ok) setValue("");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="url"
+        inputMode="url"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            void submit();
+          }
+        }}
+        placeholder="구글 지도 공유 링크 붙여넣기"
+        className="dw-input dw-input--sm min-w-0 flex-1"
+        aria-label={`${date}에 구글 지도 링크로 추가`}
+      />
+      <button
+        type="button"
+        onClick={() => void submit()}
+        disabled={busy || !value.trim()}
+        className="dw-btn-primary h-10 min-h-0 shrink-0 px-3 text-xs disabled:opacity-40"
+      >
+        {busy ? "…" : "넣기"}
+      </button>
     </div>
   );
 }

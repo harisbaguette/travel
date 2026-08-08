@@ -8,3 +8,91 @@ export function googleMapsUrl(pin: Pin): string {
     : `${pin.lat.toFixed(6)},${pin.lng.toFixed(6)}`;
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
 }
+
+// ── 반대 방향: 구글 지도 링크를 읽어 자리(좌표)와 이름을 꺼낸다 ──
+
+/** 구글 지도 링크에서 읽어 낸 것 — 좌표가 없고 이름만 있을 수도 있다. */
+export interface ParsedMapLink {
+  lat?: number;
+  lng?: number;
+  name?: string;
+}
+
+/** 앱에서 "공유"로 만든 짧은 링크인지 — 짧은 링크는 서버가 원래 주소로 펴 줘야 읽을 수 있다. */
+export function isShortMapLink(raw: string): boolean {
+  try {
+    const host = new URL(raw.trim()).hostname;
+    return (
+      host === "maps.app.goo.gl" ||
+      host === "goo.gl" ||
+      host === "app.goo.gl" ||
+      host === "g.co"
+    );
+  } catch {
+    return false;
+  }
+}
+
+function validCoord(lat: number, lng: number): boolean {
+  return (
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    Math.abs(lat) <= 90 &&
+    Math.abs(lng) <= 180
+  );
+}
+
+/** 구글 지도 링크를 읽는다. 좌표를 못 찾으면 이름만이라도 돌려준다(그마저 없으면 null). */
+export function parseGoogleMapsUrl(raw: string): ParsedMapLink | null {
+  let url: URL;
+  try {
+    url = new URL(raw.trim());
+  } catch {
+    return null;
+  }
+
+  // /maps/place/가게+이름/... — 링크에 적힌 장소 이름
+  let name: string | undefined;
+  const placeMatch = url.pathname.match(/\/place\/([^/]+)/);
+  if (placeMatch) {
+    try {
+      const decoded = decodeURIComponent(placeMatch[1]).replace(/\+/g, " ").trim();
+      if (decoded) name = decoded;
+    } catch {
+      // 깨진 글자면 이름 없이 진행
+    }
+  }
+
+  // !3d위도!4d경도 — 링크가 가리키는 장소 그 자체의 좌표(화면 중심보다 정확)
+  const bang = raw.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/);
+  if (bang) {
+    const lat = Number(bang[1]);
+    const lng = Number(bang[2]);
+    if (validCoord(lat, lng)) return { lat, lng, name };
+  }
+
+  // ?q=위도,경도 / ?query=... / ?ll=... — 좌표를 그대로 적은 링크
+  for (const key of ["query", "q", "ll", "center", "destination"]) {
+    const v = url.searchParams.get(key);
+    if (!v) continue;
+    const m = v.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
+    if (!m) {
+      // 좌표가 아니라 "가게 이름"을 적은 링크 — 이름으로라도 쓴다
+      if (!name && v.trim()) name = v.trim();
+      continue;
+    }
+    const lat = Number(m[1]);
+    const lng = Number(m[2]);
+    if (validCoord(lat, lng)) return { lat, lng, name };
+  }
+
+  // @위도,경도,줌 — 그때 보고 있던 지도 화면의 중심(마지막 수단)
+  const at = raw.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
+  if (at) {
+    const lat = Number(at[1]);
+    const lng = Number(at[2]);
+    if (validCoord(lat, lng)) return { lat, lng, name };
+  }
+
+  return name ? { name } : null;
+}

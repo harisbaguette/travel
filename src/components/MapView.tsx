@@ -5,11 +5,12 @@ import {
   MapContainer,
   TileLayer,
   Marker,
+  Polyline,
   Popup,
   useMap,
   useMapEvents,
 } from "react-leaflet";
-import { LocateFixed } from "lucide-react";
+import { CalendarPlus, LocateFixed } from "lucide-react";
 import L, { type Map as LeafletMap } from "leaflet";
 import "leaflet.gridlayer.googlemutant";
 import type { Pin } from "@/lib/types";
@@ -17,9 +18,19 @@ import { PIN_TYPES, pinMarkerSvg } from "@/lib/pinTypes";
 import { googleMapsUrl } from "@/lib/mapLinks";
 import { hasGoogleKey, loadGoogleMaps, onGoogleAuthFailure } from "@/lib/googleMaps";
 
+/** 하루치 동선 — 일정 화면에서 짠 순서대로 핀 자리를 이은 선 하나. */
+export interface DayRoute {
+  date: string;
+  label: string; // "1일차" 같은 이름
+  color: string;
+  points: [number, number][]; // 방문 순서대로의 [위도, 경도]
+}
+
 interface MapViewProps {
   onReady?: (map: LeafletMap) => void;
   pins?: Pin[];
+  /** 일자별 동선 — 일정에 두 곳 이상 넣은 날만 온다. */
+  dayRoutes?: DayRoute[];
   /** 지금 이 브라우저 사용자 ID — 내 핀/남의 핀 구분용. 빈 값이면 전부 내 핀 취급. */
   currentUserId?: string;
   /** 처음 보여줄 위치와 확대 정도. */
@@ -31,6 +42,13 @@ interface MapViewProps {
   onSearchTargetClose?: () => void;
   onPinDelete?: (id: string) => void;
   onPinDragEnd?: (id: string, lat: number, lng: number) => void;
+  /** 말풍선의 "일정에 넣기" — 며칠째에 넣을지 고르는 창을 부모가 띄운다. */
+  onAddToSchedule?: (place: {
+    lat: number;
+    lng: number;
+    name: string;
+    pinId?: string;
+  }) => void;
   className?: string;
 }
 
@@ -217,6 +235,7 @@ const MapView = forwardRef<LeafletMap, MapViewProps>(function MapView(
   {
     onReady,
     pins = [],
+    dayRoutes = [],
     currentUserId = "",
     initialCenter = DEFAULT_CENTER,
     initialZoom = DEFAULT_ZOOM,
@@ -249,6 +268,32 @@ const MapView = forwardRef<LeafletMap, MapViewProps>(function MapView(
           onClose={onSearchTargetClose}
         />
       )}
+      {/* 일자별 동선 — 핀보다 아래(선이 핀을 가리지 않게). 선을 누르면 며칠째인지 알려 준다. */}
+      {dayRoutes.map((route) => (
+        <Polyline
+          key={route.date}
+          positions={route.points}
+          pathOptions={{
+            color: route.color,
+            weight: 3.5,
+            opacity: 0.85,
+            dashArray: "1 9",
+            lineCap: "round",
+            lineJoin: "round",
+            // 선을 누른 손짓이 지도까지 내려가면 "그 자리에 뭐가 있나" 카드가 같이 떠 버린다
+            bubblingMouseEvents: false,
+          }}
+        >
+          <Popup>
+            <span className="text-sm font-semibold" style={{ color: route.color }}>
+              {route.label}
+            </span>
+            <span className="ml-1 text-xs text-[var(--text-muted)]">
+              {route.points.length}곳 동선
+            </span>
+          </Popup>
+        </Polyline>
+      ))}
       {pins.map((pin) => (
         <PinMarker
           key={pin.id}
