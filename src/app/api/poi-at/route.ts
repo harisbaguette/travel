@@ -1,9 +1,11 @@
 // 지도에서 손가락으로 누른 자리에 "뭐가 있는지" 알려 주는 창구.
-// 1) 그 자리 45m 안의 이름 있는 장소(가게·식당·관광지 등)를 OpenStreetMap 자료에서 찾고,
-// 2) 없으면 그 자리 주소라도 알려 준다(Nominatim 역주소 조회).
-// simplify: 지도 그림(구글)과 자료 창고(OSM)가 달라, 구글 지도에만 있는 가게는 주소로 나온다.
+// 1) 화면에 그려져 있던 구글 지도 가게 이름을 그대로 집어낸다(타일 POI — 구글맵처럼
+//    "누른 그 가게"가 잡힌다. 확대 단계 z가 함께 와야 한다).
+// 2) 여는 시간·전화 같은 속살은 OpenStreetMap에서 같은 이름의 가게를 찾아 보탠다.
+// 3) 구글에서 못 찾으면 옛 방식대로 그 자리 45m 안의 OSM 장소 → 주소 순서로 어림한다.
 
 import { runOverpass, type OverpassElement } from "@/lib/overpass";
+import { findTilePoiAt } from "@/lib/tilePoi";
 
 const RADIUS_M = 45;
 
@@ -145,15 +147,46 @@ async function reverseAddress(lat: number, lng: number): Promise<PoiInfo | null>
   }
 }
 
+// 이름이 서로 겹치는가 — 띄어쓰기와 대소문자를 지우고 한쪽이 다른 쪽을 품으면 같은 곳으로 본다.
+function namesOverlap(a: string, b: string): boolean {
+  const na = a.toLowerCase().replace(/\s+/g, "");
+  const nb = b.toLowerCase().replace(/\s+/g, "");
+  if (na.length < 2 || nb.length < 2) return false;
+  return na.includes(nb) || nb.includes(na);
+}
+
 export async function GET(request: Request): Promise<Response> {
   const params = new URL(request.url).searchParams;
   const lat = Number(params.get("lat"));
   const lng = Number(params.get("lng"));
+  const zoom = Number(params.get("z"));
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
     return Response.json(
       { ok: false, error: "좌표가 올바르지 않아요." },
       { status: 400 }
     );
+  }
+
+  // 화면에 그려져 있던 구글 아이콘을 누른 거라면 그 아이콘의 이름·자리를 그대로 쓴다
+  // — 표식이 엉뚱한 데(근처 다른 자료의 자리)로 튀지 않는다.
+  if (Number.isFinite(zoom)) {
+    const tile = await findTilePoiAt(lat, lng, zoom);
+    if (tile) {
+      // 여는 시간·전화 같은 속살은 OSM에서 같은 이름의 가게를 찾았을 때만 빌려 온다
+      const osm = await findNearbyPoi(tile.lat, tile.lng);
+      const same = osm && namesOverlap(osm.name, tile.name) ? osm : null;
+      const poi: PoiInfo = {
+        kind: "poi",
+        name: tile.name,
+        category: same?.category ?? (tile.transit ? "정류장·역" : undefined),
+        lat: tile.lat,
+        lng: tile.lng,
+        hours: same?.hours,
+        phone: same?.phone,
+        website: same?.website,
+      };
+      return Response.json({ ok: true, poi });
+    }
   }
 
   const poi = (await findNearbyPoi(lat, lng)) ?? (await reverseAddress(lat, lng));

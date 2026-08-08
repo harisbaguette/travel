@@ -237,13 +237,14 @@ function PoiTapLayer({
     };
   }, []);
 
-  const lookup = (lat: number, lng: number) => {
+  // zoom(확대 단계)을 함께 보내면 서버가 "화면에 그려져 있던 그 가게"를 그대로 집어낸다
+  const lookup = (lat: number, lng: number, zoom: number) => {
     abortRef.current?.abort();
     const ac = new AbortController();
     abortRef.current = ac;
     // 답을 기다리는 동안에도 점을 먼저 찍어 "눌렸다"는 느낌을 준다
     setPoi({ kind: "address", name: "무슨 곳인지 알아보는 중…", lat, lng, pending: true });
-    void fetch(`/api/poi-at?lat=${lat}&lng=${lng}`, { signal: ac.signal })
+    void fetch(`/api/poi-at?lat=${lat}&lng=${lng}&z=${zoom}`, { signal: ac.signal })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (ac.signal.aborted) return;
@@ -271,7 +272,7 @@ function PoiTapLayer({
       });
   };
 
-  useMapEvents({
+  const map = useMapEvents({
     popupopen() {
       popupOpenRef.current = true;
     },
@@ -294,7 +295,7 @@ function PoiTapLayer({
       if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
       clickTimerRef.current = setTimeout(() => {
         clickTimerRef.current = null;
-        lookup(lat, lng);
+        lookup(lat, lng, map.getZoom());
       }, 260);
     },
     dblclick() {
@@ -310,7 +311,7 @@ function PoiTapLayer({
         clickTimerRef.current = null;
       }
       suppressRef.current = false;
-      lookup(e.latlng.lat, e.latlng.lng);
+      lookup(e.latlng.lat, e.latlng.lng, map.getZoom());
     },
   });
 
