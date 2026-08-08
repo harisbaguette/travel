@@ -1,6 +1,8 @@
 // 주요 아시아 여행 도시 좌표 테이블 — [위도, 경도]
 // simplify: 하드코딩. 테이블에 없으면 Nominatim API로 검색.
 
+import { GOOGLE_MAPS_KEY, hasGoogleKey } from "./googleMaps";
+
 export type LatLng = [number, number];
 
 export const CITIES: Record<string, LatLng> = {
@@ -273,7 +275,82 @@ async function photonSearch(
   return out;
 }
 
-// 한국어로 먼저 찾고, 못 찾으면 아는 낱말을 영어로 바꿔 한 번 더 찾는다.
+// ── 구글 장소 검색(Places API) — 열쇠가 있을 때만 ──
+// 구글이 모은 가게·건물 자료까지 뒤지므로, 무료 지도 사전에 없는 한국 상호도 찾는다.
+interface GooglePlace {
+  displayName?: { text?: string };
+  formattedAddress?: string;
+  location?: { latitude?: number; longitude?: number };
+  viewport?: {
+    low?: { latitude?: number; longitude?: number };
+    high?: { latitude?: number; longitude?: number };
+  };
+}
+
+async function googlePlacesSearch(
+  query: string,
+  near?: LatLng,
+  signal?: AbortSignal
+): Promise<PlaceSuggestion[]> {
+  const body: Record<string, unknown> = {
+    textQuery: query,
+    languageCode: "ko",
+    pageSize: 6,
+  };
+  // 지금 보는 지도 근처를 먼저 — 반지름 50km 안을 우선한다
+  if (near) {
+    body.locationBias = {
+      circle: {
+        center: { latitude: near[0], longitude: near[1] },
+        radius: 50000,
+      },
+    };
+  }
+  const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Goog-Api-Key": GOOGLE_MAPS_KEY,
+      "X-Goog-FieldMask":
+        "places.displayName,places.formattedAddress,places.location,places.viewport",
+    },
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (!res.ok) return [];
+  const data = (await res.json()) as { places?: GooglePlace[] };
+  const out: PlaceSuggestion[] = [];
+  for (const p of data.places ?? []) {
+    const name = p.displayName?.text;
+    const lat = p.location?.latitude;
+    const lng = p.location?.longitude;
+    if (!name || typeof lat !== "number" || typeof lng !== "number") continue;
+    const lo = p.viewport?.low;
+    const hi = p.viewport?.high;
+    const bounds =
+      typeof lo?.latitude === "number" &&
+      typeof lo?.longitude === "number" &&
+      typeof hi?.latitude === "number" &&
+      typeof hi?.longitude === "number"
+        ? ([[lo.latitude, lo.longitude], [hi.latitude, hi.longitude]] as [
+            [number, number],
+            [number, number]
+          ])
+        : undefined;
+    out.push({
+      name,
+      address: p.formattedAddress ?? "",
+      lat,
+      lng,
+      bounds,
+      zoom: 16,
+    });
+    if (out.length >= 6) break;
+  }
+  return out;
+}
+
+// 구글(열쇠 있을 때) → 무료 사전 한국어 → 무료 사전 영어 순서로 찾는다.
 export async function suggestPlaces(
   query: string,
   near?: LatLng,
@@ -281,6 +358,15 @@ export async function suggestPlaces(
 ): Promise<PlaceSuggestion[]> {
   const q = query.trim();
   if (q.length < 2) return [];
+  if (hasGoogleKey()) {
+    try {
+      const fromGoogle = await googlePlacesSearch(q, near, signal);
+      if (fromGoogle.length > 0) return fromGoogle;
+    } catch (e) {
+      // 도중 취소는 그대로 알리고, 그 밖의 실패는 무료 사전으로 넘어간다
+      if (e instanceof DOMException && e.name === "AbortError") throw e;
+    }
+  }
   const direct = await photonSearch(q, near, signal);
   if (direct.length > 0) return direct;
   const en = toEnglishQuery(q);
