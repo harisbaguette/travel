@@ -718,26 +718,6 @@ export default function Home() {
 
   return (
     <div className="app-shell">
-      {/* 지도 — 화면 전체에 깔린다(위 알약 줄과 아래 메뉴 뒤까지). 탭을 바꿔도 그대로 남아
-          있다(다시 그리면 느리다). 다만 덮여 있는 동안에는 지도 핀들이 키보드 순서에 끼어
-          있어, 탭키로 비서·여행 화면에 닿기 전에 보이지도 않는 핀 수십 개를 지나가게 된다.
-          inert로 덮인 동안만 통째로 건너뛰게 한다. */}
-      <div className="map-layer" inert={tab !== "map" || listing}>
-        <MapView
-          onReady={handleMapReady}
-          pins={viewPins}
-          currentUserId={viewUserId}
-          initialCenter={initialView.center}
-          initialZoom={initialView.zoom}
-          onPinDelete={handlePinDelete}
-          onPinDragEnd={handlePinDragEnd}
-          searchTarget={searchTarget}
-          onSearchTargetAdd={handleSearchTargetAdd}
-          onSearchTargetClose={() => setSearchTarget(null)}
-          className="h-full w-full"
-        />
-      </div>
-
       {/* 머리 — 여행 고르는 알약 한 줄 + 지도/리스트 전환. 지도 위에 떠 있다. */}
       <header
         className={`relative z-[1050] shrink-0 px-4 pb-2 pt-2${
@@ -982,6 +962,26 @@ export default function Home() {
           <span className="map-crosshair" />
         </div>
       )}
+
+      {/* 지도 — 위 알약 줄과 아래 메뉴 뒤까지 화면 전체에 깔린다(그림은 맨 뒤, 순서는 머리 다음:
+          탭키를 누르면 위 단추들을 먼저 지나고 그다음 지도 핀에 닿는다). 탭을 바꿔도 그대로
+          남아 있다(다시 그리면 느리다). 다만 덮여 있는 동안에는 보이지도 않는 핀 수십 개가
+          키보드 순서에 끼어 있어, inert로 덮인 동안만 통째로 건너뛰게 한다. */}
+      <div className="map-layer" inert={tab !== "map" || listing}>
+        <MapView
+          onReady={handleMapReady}
+          pins={viewPins}
+          currentUserId={viewUserId}
+          initialCenter={initialView.center}
+          initialZoom={initialView.zoom}
+          onPinDelete={handlePinDelete}
+          onPinDragEnd={handlePinDragEnd}
+          searchTarget={searchTarget}
+          onSearchTargetAdd={handleSearchTargetAdd}
+          onSearchTargetClose={() => setSearchTarget(null)}
+          className="h-full w-full"
+        />
+      </div>
 
       {/* 몸통 — 지도 위에 여행 화면이 통째로 덮인다. 아무것도 덮이지 않은 자리는 손가락
           입력을 뒤 지도로 흘려보낸다(pointer-events-none). 덮개마다 다시 켜 준다. */}
