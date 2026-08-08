@@ -23,7 +23,7 @@ export interface PinTypeConfig {
   color: string;
   /** React 화면에서 쓰는 아이콘 부품 */
   Icon: LucideIcon;
-  /** 지도 마커(divIcon)용 SVG 속 그림 선 — 설치된 lucide-react 1.30.0에서 그대로 옮겨 적음 */
+  /** 지도 마커용 SVG 속 그림 선 — 설치된 lucide-react 1.30.0에서 그대로 옮겨 적음 */
   iconPaths: string;
 }
 
@@ -154,7 +154,7 @@ function stampPath(s: number, r: number): string {
 // 우표 한 변 30, 톱니 홈 반지름 2 — 마커마다 같은 몸이라 한 번만 만들어 둔다.
 const STAMP_BODY = stampPath(30, 2);
 
-/** 지도 마커 SVG 통짜 그림 — Leaflet divIcon은 React 부품 대신 글자(HTML)만 받아서.
+/** 지도 마커 SVG 통짜 그림 — 구글 표식은 React 부품 대신 그림 한 장만 받아서.
  *  모양은 "여행 수첩에 꽂은 우표 압정": 톱니 가장자리 흰 우표 + 종류색 테두리·그림 +
  *  종류색 바늘대(흰 옷 입힘) + 바늘 끝 그림자. 구글 POI(색 동그라미+흰 그림)와는
  *  바탕색·윤곽 모양이 모두 반대라 한눈에 갈린다. tiltDeg는 우표 머리만 살짝 기울여

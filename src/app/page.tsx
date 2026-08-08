@@ -9,7 +9,6 @@ import {
   useSyncExternalStore,
 } from "react";
 import dynamic from "next/dynamic";
-import type { Map as LeafletMap } from "leaflet";
 import {
   Bot,
   CalendarDays,
@@ -31,7 +30,7 @@ import { PIN_TYPES, PIN_TYPE_LIST } from "@/lib/pinTypes";
 import { isShortMapLink, looksLikeMapLink, parseGoogleMapsUrl } from "@/lib/mapLinks";
 import { dateRange, daysBetween } from "@/lib/dates";
 import { dayOrder, removePinsFromDay } from "@/lib/dayEntries";
-import type { DayRoute } from "@/components/MapView";
+import type { DayRoute, MapHandle } from "@/components/MapView";
 import { loadPins, savePins } from "@/lib/pinStorage";
 import {
   loadItinerary,
@@ -195,7 +194,7 @@ type Tab = (typeof DOCK_ITEMS)[number]["key"];
 
 export default function Home() {
   const hydrated = useHydrated();
-  const mapRef = useRef<LeafletMap | null>(null);
+  const mapRef = useRef<MapHandle | null>(null);
   const roomRef = useRef<string>("");
   const searchRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
@@ -371,10 +370,10 @@ export default function Home() {
   }, []);
 
   const handleMapReady = useCallback(
-    (map: LeafletMap) => {
+    (map: MapHandle) => {
       mapRef.current = map;
       // 지도를 움직일 때마다 지금 방의 마지막 위치를 기억.
-      map.on("moveend", () => {
+      map.onMoveEnd(() => {
         const c = map.getCenter();
         saveView(roomRef.current, { lat: c.lat, lng: c.lng, zoom: map.getZoom() });
       });
@@ -481,7 +480,7 @@ export default function Home() {
       setSearchTarget({ lat: coords[0], lng: coords[1], name: q });
       const map = mapRef.current;
       if (!map) return;
-      map.setView(coords as LatLng, 12, { animate: true });
+      map.setView(coords, 12, { animate: true });
     } catch {
       setNotice("검색 중 문제가 생겼어요");
     } finally {

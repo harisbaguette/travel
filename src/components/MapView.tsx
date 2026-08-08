@@ -1,16 +1,15 @@
 "use client";
 
-import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
 import {
-  MapContainer,
-  TileLayer,
-  Marker,
-  Polyline,
-  Popup,
-  useMap,
-  useMapEvents,
-  ZoomControl,
-} from "react-leaflet";
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { createPortal } from "react-dom";
 import {
   CalendarPlus,
   Clock,
@@ -19,18 +18,19 @@ import {
   Map as MapIcon,
   MapPin,
   MapPinPlus,
+  Minus,
   Pencil,
   Phone,
+  Plus,
+  Sparkles,
+  Star,
   Trash2,
   X,
 } from "lucide-react";
-import L, { type Map as LeafletMap } from "leaflet";
-import "leaflet.gridlayer.googlemutant";
 import type { Pin } from "@/lib/types";
 import { PIN_TYPES, pinMarkerSvg } from "@/lib/pinTypes";
 import { googleMapsUrl, placeSearchUrl } from "@/lib/mapLinks";
-import { hoursViewKo } from "@/lib/openingHours";
-import { hasGoogleKey, loadGoogleMaps, onGoogleAuthFailure } from "@/lib/googleMaps";
+import { importMapsLibrary } from "@/lib/googleMaps";
 
 /** 하루치 동선 — 일정 화면에서 짠 순서대로 핀 자리를 이은 선 하나. */
 export interface DayRoute {
@@ -40,8 +40,26 @@ export interface DayRoute {
   points: [number, number][]; // 방문 순서대로의 [위도, 경도]
 }
 
+/** 부모(page.tsx)가 지도를 움직일 때 잡는 손잡이 — 지도 속살을 밖으로 내보내지 않는다. */
+export interface MapHandle {
+  setView(
+    center: [number, number] | google.maps.LatLngLiteral,
+    zoom: number,
+    opts?: { animate?: boolean }
+  ): void;
+  getCenter(): { lat: number; lng: number };
+  getZoom(): number;
+  /** [[남,서],[북,동]] 네모가 다 보이게 맞춘다. */
+  fitBounds(
+    bounds: [[number, number], [number, number]],
+    opts?: { padding?: [number, number]; maxZoom?: number; animate?: boolean }
+  ): void;
+  /** 지도를 다 움직이고 멈출 때마다 부른다. */
+  onMoveEnd(cb: () => void): void;
+}
+
 interface MapViewProps {
-  onReady?: (map: LeafletMap) => void;
+  onReady?: (map: MapHandle) => void;
   pins?: Pin[];
   /** 일자별 동선 — 일정에 두 곳 이상 넣은 날만 온다. */
   dayRoutes?: DayRoute[];
@@ -69,149 +87,22 @@ interface MapViewProps {
   className?: string;
 }
 
-// 구글 지도 그림 조각(타일) 주소 — 열쇠(API 키)나 계정 없이 바로 받아올 수 있다.
-// hl=ko: 지명을 구글맵 앱처럼 한국어로 보여 준다.
-// simplify: 구글이 공식으로 열어 둔 문은 아님 — 막히는 날이 오면 공식 열쇠를 넣어 올린다.
-const GOOGLE_TILE_URL =
-  "https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&hl=ko";
-
 const DEFAULT_CENTER: [number, number] = [10.2899, 103.984]; // 푸꾸옥
 const DEFAULT_ZOOM = 11;
 
-// 바탕 지도 층 — 구글 지도만 쓴다.
-// 열쇠가 있으면 공식 구글 지도(googlemutant), 없으면 열쇠 없는 구글 조각.
-function GoogleBaseLayer() {
-  const map = useMap();
-  const [mode, setMode] = useState<"google" | "gtile">(() => {
-    if (typeof window === "undefined") return "gtile";
-    return hasGoogleKey() ? "google" : "gtile";
-  });
+/** 지도 위에 한 번에 하나만 떠 있게 하는 말풍선 자리표. */
+type Registry = { current: google.maps.InfoWindow | null };
 
-  // 출처 표기는 평소 작은 ⓘ 동그라미로 접어 둔다(지도를 가리지 않게).
-  // "Leaflet" 링크는 지우고, 손가락으로 눌러도 펼쳐지도록 초점을 받게 한다.
-  useEffect(() => {
-    const control = map.attributionControl;
-    if (!control) return;
-    control.setPrefix(false);
-    control.getContainer()?.setAttribute("tabindex", "0");
-  }, [map]);
-
-  // 구글 지도 층 — 공식 구글 지도 프로그램을 내려받아 Leaflet 밑에 깐다(googlemutant).
-  // 열쇠가 틀리거나 내려받기가 실패하면 조용히 열쇠 없는 구글 조각으로 되돌아간다.
-  useEffect(() => {
-    if (mode !== "google") return;
-    let cancelled = false;
-    let layer: L.Layer | null = null;
-    // 열쇠가 틀렸다고 구글이 알려오면 열쇠 없는 구글 조각으로 되돌린다
-    onGoogleAuthFailure(() => {
-      if (!cancelled) setMode("gtile");
-    });
-    void loadGoogleMaps().then((ok) => {
-      if (cancelled) return;
-      if (!ok) {
-        setMode("gtile");
-        return;
-      }
-      try {
-        layer = L.gridLayer.googleMutant({ type: "roadmap" });
-        layer.addTo(map);
-      } catch {
-        setMode("gtile");
-      }
-    });
-    return () => {
-      cancelled = true;
-      if (layer) map.removeLayer(layer);
-    };
-  }, [map, mode]);
-
-  // 열쇠 없는 구글 조각 — 공식 층이 없거나 실패했을 때의 기본 바탕
-  if (mode === "gtile") {
-    return (
-      <TileLayer
-        attribution="&copy; Google"
-        url={GOOGLE_TILE_URL}
-        subdomains={["0", "1", "2", "3"]}
-        maxZoom={20}
-      />
-    );
-  }
-  return null;
+/** 처음 받은 값만 붙잡아 둔다 — 만들 때 한 번 쓰고 마는 설정용. */
+function useInitial<T>(value: T): T {
+  const [initial] = useState(value);
+  return initial;
 }
 
-// ── 지도 누르는 손맛 — 구글맵과 똑같이 세 가지로 나눈다 ──
-// · 화면에 그려진 가게(아이콘·이름)를 누르면 → 그 가게 카드가 뜬다
-// · 빈 땅을 그냥 누르면 → 아무 일도 없다(열려 있던 카드만 닫힌다) — 좌표 카드 금지
-// · 길게 누르거나 마우스 오른쪽 → 빨간 핀을 떨어뜨리고 그 자리 주소를 알려 준다
-interface PoiInfo {
-  kind: "poi" | "address";
-  name: string;
-  category?: string;
-  lat: number;
-  lng: number;
-  hours?: string;
-  phone?: string;
-  website?: string;
-}
-
-// 지금 지도 위에 떠 있는 카드 — 가게 카드거나, 떨어뜨린 핀 카드거나 둘 중 하나.
-type TapCard =
-  | { type: "poi"; poi: PoiInfo }
-  | { type: "drop"; lat: number; lng: number; address?: string };
-
-// 여는 시간 한 줄 — "영업 중 · 22:00에 닫아요" 판정을 초록/빨강으로 먼저, 시간표를 그 아래에.
-// 판정은 그 나라 시각으로 계산하고, 애매하면(시간대 어림이 흔들리면) 시간표만 보여 준다.
-function HoursLine({ spec, lng }: { spec: string; lng: number }) {
-  const view = useMemo(() => hoursViewKo(spec, lng), [spec, lng]);
-  const showText = view.text !== view.state?.label;
-  return (
-    <div className="mt-1 flex items-start gap-1 text-xs text-[var(--text-muted)]">
-      <Clock size={11} aria-hidden className="mt-0.5 shrink-0" />
-      <span className="min-w-0">
-        {view.state && (
-          <>
-            <span
-              className={
-                view.state.open
-                  ? "font-semibold text-[#0e7a4f]"
-                  : "font-semibold text-[var(--danger)]"
-              }
-            >
-              {view.state.label}
-            </span>
-            {showText && <br />}
-          </>
-        )}
-        {showText && view.text}
-      </span>
-    </div>
-  );
-}
-
-// 그 좌표에 뭐가 있는지 서버(/api/poi-at)에 조용히 물어봐 두는 재료 — 검색 표식 카드가 쓴다.
-function usePlaceDetails(lat: number, lng: number) {
-  // 어느 좌표의 답인지 꼬리표를 같이 붙여 둔다 — 좌표가 바뀌면 꼬리표가 어긋나
-  // 옛 답 대신 "아직 없음"이 돌아간다(지우는 일을 따로 하지 않아도 된다).
-  const [result, setResult] = useState<{
-    key: string;
-    poi: PoiInfo | null;
-  } | null>(null);
-  useEffect(() => {
-    const ac = new AbortController();
-    const key = `${lat},${lng}`;
-    void fetch(`/api/poi-at?lat=${lat}&lng=${lng}`, { signal: ac.signal })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (!ac.signal.aborted)
-          setResult({
-            key,
-            poi: (d as { poi?: PoiInfo | null } | null)?.poi ?? null,
-          });
-      })
-      .catch(() => {});
-    return () => ac.abort();
-  }, [lat, lng]);
-  return result && result.key === `${lat},${lng}` ? result.poi : null;
+function toLatLng(
+  c: [number, number] | google.maps.LatLngLiteral
+): google.maps.LatLngLiteral {
+  return Array.isArray(c) ? { lat: c[0], lng: c[1] } : c;
 }
 
 // 두 자리 사이 거리(m) — 찾아온 정보가 정말 그 가게 것인지 가려낼 때 쓴다.
@@ -228,435 +119,748 @@ function namesOverlap(a: string, b: string): boolean {
   return na.includes(nb) || nb.includes(na);
 }
 
-function PoiTapLayer({
-  onAddToSchedule,
-  onSavePlace,
-}: {
-  onAddToSchedule?: MapViewProps["onAddToSchedule"];
-  onSavePlace?: MapViewProps["onSavePlace"];
-}) {
-  const [card, setCard] = useState<TapCard | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
-  const markerRef = useRef<L.Marker | null>(null);
-  // 두 번 빠르게 누르는 확대 손짓과 구분하려고 잠깐 기다리는 시계
-  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+// ────────────────────────────────────────────────────────────────────────────
+// 표식 + 말풍선 한 벌 — 말풍선 속은 createPortal로 우리 화면 부품을 그대로 그린다.
+// icon을 주면 표식이 생기고(누르면 열림), 안 주면 그 자리에 말풍선만 뜬다.
+// ────────────────────────────────────────────────────────────────────────────
+interface MapPopupProps {
+  map: google.maps.Map;
+  registry: Registry;
+  lat: number;
+  lng: number;
+  icon?: google.maps.Icon;
+  title?: string;
+  zIndex?: number;
+  opacity?: number;
+  /** 말풍선을 표식 위로 몇 픽셀 더 올릴지 */
+  offsetY?: number;
+  /** 값이 0보다 크면 그 값이 바뀔 때마다 말풍선을 연다 */
+  openSignal?: number;
+  onClose?: () => void;
+  children: ReactNode;
+}
 
+function MapPopup({
+  map,
+  registry,
+  lat,
+  lng,
+  icon,
+  title,
+  zIndex,
+  opacity,
+  offsetY = 0,
+  openSignal = 0,
+  onClose,
+  children,
+}: MapPopupProps) {
+  const [host] = useState<HTMLDivElement | null>(() =>
+    typeof document === "undefined" ? null : document.createElement("div")
+  );
+  const markerRef = useRef<google.maps.Marker | null>(null);
+  const infoRef = useRef<google.maps.InfoWindow | null>(null);
+  const openRef = useRef<() => void>(() => {});
+  const onCloseRef = useRef(onClose);
+  const posRef = useRef({ lat, lng });
+
+  // 지금 자리와 닫기 손잡이를 늘 최신으로 — 아래 효과들이 이 값을 꺼내 쓴다.
+  // (화면을 그리는 중에 고치면 안 되므로 그리기가 끝난 뒤에 옮겨 담는다.)
   useEffect(() => {
-    return () => {
-      if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
-      abortRef.current?.abort();
-    };
-  }, []);
-
-  // 톡 누름 — 화면에 그려져 있던 가게를 눌렀을 때만 카드를 띄운다(구글맵과 같음).
-  // 빈 땅이면 조용히 아무 일도 하지 않는다 — 좌표 카드·알아보는 중 카드를 만들지 않는다.
-  const lookup = (lat: number, lng: number, zoom: number) => {
-    abortRef.current?.abort();
-    const ac = new AbortController();
-    abortRef.current = ac;
-    void fetch(`/api/poi-at?lat=${lat}&lng=${lng}&z=${zoom}&strict=1`, {
-      signal: ac.signal,
-    })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (ac.signal.aborted) return;
-        const found = (d as { poi?: PoiInfo | null } | null)?.poi;
-        if (found && found.kind === "poi") setCard({ type: "poi", poi: found });
-      })
-      .catch(() => {});
-  };
-
-  // 길게 누름·마우스 오른쪽 — 그 자리에 빨간 핀을 바로 떨어뜨리고, 주소는 뒤따라 채운다.
-  const dropPin = (lat: number, lng: number) => {
-    abortRef.current?.abort();
-    const ac = new AbortController();
-    abortRef.current = ac;
-    setCard({ type: "drop", lat, lng });
-    const fallback = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-    const fill = (address: string) =>
-      setCard((prev) =>
-        prev?.type === "drop" && prev.lat === lat && prev.lng === lng
-          ? { ...prev, address }
-          : prev
-      );
-    void fetch(`/api/poi-at?lat=${lat}&lng=${lng}&addr=1`, { signal: ac.signal })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (ac.signal.aborted) return;
-        const found = (d as { poi?: PoiInfo | null } | null)?.poi;
-        fill(found?.name ?? fallback);
-      })
-      .catch(() => {
-        // 주소 알아보기가 실패해도 "알아보는 중…"에 갇히지 않게 좌표라도 채워 준다
-        if (!ac.signal.aborted) fill(fallback);
-      });
-  };
-
-  const map = useMapEvents({
-    click(e) {
-      // 구글맵과 같은 순서 — 떠 있던 카드는 먼저 치우고, 새로 누른 자리에 가게가
-      // 그려져 있으면 그 가게 카드로 갈아탄다(빈 땅이면 치우기만 하고 끝).
-      setCard(null);
-      const { lat, lng } = e.latlng;
-      // 두 번 빠르게 누르면 확대 손짓 — 잠깐 기다려서 한 번 누른 게 맞을 때만 찾는다
-      if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
-      clickTimerRef.current = setTimeout(() => {
-        clickTimerRef.current = null;
-        lookup(lat, lng, map.getZoom());
-      }, 260);
-    },
-    dblclick() {
-      if (clickTimerRef.current) {
-        clearTimeout(clickTimerRef.current);
-        clickTimerRef.current = null;
-      }
-    },
-    // 마우스 오른쪽 누름·손가락 길게 누름 — 구글맵처럼 빨간 핀을 떨어뜨린다
-    contextmenu(e) {
-      if (clickTimerRef.current) {
-        clearTimeout(clickTimerRef.current);
-        clickTimerRef.current = null;
-      }
-      dropPin(e.latlng.lat, e.latlng.lng);
-    },
+    posRef.current = { lat, lng };
+    onCloseRef.current = onClose;
   });
 
-  // 카드 내용이 갱신될 때마다 말풍선을 열어 둔다
+  // 만들 때 한 번만 쓰는 값들 — 나중에 바뀌면 아래 갱신 효과가 따로 고쳐 준다.
+  const initIcon = useInitial(icon);
+  const initTitle = useInitial(title);
+  const initZ = useInitial(zIndex);
+  const initOpacity = useInitial(opacity);
+  const initOffsetY = useInitial(offsetY);
+
   useEffect(() => {
-    if (!card) return;
-    const timer = setTimeout(() => markerRef.current?.openPopup(), 100);
-    return () => clearTimeout(timer);
-  }, [card]);
+    if (!host) return;
+    const info = new google.maps.InfoWindow({
+      content: host,
+      maxWidth: 280,
+      pixelOffset: new google.maps.Size(0, -initOffsetY),
+    });
+    infoRef.current = info;
+    // simplify: Map ID를 만들 수 있게 되면 AdvancedMarkerElement로 올린다.
+    //           지금 열쇠로는 Map ID를 못 만들어 구버전 표식(google.maps.Marker)을 쓴다.
+    const marker = initIcon
+      ? new google.maps.Marker({
+          map,
+          position: posRef.current,
+          icon: initIcon,
+          title: initTitle,
+          zIndex: initZ,
+          opacity: initOpacity,
+        })
+      : null;
+    markerRef.current = marker;
 
-  // 가게 카드는 표식 없이 말풍선만 — 구글맵처럼 화면에 그려진 가게 아이콘을 그대로 가리킨다.
-  const poiAnchorIcon = useMemo(
-    () =>
-      L.divIcon({
-        className: "search-target-icon",
-        html: "",
-        iconSize: [0, 0],
-        iconAnchor: [0, 0],
-        popupAnchor: [0, -14],
-      }),
-    []
-  );
+    const open = () => {
+      if (registry.current && registry.current !== info) registry.current.close();
+      registry.current = info;
+      if (marker) info.open({ map, anchor: marker });
+      else {
+        info.setPosition(posRef.current);
+        info.open({ map });
+      }
+    };
+    openRef.current = open;
 
-  // 떨어뜨린 핀 — 구글맵의 빨간 물방울 핀과 같은 모양
-  const dropIcon = useMemo(
-    () =>
-      L.divIcon({
-        className: "drop-pin-icon",
-        html: `<svg width="27" height="43" viewBox="0 0 27 43" aria-hidden="true"><path fill="#EA4335" stroke="#B31412" stroke-width="1" d="M13.5 .5C6.3 .5 .5 6.3 .5 13.5c0 9.8 13 29 13 29s13-19.2 13-29C26.5 6.3 20.7 .5 13.5 .5Z"/><circle cx="13.5" cy="13.5" r="4.6" fill="#7B231E"/></svg>`,
-        iconSize: [27, 43],
-        iconAnchor: [13, 43],
-        popupAnchor: [0, -40],
-      }),
-    []
+    const listeners: google.maps.MapsEventListener[] = [];
+    if (marker) listeners.push(marker.addListener("click", open));
+    listeners.push(
+      info.addListener("closeclick", () => {
+        if (registry.current === info) registry.current = null;
+        onCloseRef.current?.();
+      })
+    );
+    return () => {
+      for (const l of listeners) l.remove();
+      info.close();
+      marker?.setMap(null);
+      if (registry.current === info) registry.current = null;
+      infoRef.current = null;
+      markerRef.current = null;
+    };
+  }, [map, host, registry, initIcon, initTitle, initZ, initOpacity, initOffsetY]);
+
+  useEffect(() => {
+    markerRef.current?.setPosition({ lat, lng });
+    infoRef.current?.setPosition({ lat, lng });
+  }, [lat, lng]);
+
+  useEffect(() => {
+    if (icon) markerRef.current?.setIcon(icon);
+  }, [icon]);
+
+  useEffect(() => {
+    if (title !== undefined) markerRef.current?.setTitle(title);
+  }, [title]);
+
+  useEffect(() => {
+    if (openSignal > 0) openRef.current();
+  }, [openSignal]);
+
+  return host ? createPortal(children, host) : null;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// 우리가 만든 HTML 조각을 지도 위 제자리에 붙여 두는 층 — 물결이 퍼지는 검색 점처럼
+// 그림(SVG) 한 장으로는 못 만드는 움직임을 살리려고 쓴다.
+// ────────────────────────────────────────────────────────────────────────────
+function useHtmlOverlay(
+  map: google.maps.Map,
+  el: HTMLElement | null,
+  lat: number,
+  lng: number
+): void {
+  useEffect(() => {
+    if (!el) return;
+    const node = el;
+    class Spot extends google.maps.OverlayView {
+      onAdd() {
+        this.getPanes()?.overlayMouseTarget.appendChild(node);
+      }
+      draw() {
+        const p = this.getProjection()?.fromLatLngToDivPixel(
+          new google.maps.LatLng(lat, lng)
+        );
+        if (!p) return;
+        node.style.position = "absolute";
+        node.style.left = `${p.x}px`;
+        node.style.top = `${p.y}px`;
+        node.style.transform = "translate(-50%, -50%)";
+      }
+      onRemove() {
+        node.remove();
+      }
+    }
+    const spot = new Spot();
+    spot.setMap(map);
+    return () => spot.setMap(null);
+  }, [map, el, lat, lng]);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// 구글이 알려 주는 가게 정보 — 구글맵 앱 카드와 같은 재료.
+// ────────────────────────────────────────────────────────────────────────────
+interface PlaceInfo {
+  name: string;
+  lat: number;
+  lng: number;
+  photo?: string;
+  rating?: number;
+  ratingCount?: number;
+  price?: string;
+  category?: string;
+  address?: string;
+  openNow?: boolean;
+  todayHours?: string;
+  phone?: string;
+  website?: string;
+  closed?: string;
+}
+
+// 가게 정보를 물을 때 받아 오는 항목들 — 구글맵 카드에 그대로 쓰는 것만.
+const PLACE_FIELDS = [
+  "displayName",
+  "formattedAddress",
+  "location",
+  "rating",
+  "userRatingCount",
+  "priceLevel",
+  "regularOpeningHours",
+  "utcOffsetMinutes",
+  "photos",
+  "nationalPhoneNumber",
+  "internationalPhoneNumber",
+  "websiteURI",
+  "primaryTypeDisplayName",
+  "types",
+  "businessStatus",
+];
+
+// 가격대 — 구글이 주는 등급을 화폐 기호 개수로 보여 준다(구글맵 앱과 같은 문법).
+const PRICE_MARK: Record<string, string> = {
+  FREE: "무료",
+  INEXPENSIVE: "₩",
+  MODERATE: "₩₩",
+  EXPENSIVE: "₩₩₩",
+  VERY_EXPENSIVE: "₩₩₩₩",
+};
+
+const BUSINESS_CLOSED: Record<string, string> = {
+  CLOSED_TEMPORARILY: "임시 휴업",
+  CLOSED_PERMANENTLY: "영업 종료",
+};
+
+// 오늘 줄 고르기 — 구글은 월요일부터 일곱 줄을 한국어로 준다.
+// simplify: 보는 사람 기기의 요일로 고른다(현지와 하루 차이가 날 수 있음).
+function todayHoursLine(
+  hours: google.maps.places.OpeningHours | null | undefined
+): string | undefined {
+  const lines = hours?.weekdayDescriptions;
+  if (!lines || lines.length < 7) return undefined;
+  return lines[(new Date().getDay() + 6) % 7];
+}
+
+async function readPlace(place: google.maps.places.Place): Promise<PlaceInfo | null> {
+  const name = place.displayName ?? "";
+  const loc = place.location;
+  if (!name || !loc) return null;
+  let openNow: boolean | undefined;
+  try {
+    openNow = await place.isOpen();
+  } catch {
+    // 영업 중인지 못 구하면 그 줄은 아예 빼 둔다(어림짐작 금지)
+  }
+  const price = place.priceLevel ? PRICE_MARK[place.priceLevel] : undefined;
+  return {
+    name,
+    lat: loc.lat(),
+    lng: loc.lng(),
+    photo: place.photos?.[0]?.getURI({ maxWidth: 400 }),
+    rating: place.rating ?? undefined,
+    ratingCount: place.userRatingCount ?? undefined,
+    price,
+    category: place.primaryTypeDisplayName ?? undefined,
+    address: place.formattedAddress ?? undefined,
+    openNow,
+    todayHours: todayHoursLine(place.regularOpeningHours),
+    phone: place.nationalPhoneNumber ?? place.internationalPhoneNumber ?? undefined,
+    website: place.websiteURI ?? undefined,
+    closed: place.businessStatus ? BUSINESS_CLOSED[place.businessStatus] : undefined,
+  };
+}
+
+/** 가게 카드 속살 — 사진 → 이름 → ★평점(리뷰수)·종류·가격대 → 영업 여부 → 전화 → 웹사이트. */
+function PlaceCardBody({ info }: { info: PlaceInfo }) {
+  const meta = [
+    info.category,
+    info.price,
+  ].filter(Boolean) as string[];
+  return (
+    <>
+      {info.photo && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img className="map-popup__photo" src={info.photo} alt="" loading="lazy" />
+      )}
+      <div className="map-popup__title font-semibold text-[var(--text)]">{info.name}</div>
+      {(info.rating !== undefined || meta.length > 0) && (
+        <div className="mt-0.5 flex flex-wrap items-center gap-1 text-xs text-[var(--text-muted)]">
+          {info.rating !== undefined && (
+            <span className="flex items-center gap-0.5">
+              <Star size={11} aria-hidden className="shrink-0 fill-[#f2a93b] text-[#f2a93b]" />
+              <span className="font-semibold text-[var(--text)]">
+                {info.rating.toFixed(1)}
+              </span>
+              {info.ratingCount !== undefined && <span>({info.ratingCount})</span>}
+            </span>
+          )}
+          {meta.length > 0 && <span>{meta.join(" · ")}</span>}
+        </div>
+      )}
+      {info.closed && (
+        <div className="mt-0.5 text-xs font-semibold text-[var(--danger)]">{info.closed}</div>
+      )}
+      {(info.openNow !== undefined || info.todayHours) && (
+        <div className="mt-1 flex items-start gap-1 text-xs text-[var(--text-muted)]">
+          <Clock size={11} aria-hidden className="mt-0.5 shrink-0" />
+          <span className="min-w-0">
+            {info.openNow !== undefined && (
+              <>
+                <span
+                  className={
+                    info.openNow
+                      ? "font-semibold text-[#0e7a4f]"
+                      : "font-semibold text-[var(--danger)]"
+                  }
+                >
+                  {info.openNow ? "영업 중" : "영업 준비 중"}
+                </span>
+                {info.todayHours && <br />}
+              </>
+            )}
+            {info.todayHours}
+          </span>
+        </div>
+      )}
+      {info.phone && (
+        <div className="mt-0.5 flex items-center gap-1 text-xs text-[var(--text-muted)]">
+          <Phone size={11} aria-hidden className="shrink-0" />
+          <span className="min-w-0 truncate">{info.phone}</span>
+        </div>
+      )}
+      {info.website && (
+        <a
+          href={info.website}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-0.5 flex items-center gap-1 text-xs text-[var(--text-faint)]"
+        >
+          <Link2 size={11} aria-hidden className="shrink-0" />
+          <span className="min-w-0 truncate underline underline-offset-2">웹사이트</span>
+        </a>
+      )}
+    </>
   );
+}
+
+/** 말풍선 아래 동작 줄 — 핀 저장 / 일정 / 구글 지도. */
+function PlaceActions({
+  lat,
+  lng,
+  name,
+  onSavePlace,
+  onAddToSchedule,
+  onDone,
+}: {
+  lat: number;
+  lng: number;
+  name: string;
+  onSavePlace?: MapViewProps["onSavePlace"];
+  onAddToSchedule?: MapViewProps["onAddToSchedule"];
+  onDone: () => void;
+}) {
+  return (
+    <div className="popup-actions">
+      {onSavePlace && (
+        <button
+          type="button"
+          onClick={() => {
+            onSavePlace({ lat, lng, name });
+            onDone();
+          }}
+          className="popup-action popup-action--accent"
+        >
+          <span className="popup-action__icon">
+            <MapPinPlus size={16} strokeWidth={2.2} aria-hidden />
+          </span>
+          핀 저장
+        </button>
+      )}
+      {onAddToSchedule && (
+        <button
+          type="button"
+          onClick={() => onAddToSchedule({ lat, lng, name })}
+          className="popup-action"
+        >
+          <span className="popup-action__icon">
+            <CalendarPlus size={16} strokeWidth={2.2} aria-hidden />
+          </span>
+          일정
+        </button>
+      )}
+      <a
+        href={placeSearchUrl(name, lat, lng)}
+        target="_blank"
+        rel="noreferrer"
+        className="popup-action"
+      >
+        <span className="popup-action__icon">
+          <MapIcon size={16} strokeWidth={2.2} aria-hidden />
+        </span>
+        구글 지도
+      </a>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// 지도 누르는 손맛 — 구글맵과 똑같이 세 가지로 나눈다.
+// · 구글이 그려 둔 가게를 누르면 → 그 가게 카드(사진·별점·영업시간·전화)
+// · 빈 땅을 누르면 → 열려 있던 카드만 닫힌다
+// · 길게 누르거나 마우스 오른쪽 → 빨간 물방울 핀 + 그 자리 주소
+// ────────────────────────────────────────────────────────────────────────────
+type TapCard =
+  | { type: "poi"; placeId: string; lat: number; lng: number }
+  | { type: "drop"; lat: number; lng: number };
+
+// 떨어뜨린 핀 그림 — 구글맵의 빨간 물방울 핀과 같은 문법.
+const DROP_PIN_SVG =
+  `<svg xmlns="http://www.w3.org/2000/svg" width="27" height="43" viewBox="0 0 27 43">` +
+  `<path fill="#EA4335" stroke="#B31412" stroke-width="1" d="M13.5 .5C6.3 .5 .5 6.3 .5 13.5c0 9.8 13 29 13 29s13-19.2 13-29C26.5 6.3 20.7 .5 13.5 .5Z"/>` +
+  `<circle cx="13.5" cy="13.5" r="4.6" fill="#7B231E"/></svg>`;
+
+function PoiTapLayer({
+  map,
+  registry,
+  onSavePlace,
+  onAddToSchedule,
+}: {
+  map: google.maps.Map;
+  registry: Registry;
+  onSavePlace?: MapViewProps["onSavePlace"];
+  onAddToSchedule?: MapViewProps["onAddToSchedule"];
+}) {
+  const [card, setCard] = useState<TapCard | null>(null);
+
+  useEffect(() => {
+    const onClick = map.addListener("click", (e: google.maps.IconMouseEvent) => {
+      // 구글이 그려 둔 가게를 눌렀다 — 구글 기본 카드는 막고 우리 카드를 띄운다.
+      if (e.placeId && e.latLng) {
+        e.stop();
+        setCard({
+          type: "poi",
+          placeId: e.placeId,
+          lat: e.latLng.lat(),
+          lng: e.latLng.lng(),
+        });
+        return;
+      }
+      // 빈 땅 — 떠 있던 카드만 치운다(좌표 카드는 만들지 않는다).
+      // 핀 말풍선처럼 우리가 안 만든 카드도 같이 닫는다(예전 지도와 같은 손맛).
+      registry.current?.close();
+      registry.current = null;
+      setCard(null);
+    });
+    const onContext = map.addListener(
+      "contextmenu",
+      (e: google.maps.MapMouseEvent) => {
+        if (!e.latLng) return;
+        setCard({ type: "drop", lat: e.latLng.lat(), lng: e.latLng.lng() });
+      }
+    );
+    return () => {
+      onClick.remove();
+      onContext.remove();
+    };
+  }, [map, registry]);
 
   if (!card) return null;
-  const isDrop = card.type === "drop";
-  const pos: [number, number] = isDrop
-    ? [card.lat, card.lng]
-    : [card.poi.lat, card.poi.lng];
-  // 핀 저장·일정에 넘길 이름 — 가게면 가게 이름, 떨어뜨린 핀이면 주소(없으면 좌표)
-  const placeName = isDrop
-    ? card.address ?? `${card.lat.toFixed(5)}, ${card.lng.toFixed(5)}`
-    : card.poi.name;
-  return (
-    <Marker
-      position={pos}
-      icon={isDrop ? dropIcon : poiAnchorIcon}
-      zIndexOffset={400}
-      ref={(m) => {
-        markerRef.current = m as L.Marker | null;
-      }}
-    >
-      <Popup className="pin-popup">
-        <div className="min-w-[180px] max-w-[240px]">
-          {isDrop ? (
-            <>
-              <div className="font-semibold text-[var(--text)]">떨어뜨린 핀</div>
-              <div className="mt-0.5 flex items-start gap-1 text-xs text-[var(--text-muted)]">
-                <MapPin size={11} aria-hidden className="mt-0.5 shrink-0" />
-                <span className="min-w-0">{card.address ?? "주소 알아보는 중…"}</span>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="font-semibold text-[var(--text)]">{card.poi.name}</div>
-              {card.poi.category && (
-                <div className="mt-0.5 text-xs text-[var(--text-muted)]">
-                  {card.poi.category}
-                </div>
-              )}
-              {card.poi.hours && <HoursLine spec={card.poi.hours} lng={card.poi.lng} />}
-              {card.poi.phone && (
-                <div className="mt-0.5 flex items-center gap-1 text-xs text-[var(--text-muted)]">
-                  <Phone size={11} aria-hidden className="shrink-0" />
-                  {card.poi.phone}
-                </div>
-              )}
-            </>
-          )}
-          <div className="popup-actions">
-            {onSavePlace && (
-              <button
-                type="button"
-                onClick={() => {
-                  onSavePlace({ lat: pos[0], lng: pos[1], name: placeName });
-                  setCard(null);
-                }}
-                className="popup-action popup-action--accent"
-              >
-                <span className="popup-action__icon">
-                  <MapPinPlus size={16} strokeWidth={2.2} aria-hidden />
-                </span>
-                핀 저장
-              </button>
-            )}
-            {onAddToSchedule && (
-              <button
-                type="button"
-                onClick={() =>
-                  onAddToSchedule({ lat: pos[0], lng: pos[1], name: placeName })
-                }
-                className="popup-action"
-              >
-                <span className="popup-action__icon">
-                  <CalendarPlus size={16} strokeWidth={2.2} aria-hidden />
-                </span>
-                일정
-              </button>
-            )}
-            <a
-              href={placeSearchUrl(placeName, pos[0], pos[1])}
-              target="_blank"
-              rel="noreferrer"
-              className="popup-action"
-            >
-              <span className="popup-action__icon">
-                <MapIcon size={16} strokeWidth={2.2} aria-hidden />
-              </span>
-              구글 지도
-            </a>
-          </div>
-        </div>
-      </Popup>
-    </Marker>
-  );
-}
-
-// Leaflet은 SSR 미지원 -> "use client" + 부모에서 dynamic(ssr:false) 로 로드
-const MapView = forwardRef<LeafletMap, MapViewProps>(function MapView(
-  {
-    onReady,
-    pins = [],
-    dayRoutes = [],
-    currentUserId = "",
-    initialCenter = DEFAULT_CENTER,
-    initialZoom = DEFAULT_ZOOM,
-    searchTarget,
-    onSearchTargetAdd,
-    onSearchTargetClose,
-    onPinDelete,
-    onPinEdit,
-    onSavePlace,
-    onAddToSchedule,
-    className,
-  },
-  ref
-) {
-  return (
-    <MapContainer
-      center={initialCenter}
-      zoom={initialZoom}
-      zoomControl={false}
-      ref={ref}
-      className={className}
-      style={{ height: "100%", width: "100%" }}
-    >
-      <GoogleBaseLayer />
-      <PoiTapLayer onAddToSchedule={onAddToSchedule} onSavePlace={onSavePlace} />
-      {onReady && <MapReadyBridge onReady={onReady} />}
-      {/* 확대·축소 단추 — 마우스 화면에서만 보인다(손가락 화면은 벌려서 확대) */}
-      <ZoomControl position="bottomright" />
-      <LocateButton />
-      {searchTarget && (
-        <SearchTargetMarker
-          target={searchTarget}
-          onAdd={onSearchTargetAdd}
-          onSchedule={onAddToSchedule}
-          onClose={onSearchTargetClose}
-        />
-      )}
-      {/* 일자별 동선 — 핀보다 아래(선이 핀을 가리지 않게). 선을 누르면 며칠째인지 알려 준다. */}
-      {dayRoutes.map((route) => (
-        <Polyline
-          key={route.date}
-          positions={route.points}
-          pathOptions={{
-            color: route.color,
-            weight: 3.5,
-            opacity: 0.85,
-            dashArray: "1 9",
-            lineCap: "round",
-            lineJoin: "round",
-            // 선을 누른 손짓이 지도까지 내려가면 "그 자리에 뭐가 있나" 카드가 같이 떠 버린다
-            bubblingMouseEvents: false,
-          }}
-        >
-          <Popup>
-            <span className="text-sm font-semibold" style={{ color: route.color }}>
-              {route.label}
-            </span>
-            <span className="ml-1 text-xs text-[var(--text-muted)]">
-              {route.points.length}곳 동선
-            </span>
-          </Popup>
-        </Polyline>
-      ))}
-      {pins.map((pin) => (
-        <PinMarker
-          key={pin.id}
-          pin={pin}
-          isMine={!pin.createdBy || !currentUserId || pin.createdBy === currentUserId}
-          onDelete={onPinDelete}
-          onEdit={onPinEdit}
-          onAddToSchedule={onAddToSchedule}
-        />
-      ))}
-    </MapContainer>
-  );
-});
-
-function MapReadyBridge({ onReady }: { onReady: (map: LeafletMap) => void }) {
-  const map = useMap();
-  useEffect(() => {
-    onReady(map);
-  }, [map, onReady]);
-  return null;
-}
-
-// 내 위치 버튼 — 여행 중 "지금 나 어디지?"를 한 번에. 위치 표시는 파란 점.
-function LocateButton() {
-  const map = useMap();
-  const markerRef = useRef<L.CircleMarker | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  const locate = () => {
-    if (!navigator.geolocation || busy) return;
-    setBusy(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const ll: [number, number] = [pos.coords.latitude, pos.coords.longitude];
-        if (markerRef.current) markerRef.current.remove();
-        markerRef.current = L.circleMarker(ll, {
-          radius: 8,
-          color: "#ffffff",
-          weight: 3,
-          fillColor: "#3d79c0",
-          fillOpacity: 1,
-        }).addTo(map);
-        map.setView(ll, Math.max(map.getZoom(), 15), { animate: true });
-        setBusy(false);
-      },
-      () => setBusy(false),
-      { enableHighAccuracy: true, timeout: 8000 }
-    );
-  };
-
-  return (
-    <button
-      type="button"
-      onClick={locate}
-      disabled={busy}
-      className="map-locate-btn"
-      aria-label="내 위치로 이동"
-    >
-      <LocateFixed
-        size={19}
-        strokeWidth={2.2}
-        className={`mx-auto text-[var(--accent-ink)] ${busy ? "animate-spin" : ""}`}
-        aria-hidden
+  if (card.type === "poi")
+    return (
+      <PoiCard
+        key={card.placeId}
+        map={map}
+        registry={registry}
+        placeId={card.placeId}
+        lat={card.lat}
+        lng={card.lng}
+        onSavePlace={onSavePlace}
+        onAddToSchedule={onAddToSchedule}
+        onClose={() => setCard(null)}
       />
-    </button>
+    );
+  return (
+    <DropPinCard
+      key={`${card.lat},${card.lng}`}
+      map={map}
+      registry={registry}
+      lat={card.lat}
+      lng={card.lng}
+      onSavePlace={onSavePlace}
+      onAddToSchedule={onAddToSchedule}
+      onClose={() => setCard(null)}
+    />
   );
 }
 
-// 검색으로 찾은 자리 표식 — 물결이 퍼지는 파란 점. 그 가게의 종류·여는 시간·전화·주소를
-// 조용히 알아봐 말풍선에 채워 주고, 핀 저장·일정·구글 지도로 바로 이어 준다.
+function PoiCard({
+  map,
+  registry,
+  placeId,
+  lat,
+  lng,
+  onSavePlace,
+  onAddToSchedule,
+  onClose,
+}: {
+  map: google.maps.Map;
+  registry: Registry;
+  placeId: string;
+  lat: number;
+  lng: number;
+  onSavePlace?: MapViewProps["onSavePlace"];
+  onAddToSchedule?: MapViewProps["onAddToSchedule"];
+  onClose: () => void;
+}) {
+  const [info, setInfo] = useState<PlaceInfo | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { Place } = await importMapsLibrary("places");
+        const place = new Place({ id: placeId });
+        await place.fetchFields({ fields: PLACE_FIELDS });
+        const read = await readPlace(place);
+        if (!cancelled && read) setInfo(read);
+      } catch {
+        // 못 물어보면 카드 뼈대(이름 자리)는 그대로 두고 조용히 넘어간다
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [placeId]);
+
+  const name = info?.name ?? "";
+  return (
+    <MapPopup
+      map={map}
+      registry={registry}
+      lat={info?.lat ?? lat}
+      lng={info?.lng ?? lng}
+      offsetY={14}
+      openSignal={1}
+      onClose={onClose}
+    >
+      <div className="map-popup">
+        {info ? (
+          <PlaceCardBody info={info} />
+        ) : (
+          <div className="map-popup__title text-sm text-[var(--text-muted)]">
+            알아보는 중…
+          </div>
+        )}
+        {info && (
+          <PlaceActions
+            lat={info.lat}
+            lng={info.lng}
+            name={name}
+            onSavePlace={onSavePlace}
+            onAddToSchedule={onAddToSchedule}
+            onDone={onClose}
+          />
+        )}
+      </div>
+    </MapPopup>
+  );
+}
+
+function DropPinCard({
+  map,
+  registry,
+  lat,
+  lng,
+  onSavePlace,
+  onAddToSchedule,
+  onClose,
+}: {
+  map: google.maps.Map;
+  registry: Registry;
+  lat: number;
+  lng: number;
+  onSavePlace?: MapViewProps["onSavePlace"];
+  onAddToSchedule?: MapViewProps["onAddToSchedule"];
+  onClose: () => void;
+}) {
+  const [address, setAddress] = useState<string | null>(null);
+
+  // 주소는 구글 주소찾기(Geocoder)에게 브라우저에서 직접 묻는다.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const fallback = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+      try {
+        const { Geocoder } = await importMapsLibrary("geocoding");
+        const { results } = await new Geocoder().geocode({
+          location: { lat, lng },
+          language: "ko",
+        });
+        if (!cancelled) setAddress(results[0]?.formatted_address ?? fallback);
+      } catch {
+        if (!cancelled) setAddress(fallback);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [lat, lng]);
+
+  const icon = useMemo<google.maps.Icon>(
+    () => ({
+      url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(DROP_PIN_SVG)}`,
+      scaledSize: new google.maps.Size(27, 43),
+      anchor: new google.maps.Point(13, 43),
+    }),
+    []
+  );
+
+  const name = address ?? `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  return (
+    <MapPopup
+      map={map}
+      registry={registry}
+      lat={lat}
+      lng={lng}
+      icon={icon}
+      zIndex={400}
+      openSignal={1}
+      onClose={onClose}
+    >
+      <div className="map-popup">
+        <div className="map-popup__title font-semibold text-[var(--text)]">
+          떨어뜨린 핀
+        </div>
+        <div className="mt-0.5 flex items-start gap-1 text-xs text-[var(--text-muted)]">
+          <MapPin size={11} aria-hidden className="mt-0.5 shrink-0" />
+          <span className="min-w-0">{address ?? "주소 알아보는 중…"}</span>
+        </div>
+        <PlaceActions
+          lat={lat}
+          lng={lng}
+          name={name}
+          onSavePlace={onSavePlace}
+          onAddToSchedule={onAddToSchedule}
+          onDone={onClose}
+        />
+      </div>
+    </MapPopup>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// 검색으로 찾은 자리 — 물결이 퍼지는 파란 점. 그 가게 정보는 구글 장소에 이름+근처로 묻는다.
+// ────────────────────────────────────────────────────────────────────────────
 function SearchTargetMarker({
+  map,
+  registry,
   target,
   onAdd,
   onSchedule,
   onClose,
 }: {
+  map: google.maps.Map;
+  registry: Registry;
   target: { lat: number; lng: number; name: string; address?: string };
   onAdd?: () => void;
   onSchedule?: MapViewProps["onAddToSchedule"];
   onClose?: () => void;
 }) {
-  const markerRef = useRef<L.Marker | null>(null);
-  const details = usePlaceDetails(target.lat, target.lng);
-  // 옆 가게 정보를 잘못 붙이지 않게 — 아주 가깝거나(30m) 이름이 겹칠 때만 그 가게 것으로 믿는다
-  const detail =
-    details?.kind === "poi" &&
-    (metersApart(target.lat, target.lng, details.lat, details.lng) <= 30 ||
-      namesOverlap(target.name, details.name))
-      ? details
-      : null;
-  const address =
-    target.address ?? (details?.kind === "address" ? details.name : undefined);
+  const [host] = useState<HTMLDivElement | null>(() =>
+    typeof document === "undefined" ? null : document.createElement("div")
+  );
+  const [openTick, setOpenTick] = useState(1);
+  const [info, setInfo] = useState<PlaceInfo | null>(null);
+  useHtmlOverlay(map, host, target.lat, target.lng);
 
-  const icon = L.divIcon({
-    className: "search-target-icon",
-    html: `<div class="search-dot"></div>`,
-    iconSize: [20, 20],
-    iconAnchor: [10, 10],
-    popupAnchor: [0, -12],
-  });
-
-  // 찾자마자 이름 말풍선을 펼쳐 "여기예요"를 알려준다.
   useEffect(() => {
-    const timer = setTimeout(() => markerRef.current?.openPopup(), 350);
-    return () => clearTimeout(timer);
-  }, [target.lat, target.lng]);
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { Place } = await importMapsLibrary("places");
+        const { places } = await Place.searchByText({
+          textQuery: target.name,
+          fields: PLACE_FIELDS,
+          locationBias: {
+            center: { lat: target.lat, lng: target.lng },
+            radius: 100,
+          },
+          maxResultCount: 1,
+          language: "ko",
+        });
+        const found = places[0] ? await readPlace(places[0]) : null;
+        // 옆 가게 정보를 잘못 붙이지 않게 — 아주 가깝거나(30m) 이름이 겹칠 때만 믿는다
+        if (
+          !cancelled &&
+          found &&
+          (metersApart(target.lat, target.lng, found.lat, found.lng) <= 30 ||
+            namesOverlap(target.name, found.name))
+        )
+          setInfo(found);
+      } catch {
+        // 못 찾으면 이름만 보여 준다
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [target.lat, target.lng, target.name]);
 
-  // 정보가 뒤늦게 도착하면 말풍선 크기와 자리를 다시 잡는다
-  useEffect(() => {
-    markerRef.current?.getPopup()?.update();
-  }, [details]);
+  const address = target.address ?? info?.address;
 
   return (
-    <Marker
-      position={[target.lat, target.lng]}
-      icon={icon}
-      title={target.name}
-      alt={target.name}
-      zIndexOffset={500}
-      ref={(m) => {
-        markerRef.current = m as L.Marker | null;
-      }}
-    >
-      <Popup className="pin-popup">
-        <div className="min-w-[200px] max-w-[250px]">
-          <div className="font-semibold text-[var(--text)]">{target.name}</div>
-          {(detail?.category || address) && (
-            <div className="mt-0.5 text-xs text-[var(--text-muted)]">
-              {[detail?.category, address].filter(Boolean).join(" · ")}
-            </div>
+    <>
+      {host &&
+        createPortal(
+          <div
+            className="search-dot"
+            role="button"
+            tabIndex={0}
+            aria-label={target.name}
+            onClick={() => setOpenTick((t) => t + 1)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") setOpenTick((t) => t + 1);
+            }}
+          />,
+          host
+        )}
+      <MapPopup
+        map={map}
+        registry={registry}
+        lat={target.lat}
+        lng={target.lng}
+        offsetY={12}
+        openSignal={openTick}
+      >
+        <div className="map-popup">
+          {info?.photo && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img className="map-popup__photo" src={info.photo} alt="" loading="lazy" />
           )}
-          {detail?.hours && <HoursLine spec={detail.hours} lng={target.lng} />}
-          {detail?.phone && (
-            <div className="mt-0.5 flex items-center gap-1 text-xs text-[var(--text-muted)]">
-              <Phone size={11} aria-hidden className="shrink-0" />
-              <span className="min-w-0 truncate">{detail.phone}</span>
-            </div>
+          <div className="map-popup__title font-semibold text-[var(--text)]">
+            {target.name}
+          </div>
+          {info ? (
+            <PlaceCardBody info={{ ...info, name: target.name, photo: undefined }} />
+          ) : (
+            address && (
+              <div className="mt-0.5 text-xs text-[var(--text-muted)]">{address}</div>
+            )
           )}
           <div className="popup-actions">
             {onAdd && (
-              <button type="button" onClick={onAdd} className="popup-action popup-action--accent">
+              <button
+                type="button"
+                onClick={onAdd}
+                className="popup-action popup-action--accent"
+              >
                 <span className="popup-action__icon">
                   <MapPinPlus size={16} strokeWidth={2.2} aria-hidden />
                 </span>
@@ -698,18 +902,25 @@ function SearchTargetMarker({
             )}
           </div>
         </div>
-      </Popup>
-    </Marker>
+      </MapPopup>
+    </>
   );
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+// 내가 꽂은 핀 — 우표 압정 그림(SVG)을 그대로 표식 그림으로 쓴다.
+// ────────────────────────────────────────────────────────────────────────────
 function PinMarker({
+  map,
+  registry,
   pin,
   isMine,
   onDelete,
   onEdit,
   onAddToSchedule,
 }: {
+  map: google.maps.Map;
+  registry: Registry;
   pin: Pin;
   isMine: boolean;
   onDelete?: (id: string) => void;
@@ -720,157 +931,477 @@ function PinMarker({
   // 지우기는 한 번 더 물어본다 — 손이 스쳐 사라지면 되돌릴 길이 없다.
   const [asking, setAsking] = useState(false);
 
-  // 마커는 SVG 통짜 그림(우표 압정) — 색·모양이 그림 안에 다 들어 있어 화면이 다시
-  // 그려져도 안 지워진다. 아이콘도 값이 바뀔 때만 새로 만든다.
   // 기울기는 핀마다 고정된 값(-2~2도) — 이름표(id) 글자 합으로 정해져 새로고침해도 같다.
-  const icon = useMemo(() => {
+  const icon = useMemo<google.maps.Icon>(() => {
     let sum = 0;
     for (let i = 0; i < pin.id.length; i++) sum += pin.id.charCodeAt(i);
-    return L.divIcon({
-      className: isMine ? "pin-icon" : "pin-icon pin-icon--other",
-      html: pinMarkerSvg(pin.type, (sum % 5) - 2),
-      iconSize: [36, 46],
-      iconAnchor: [18, 44],
-      popupAnchor: [0, -44],
-    });
-  }, [isMine, pin.id, pin.type]);
+    const svg = pinMarkerSvg(pin.type, (sum % 5) - 2);
+    return {
+      url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
+      scaledSize: new google.maps.Size(36, 46),
+      anchor: new google.maps.Point(18, 44),
+    };
+  }, [pin.id, pin.type]);
 
   return (
-    <Marker
-      position={[pin.lat, pin.lng]}
+    <MapPopup
+      map={map}
+      registry={registry}
+      lat={pin.lat}
+      lng={pin.lng}
       icon={icon}
-      // 핀은 키보드로도 고를 수 있는 단추다 — 이름이 없으면 읽어 주는 프로그램이
-      // "단추"라고만 말한다. 이름을 붙여 어떤 핀인지 들리게 한다.
-      // 끌기는 아예 잠가 둔다 — 지도를 밀던 손가락에 핀이 딸려 가는 사고의 뿌리였다.
-      // 자리가 틀린 핀은 지우고 다시 꽂는 게 길이다.
+      // 핀은 누를 수 있는 단추다 — 이름을 붙여 읽어 주는 프로그램에도 들리게 한다.
       title={pin.name}
-      alt={pin.name}
+      opacity={isMine ? 1 : 0.78}
+      onClose={() => setAsking(false)}
     >
-      <Popup className="pin-popup">
-        <div className="min-w-[190px] max-w-[230px]">
-          <div className="flex items-center gap-1.5 font-semibold text-[var(--text)]">
-            <cfg.Icon size={15} color={cfg.color} aria-hidden className="shrink-0" />
-            <span>{pin.name}</span>
-            {pin.isAI && (
-              <span className="rounded bg-[var(--accent-soft)] px-1 text-[10px] font-medium text-[var(--accent)]">
-                AI
-              </span>
-            )}
-            {!isMine && (
-              <span className="rounded bg-[var(--surface-hover)] px-1 text-[10px] font-medium text-[var(--text-muted)]">
-                친구
-              </span>
-            )}
+      <div className="map-popup">
+        <div className="map-popup__title flex items-center gap-1.5 font-semibold text-[var(--text)]">
+          <cfg.Icon size={15} color={cfg.color} aria-hidden className="shrink-0" />
+          <span>{pin.name}</span>
+          {pin.isAI && (
+            <Sparkles
+              size={12}
+              role="img"
+              aria-label="AI 추천"
+              className="shrink-0 text-[var(--text-faint)]"
+            />
+          )}
+          {!isMine && (
+            <span className="rounded bg-[var(--surface-hover)] px-1 text-[10px] font-medium text-[var(--text-muted)]">
+              친구
+            </span>
+          )}
+        </div>
+        {pin.memo && (
+          <div className="mt-1 whitespace-pre-wrap text-xs text-[var(--text-muted)]">
+            {pin.memo}
           </div>
-          {pin.memo && (
-            <div className="mt-1 whitespace-pre-wrap text-xs text-[var(--text-muted)]">
-              {pin.memo}
-            </div>
-          )}
-          {pin.address && (
-            <div className="mt-1 flex items-start gap-1 text-xs text-[var(--text-faint)]">
-              <MapPin size={11} aria-hidden className="mt-0.5 shrink-0" />
-              <span className="min-w-0">{pin.address}</span>
-            </div>
-          )}
-          {pin.sources?.[0] && (
+        )}
+        {pin.address && (
+          <div className="mt-1 flex items-start gap-1 text-xs text-[var(--text-faint)]">
+            <MapPin size={11} aria-hidden className="mt-0.5 shrink-0" />
+            <span className="min-w-0">{pin.address}</span>
+          </div>
+        )}
+        {pin.sources?.[0] && (
+          <a
+            href={pin.sources[0].url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-1 flex items-center gap-1 text-xs text-[var(--text-faint)]"
+          >
+            <Link2 size={11} aria-hidden className="shrink-0" />
+            <span className="min-w-0 truncate underline underline-offset-2">
+              {pin.sources[0].title}
+            </span>
+          </a>
+        )}
+        {asking ? (
+          <div className="popup-actions items-center">
+            <span className="min-w-0 flex-1 text-xs text-[var(--text-muted)]">
+              {isMine ? "지울까요?" : "친구 핀이에요. 지울까요?"}
+            </span>
+            <button
+              type="button"
+              onClick={() => setAsking(false)}
+              className="rounded-md border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-muted)]"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAsking(false);
+                onDelete?.(pin.id);
+              }}
+              className="rounded-md bg-[var(--danger)] px-2 py-1 text-xs font-bold text-white"
+            >
+              지우기
+            </button>
+          </div>
+        ) : (
+          <div className="popup-actions">
+            {onAddToSchedule && (
+              <button
+                type="button"
+                onClick={() =>
+                  onAddToSchedule({
+                    lat: pin.lat,
+                    lng: pin.lng,
+                    name: pin.name,
+                    pinId: pin.id,
+                  })
+                }
+                className="popup-action popup-action--accent"
+              >
+                <span className="popup-action__icon">
+                  <CalendarPlus size={16} strokeWidth={2.2} aria-hidden />
+                </span>
+                일정
+              </button>
+            )}
             <a
-              href={pin.sources[0].url}
+              href={googleMapsUrl(pin)}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-1 flex items-center gap-1 text-xs text-[var(--text-faint)]"
+              className="popup-action"
             >
-              <Link2 size={11} aria-hidden className="shrink-0" />
-              <span className="min-w-0 truncate underline underline-offset-2">
-                {pin.sources[0].title}
+              <span className="popup-action__icon">
+                <MapIcon size={16} strokeWidth={2.2} aria-hidden />
               </span>
+              구글 지도
             </a>
-          )}
-          {asking ? (
-            <div className="popup-actions items-center">
-              <span className="min-w-0 flex-1 text-xs text-[var(--text-muted)]">
-                {isMine ? "지울까요?" : "친구 핀이에요. 지울까요?"}
-              </span>
+            {onEdit && (
               <button
                 type="button"
-                onClick={() => setAsking(false)}
-                className="rounded-md border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-muted)]"
-              >
-                취소
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setAsking(false);
-                  onDelete?.(pin.id);
-                }}
-                className="rounded-md bg-[var(--danger)] px-2 py-1 text-xs font-bold text-white"
-              >
-                지우기
-              </button>
-            </div>
-          ) : (
-            <div className="popup-actions">
-              {onAddToSchedule && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    onAddToSchedule({
-                      lat: pin.lat,
-                      lng: pin.lng,
-                      name: pin.name,
-                      pinId: pin.id,
-                    })
-                  }
-                  className="popup-action popup-action--accent"
-                >
-                  <span className="popup-action__icon">
-                    <CalendarPlus size={16} strokeWidth={2.2} aria-hidden />
-                  </span>
-                  일정
-                </button>
-              )}
-              <a
-                href={googleMapsUrl(pin)}
-                target="_blank"
-                rel="noopener noreferrer"
+                onClick={() => onEdit(pin)}
                 className="popup-action"
               >
                 <span className="popup-action__icon">
-                  <MapIcon size={16} strokeWidth={2.2} aria-hidden />
+                  <Pencil size={16} strokeWidth={2.2} aria-hidden />
                 </span>
-                구글 지도
-              </a>
-              {onEdit && (
-                <button
-                  type="button"
-                  onClick={() => onEdit(pin)}
-                  className="popup-action"
-                >
-                  <span className="popup-action__icon">
-                    <Pencil size={16} strokeWidth={2.2} aria-hidden />
-                  </span>
-                  수정
-                </button>
-              )}
-              {onDelete && (
-                <button
-                  type="button"
-                  onClick={() => setAsking(true)}
-                  className="popup-action popup-action--danger"
-                >
-                  <span className="popup-action__icon">
-                    <Trash2 size={16} strokeWidth={2.2} aria-hidden />
-                  </span>
-                  삭제
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      </Popup>
-    </Marker>
+                수정
+              </button>
+            )}
+            {onDelete && (
+              <button
+                type="button"
+                onClick={() => setAsking(true)}
+                className="popup-action popup-action--danger"
+              >
+                <span className="popup-action__icon">
+                  <Trash2 size={16} strokeWidth={2.2} aria-hidden />
+                </span>
+                삭제
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </MapPopup>
   );
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// 일자별 동선 — 점을 촘촘히 찍어 만든 점선. 누르면 며칠째인지 알려 준다.
+// ────────────────────────────────────────────────────────────────────────────
+function DayRouteLine({
+  map,
+  registry,
+  route,
+}: {
+  map: google.maps.Map;
+  registry: Registry;
+  route: DayRoute;
+}) {
+  const [openAt, setOpenAt] = useState<google.maps.LatLngLiteral | null>(null);
+  const path = useMemo(
+    () => route.points.map(([lat, lng]) => ({ lat, lng })),
+    [route.points]
+  );
+
+  useEffect(() => {
+    const line = new google.maps.Polyline({
+      map,
+      path,
+      // 선 자체는 안 그리고 동그란 점만 촘촘히 찍는다 — Leaflet의 점선(dashArray)과 같은 모양
+      strokeColor: route.color,
+      strokeOpacity: 0,
+      strokeWeight: 3.5,
+      zIndex: 1,
+      icons: [
+        {
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 2,
+            fillColor: route.color,
+            fillOpacity: 0.85,
+            strokeOpacity: 0,
+          },
+          offset: "0",
+          repeat: "10px",
+        },
+      ],
+    });
+    const l = line.addListener("click", (e: google.maps.PolyMouseEvent) => {
+      if (e.latLng) setOpenAt(e.latLng.toJSON());
+    });
+    return () => {
+      l.remove();
+      line.setMap(null);
+    };
+  }, [map, path, route.color]);
+
+  if (!openAt) return null;
+  return (
+    <MapPopup
+      key={`${openAt.lat},${openAt.lng}`}
+      map={map}
+      registry={registry}
+      lat={openAt.lat}
+      lng={openAt.lng}
+      openSignal={1}
+      onClose={() => setOpenAt(null)}
+    >
+      <div className="map-popup">
+        <span className="text-sm font-semibold" style={{ color: route.color }}>
+          {route.label}
+        </span>
+        <span className="ml-1 text-xs text-[var(--text-muted)]">
+          {route.points.length}곳 동선
+        </span>
+      </div>
+    </MapPopup>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// 지도 위 단추 — 확대·축소(마우스 화면만)와 내 위치.
+// ────────────────────────────────────────────────────────────────────────────
+function MapControls({ map }: { map: google.maps.Map }) {
+  const markerRef = useRef<google.maps.Marker | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      markerRef.current?.setMap(null);
+      markerRef.current = null;
+    };
+  }, []);
+
+  const zoomBy = (step: number) => {
+    const z = map.getZoom();
+    if (typeof z === "number") map.setZoom(z + step);
+  };
+
+  const locate = () => {
+    if (!navigator.geolocation || busy) return;
+    setBusy(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const at = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        markerRef.current?.setMap(null);
+        markerRef.current = new google.maps.Marker({
+          map,
+          position: at,
+          zIndex: 300,
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 8,
+            fillColor: "#3d79c0",
+            fillOpacity: 1,
+            strokeColor: "#ffffff",
+            strokeWeight: 3,
+          },
+        });
+        map.setZoom(Math.max(map.getZoom() ?? 15, 15));
+        map.panTo(at);
+        setBusy(false);
+      },
+      () => setBusy(false),
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  };
+
+  return (
+    <>
+      <div className="map-zoom-btns">
+        <button
+          type="button"
+          onClick={() => zoomBy(1)}
+          className="map-zoom-btn"
+          aria-label="지도 확대"
+        >
+          <Plus size={18} strokeWidth={2.4} aria-hidden />
+        </button>
+        <button
+          type="button"
+          onClick={() => zoomBy(-1)}
+          className="map-zoom-btn"
+          aria-label="지도 축소"
+        >
+          <Minus size={18} strokeWidth={2.4} aria-hidden />
+        </button>
+      </div>
+      <button
+        type="button"
+        onClick={locate}
+        disabled={busy}
+        className="map-locate-btn"
+        aria-label="내 위치로 이동"
+      >
+        <LocateFixed
+          size={19}
+          strokeWidth={2.2}
+          className={`mx-auto text-[var(--accent-ink)] ${busy ? "animate-spin" : ""}`}
+          aria-hidden
+        />
+      </button>
+    </>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// 지도 본체 — 구글 지도를 직접 만든다. 브라우저에서만 돈다("use client" + dynamic ssr:false).
+// ────────────────────────────────────────────────────────────────────────────
+const MapView = forwardRef<MapHandle, MapViewProps>(function MapView(
+  {
+    onReady,
+    pins = [],
+    dayRoutes = [],
+    currentUserId = "",
+    initialCenter = DEFAULT_CENTER,
+    initialZoom = DEFAULT_ZOOM,
+    searchTarget,
+    onSearchTargetAdd,
+    onSearchTargetClose,
+    onPinDelete,
+    onPinEdit,
+    onSavePlace,
+    onAddToSchedule,
+    className,
+  },
+  ref
+) {
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [map, setMap] = useState<google.maps.Map | null>(null);
+  const [failed, setFailed] = useState(false);
+  const registry = useRef<google.maps.InfoWindow | null>(null);
+
+  // 지도는 딱 한 번만 만든다 — 처음 위치·확대는 그때의 값을 쓴다.
+  useEffect(() => {
+    let cancelled = false;
+    let made: google.maps.Map | null = null;
+    void (async () => {
+      try {
+        const { Map: GoogleMap } = await importMapsLibrary("maps");
+        if (cancelled || !boxRef.current) return;
+        made = new GoogleMap(boxRef.current, {
+          center: { lat: initialCenter[0], lng: initialCenter[1] },
+          zoom: initialZoom,
+          disableDefaultUI: true,
+          // 이게 꺼지면 구글이 그려 둔 가게를 눌러도 아무 소식이 안 온다 — 이 앱의 핵심이다.
+          clickableIcons: true,
+          gestureHandling: "greedy",
+        });
+        setMap(made);
+      } catch {
+        if (!cancelled) setFailed(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      made = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handle = useMemo<MapHandle>(
+    () => ({
+      setView(center, zoom, opts) {
+        if (!map) return;
+        const at = toLatLng(center);
+        map.setZoom(zoom);
+        if (opts?.animate) map.panTo(at);
+        else map.setCenter(at);
+      },
+      getCenter() {
+        const c = map?.getCenter();
+        return c
+          ? { lat: c.lat(), lng: c.lng() }
+          : { lat: initialCenter[0], lng: initialCenter[1] };
+      },
+      getZoom() {
+        return map?.getZoom() ?? initialZoom;
+      },
+      fitBounds(bounds, opts) {
+        if (!map) return;
+        const box = new google.maps.LatLngBounds(
+          { lat: bounds[0][0], lng: bounds[0][1] },
+          { lat: bounds[1][0], lng: bounds[1][1] }
+        );
+        const pad = opts?.padding;
+        map.fitBounds(
+          box,
+          pad ? { top: pad[1], bottom: pad[1], left: pad[0], right: pad[0] } : undefined
+        );
+        // 구글에는 "이보다 더 당기지 마라"가 없어서, 다 맞춘 뒤 한 번 되돌린다.
+        const max = opts?.maxZoom;
+        if (typeof max === "number")
+          google.maps.event.addListenerOnce(map, "idle", () => {
+            if ((map.getZoom() ?? 0) > max) map.setZoom(max);
+          });
+      },
+      onMoveEnd(cb) {
+        map?.addListener("idle", cb);
+      },
+    }),
+    // initialCenter/initialZoom은 첫 값 그대로 쓰는 예비값이다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [map]
+  );
+
+  useImperativeHandle(ref, () => handle, [handle]);
+
+  useEffect(() => {
+    if (map && onReady) onReady(handle);
+  }, [map, handle, onReady]);
+
+  return (
+    <div className={`relative${className ? ` ${className}` : ""}`}>
+      <div ref={boxRef} className="absolute inset-0" />
+      {failed && (
+        <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-[var(--text-muted)]">
+          지도를 불러오지 못했어요 — 잠시 뒤 다시 열어 주세요
+        </div>
+      )}
+      {map && (
+        <>
+          <MapControls map={map} />
+          <PoiTapLayer
+            map={map}
+            registry={registry}
+            onSavePlace={onSavePlace}
+            onAddToSchedule={onAddToSchedule}
+          />
+          {searchTarget && (
+            <SearchTargetMarker
+              key={`${searchTarget.lat},${searchTarget.lng}`}
+              map={map}
+              registry={registry}
+              target={searchTarget}
+              onAdd={onSearchTargetAdd}
+              onSchedule={onAddToSchedule}
+              onClose={onSearchTargetClose}
+            />
+          )}
+          {dayRoutes.map((route) => (
+            <DayRouteLine
+              key={route.date}
+              map={map}
+              registry={registry}
+              route={route}
+            />
+          ))}
+          {pins.map((pin) => (
+            <PinMarker
+              key={pin.id}
+              map={map}
+              registry={registry}
+              pin={pin}
+              isMine={
+                !pin.createdBy || !currentUserId || pin.createdBy === currentUserId
+              }
+              onDelete={onPinDelete}
+              onEdit={onPinEdit}
+              onAddToSchedule={onAddToSchedule}
+            />
+          ))}
+        </>
+      )}
+    </div>
+  );
+});
 
 export default MapView;

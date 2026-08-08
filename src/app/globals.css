@@ -1,5 +1,4 @@
 @import "tailwindcss";
-@import "leaflet/dist/leaflet.css";
 
 /* DW(Doweek) 디자인 시스템 이식 — 정본: Z:\Doweek\design-system\DESIGN.md
    종이 수첩 컨셉: 따뜻한 종이 위 흰 카드 + 만년필 잉크 파랑 + 손글씨 시그니처.
@@ -962,88 +961,51 @@ body {
 
 
 /* ── 지도 위 컨트롤 ── */
-.leaflet-container {
-  background: var(--dw-paper-100);
+.gm-style {
   font-family: var(--font-sans);
 }
-.leaflet-bar a {
-  background: var(--surface);
-  color: var(--text);
-  border-color: var(--border-strong);
-}
 /* 확대·축소 단추 — 내 위치 단추 바로 위에 세로로 붙인다. 손가락 화면(터치)에서는 숨긴다
-   (구글맵 앱처럼 벌려서 확대하면 되고, 화면만 좁아진다).
-   같은 구석에 있는 출처 ⓘ 위에 차곡차곡 쌓이면 화면 한가운데까지 밀려 올라가므로,
-   쌓임에서 빼내(absolute) 지도 모서리에서 바로 잰 자리에 고정한다. */
-.leaflet-bottom.leaflet-right .leaflet-control-zoom {
+   (구글맵 앱처럼 벌려서 확대하면 되고, 화면만 좁아진다). */
+.map-zoom-btns {
   position: absolute;
   /* 내 위치 단추와 세로 중심선 맞춤 — 오른쪽 38px 지점(내 위치 단추 가운데)에
      제 너비의 절반을 밀어 넣어, 단추 너비가 달라져도 늘 가운데가 맞는다 */
   right: 38px;
   transform: translateX(50%);
   bottom: calc(var(--dock-space) + 88px);
-  margin: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
   border: 1px solid rgba(255, 255, 255, 0.8);
   border-radius: 12px;
   box-shadow: var(--shadow-2);
   overflow: hidden;
 }
-.leaflet-control-zoom a {
+.map-zoom-btn {
+  display: grid;
+  place-items: center;
   width: 40px;
   height: 40px;
-  line-height: 40px;
-  font-size: 17px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.map-zoom-btn + .map-zoom-btn {
+  border-top: 1px solid var(--border);
+}
+.map-zoom-btn:active {
+  background: var(--surface-hover);
 }
 @media (pointer: coarse) {
-  .leaflet-control-zoom {
+  .map-zoom-btns {
     display: none;
   }
 }
-/* 지도 출처 표기 — 평소엔 작은 ⓘ 동그라미로 접고, 누르면 펼쳐진다 */
-.leaflet-control-attribution {
-  background: rgba(255, 255, 255, 0.82) !important;
-  color: transparent !important;
-  width: 20px;
-  height: 20px;
-  padding: 0 !important;
-  /* 지도가 아래 메뉴 뒤까지 깔리므로, 출처 표기 ⓘ 를 메뉴 위로 올려 가리지 않게 한다 */
-  margin: 0 6px calc(var(--dock-space) + 6px) 0 !important;
-  font-size: 0;
-  line-height: 0;
-  border-radius: 999px;
-  overflow: hidden;
-  box-shadow: var(--shadow-1);
-  cursor: pointer;
-  outline: none;
-}
-.leaflet-control-attribution::before {
-  content: "ⓘ";
-  display: block;
-  width: 20px;
-  height: 20px;
-  font-size: 13px;
-  line-height: 20px;
-  text-align: center;
-  color: var(--text-faint);
-}
-.leaflet-control-attribution:hover,
-.leaflet-control-attribution:focus,
-.leaflet-control-attribution:focus-within {
-  width: auto;
-  height: auto;
-  padding: 2px 6px !important;
-  font-size: 10px;
-  line-height: 1.5;
-  color: var(--text-faint) !important;
-  border-radius: 8px;
-}
-.leaflet-control-attribution:hover::before,
-.leaflet-control-attribution:focus::before,
-.leaflet-control-attribution:focus-within::before {
-  display: none;
-}
-.leaflet-control-attribution a {
-  color: var(--text-faint) !important;
+/* 구글이 지도 구석에 놓는 상표와 약관 글씨 — 지도가 아래 메뉴 뒤까지 깔리므로
+   메뉴 위로 올려 가려지지 않게 한다(구글은 이 표기를 가리는 것을 허락하지 않는다). */
+.gm-style > div:has(> a[href^="https://maps.google.com/maps"]),
+.gm-style .gm-style-cc {
+  bottom: var(--dock-space) !important;
 }
 
 /* 내 위치 단추 — 지도 오른쪽 아래, 아래 메뉴 바로 위(엄지 닿는 자리). 지도가 메뉴 뒤까지
@@ -1071,25 +1033,12 @@ body {
   cursor: not-allowed;
 }
 
-/* 핀 마커 — 여행 수첩에 꽂은 우표 압정. 그림 자체(톱니 우표+바늘대+그림자)는 SVG 통짜로
-   pinTypes.ts의 pinMarkerSvg가 그린다 — 여기서는 그림자·움직임만 입힌다.
+/* 핀 마커 — 여행 수첩에 꽂은 우표 압정. 그림(톱니 우표+바늘대+그림자)은 pinTypes.ts의
+   pinMarkerSvg가 SVG 통짜로 그려 구글 표식에 그림째 넘긴다. 구글 표식은 그 그림을
+   사진 한 장으로 얹으므로 여기서 덧입힐 CSS가 없다(그림자·기울기는 그림 안에 들어 있다).
    구글 POI(색 동그라미+흰 그림)와 바탕색·윤곽이 모두 반대라 한눈에 갈린다. */
-.pin-icon > svg {
-  display: block;
-  filter: drop-shadow(0 2px 3px rgba(36, 30, 25, 0.3));
-  /* 커질 때 바늘 끝(땅에 닿은 점)을 붙잡고 커진다 — 가리키는 자리가 안 흔들린다 */
-  transform-origin: 18px 44px;
-}
-/* 친구 핀 — 색은 그대로 두고 살짝 투명하게만(종류 구분이 먼저다). 팝업에 '친구' 표시가 따로 있다 */
-.pin-icon--other > svg {
-  opacity: 0.78;
-}
 
-/* 검색 결과 표식 — 파란 점 둘레로 물결이 퍼진다 */
-.search-target-icon {
-  background: transparent;
-  border: none;
-}
+/* 검색 결과 표식 — 파란 점 둘레로 물결이 퍼진다(구글 지도 위 HTML 층에 얹는다) */
 .search-dot {
   position: relative;
   width: 18px;
@@ -1098,6 +1047,7 @@ body {
   background: var(--accent-ink);
   border: 3px solid #fff;
   box-shadow: 0 2px 8px rgba(36, 30, 25, 0.35);
+  cursor: pointer;
 }
 .search-dot::before {
   content: "";
@@ -1118,34 +1068,62 @@ body {
   }
 }
 
-/* 길게 눌러 떨어뜨린 핀 — 구글맵의 빨간 물방울 핀과 같은 문법 */
-.drop-pin-icon {
-  background: transparent;
-  border: none;
-}
-.drop-pin-icon svg {
-  display: block;
-  filter: drop-shadow(0 2px 4px rgba(36, 30, 25, 0.35));
-}
-
-/* Leaflet 팝업 — 흰 카드 톤 */
-.leaflet-popup-content-wrapper {
+/* 구글 지도 말풍선(InfoWindow) — 구글 기본 껍데기를 지금까지 쓰던 흰 카드 모양으로 덮는다 */
+.gm-style .gm-style-iw-c {
   background: var(--surface);
   color: var(--text);
-  border: none;
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-glass), 0 6px 20px rgba(36, 30, 25, 0.14);
-}
-.leaflet-popup-tip {
-  background: var(--surface);
-  border: none;
-}
-.leaflet-popup-content {
-  margin: 12px 14px;
+  padding: 12px 14px !important;
   font-family: var(--font-sans);
 }
-.leaflet-container a.leaflet-popup-close-button {
-  color: var(--text-faint);
+.gm-style .gm-style-iw-d {
+  padding: 0 !important;
+  overflow: hidden auto !important;
+}
+/* 말풍선 꼬리 */
+.gm-style .gm-style-iw-tc::after {
+  background: var(--surface);
+}
+/* 닫기 단추 — 구글이 만드는 머리 줄은 접고 오른쪽 위 구석에 겹쳐 놓는다 */
+.gm-style .gm-style-iw-chr {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  height: auto;
+  z-index: 1;
+}
+.gm-style .gm-style-iw-ch {
+  display: none;
+}
+.gm-style .gm-style-iw-chr button.gm-ui-hover-effect {
+  width: 26px !important;
+  height: 26px !important;
+  opacity: 1 !important;
+}
+.gm-style .gm-style-iw-chr button.gm-ui-hover-effect > span {
+  width: 16px !important;
+  height: 16px !important;
+  margin: 0 !important;
+  background-color: var(--text-faint);
+}
+
+/* 말풍선 속살 — 첫 줄만 오른쪽을 비워 닫기 단추와 안 겹치게 한다 */
+.map-popup {
+  min-width: 180px;
+  max-width: 250px;
+}
+.map-popup__title {
+  padding-right: 22px;
+}
+/* 가게 사진 — 카드 맨 위를 가로로 꽉 채운다(카드 안쪽 여백 12/14px만큼 밖으로 뺀다) */
+.map-popup__photo {
+  display: block;
+  width: calc(100% + 28px);
+  height: 110px;
+  margin: -12px -14px 8px;
+  object-fit: cover;
+  border-radius: var(--radius-card) var(--radius-card) 0 0;
 }
 
 /* 말풍선 동작 줄 — 그림 단추 + 한 단어 이름표. 구글맵의 저장·길찾기 줄과 같은 문법 */
@@ -1171,7 +1149,7 @@ body {
   color: var(--text-muted);
   transition: background var(--dur-hover) var(--ease-out);
 }
-.leaflet-container a.popup-action {
+.gm-style a.popup-action {
   color: var(--text-muted);
 }
 .popup-action:hover {
@@ -1193,7 +1171,7 @@ body {
   color: #fff;
 }
 .popup-action--danger,
-.leaflet-container a.popup-action--danger {
+.gm-style a.popup-action--danger {
   color: var(--danger);
 }
 .popup-action--danger .popup-action__icon {
@@ -1280,21 +1258,6 @@ body {
   }
   to {
     background-position: -200% 0;
-  }
-}
-/* 지도 핀이 톡 꽂히는 모양 — 바늘 끝을 붙잡고(transform-origin) 땅에서 솟듯 커진다 */
-@keyframes dw-pin-in {
-  0% {
-    opacity: 0;
-    transform: scale(0.2);
-  }
-  64% {
-    opacity: 1;
-    transform: scale(1.14);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1);
   }
 }
 /* ── 어디서나 쓰는 움직임 딱지 ──
@@ -1649,30 +1612,26 @@ li.dw-card:nth-child(n + 7) {
   transition-duration: var(--dur-press);
 }
 
-/* 지도 핀 — 꽂히는 순간 톡 튀어나오고, 손을 올리면 살짝 커진다 */
-.pin-icon > svg {
-  /* fill-mode를 두지 않는다 — 끝난 뒤 원래 모습으로 돌아가야 아래 hover가 먹는다 */
-  animation: dw-pin-in 0.42s var(--ease-out);
-  transition: transform 0.22s var(--ease-spring), filter 0.22s var(--ease-out);
+/* 확대·축소 단추 — 내 위치 단추와 같은 손맛 */
+.map-zoom-btn {
+  transition: background var(--dur-hover) var(--ease-out);
 }
 @media (hover: hover) and (pointer: fine) {
-  .pin-icon:hover > svg {
-    transform: scale(1.16);
-    filter: drop-shadow(0 5px 8px rgba(36, 30, 25, 0.4));
+  .map-zoom-btn:hover {
+    background: var(--surface-hover);
   }
 }
 
 /* 지도 말풍선 — 톡 하고 열린다 */
-.leaflet-popup-content-wrapper {
+.gm-style .gm-style-iw-c {
   animation: dw-pop 0.22s var(--ease-out) backwards;
   transition: box-shadow var(--dur-hover) var(--ease-out);
 }
-.leaflet-container a.leaflet-popup-close-button {
-  transition: color 0.18s var(--ease-out), transform 0.18s var(--ease-spring);
+.gm-style .gm-style-iw-chr button.gm-ui-hover-effect > span {
+  transition: background-color 0.18s var(--ease-out);
 }
-.leaflet-container a.leaflet-popup-close-button:hover {
-  color: var(--text);
-  transform: scale(1.15);
+.gm-style .gm-style-iw-chr button.gm-ui-hover-effect:hover > span {
+  background-color: var(--text);
 }
 
 /* 시트(바닥에서 올라오는 입력창) 손잡이 — 손을 올리면 진해진다 */
