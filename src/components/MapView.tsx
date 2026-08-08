@@ -311,23 +311,21 @@ function PinMarker({
   onDragEnd?: (id: string, lat: number, lng: number) => void;
 }) {
   const cfg = PIN_TYPES[pin.type];
-  // 내가 찍은 핀은 타입 색 테두리, 다른 사람 핀은 회색 점선 테두리로 한눈에 구분.
-  const borderColor = isMine ? cfg.color : "#94a3b8";
   // 지우기는 한 번 더 물어본다 — 손이 스쳐 사라지면 되돌릴 길이 없다.
   const [asking, setAsking] = useState(false);
 
-  // 테두리 색은 아이콘 안에 직접 써 넣는다. 바깥에서 나중에 칠하면 화면이 다시 그려질 때
+  // 채움 색은 아이콘 안에 직접 써 넣는다. 바깥에서 나중에 칠하면 화면이 다시 그려질 때
   // 마커 조각이 통째로 교체되면서 색이 지워진다. 아이콘도 값이 바뀔 때만 새로 만든다.
   const icon = useMemo(
     () =>
       L.divIcon({
         className: isMine ? "pin-icon" : "pin-icon pin-icon--other",
-        html: `<span style="border-color:${borderColor}"><i>${pinMarkerSvg(pin.type)}</i></span>`,
-        iconSize: [28, 28],
-        iconAnchor: [14, 28],
-        popupAnchor: [0, -28],
+        html: `<span style="background:${cfg.color}"><i>${pinMarkerSvg(pin.type)}</i></span>`,
+        iconSize: [32, 32],
+        iconAnchor: [16, 32],
+        popupAnchor: [0, -32],
       }),
-    [isMine, borderColor, pin.type]
+    [isMine, cfg.color, pin.type]
   );
 
   return (

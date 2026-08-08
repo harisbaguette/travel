@@ -41,7 +41,7 @@ export default function PinList({
   if (sortedPins.length === 0) {
     return (
       <p className="px-1 py-2 text-sm text-[var(--text-muted)]">
-        아직 핀이 없어요 — 지도를 누르거나 아래 + 를 눌러 꽂아 보세요
+        아직 핀이 없어요 — 지도 화면 오른쪽 아래 + 를 눌러 꽂아 보세요
       </p>
     );
   }
@@ -90,9 +90,9 @@ export default function PinList({
                 >
                   <span
                     className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
-                    style={{ background: `${cfg.color}14` }}
+                    style={{ background: cfg.color }}
                   >
-                    <cfg.Icon size={16} color={cfg.color} aria-hidden />
+                    <cfg.Icon size={16} color="#fff" aria-hidden />
                   </span>
                   <span className="flex min-w-0 flex-col">
                     <span className="truncate text-sm font-semibold text-[var(--text)]">

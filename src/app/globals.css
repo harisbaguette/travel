@@ -708,8 +708,8 @@ body {
   cursor: not-allowed;
 }
 
-/* 핀 마커 — 흰 물방울 + 종류별 아이콘(Lucide), 타입별 테두리.
-   테두리 색은 마커 글자 안에 직접 써 넣으므로 물방울 모양을 안쪽 칸이 맡는다
+/* 핀 마커 — 종류 색으로 꽉 찬 물방울 + 흰 아이콘(Lucide), 흰 테두리 링.
+   채움 색은 마커 글자 안에 직접 써 넣으므로 물방울 모양을 안쪽 칸이 맡는다
    (바깥에서 나중에 칠하면 화면이 다시 그려질 때 색이 지워진다). */
 .pin-icon {
   display: flex;
@@ -726,13 +726,12 @@ body {
   height: 32px;
   border-radius: 50% 50% 50% 0;
   transform: rotate(-45deg);
-  background: var(--surface);
-  border: 3px solid var(--accent-ink);
-  box-shadow: 0 2px 8px rgba(36, 30, 25, 0.25);
+  border: 2.5px solid #fff;
+  box-shadow: 0 2px 8px rgba(36, 30, 25, 0.35);
 }
-/* 친구 핀 — 점선은 3px 두께에서 톱니바퀴처럼 깨져 보여서 실선 회색 + 살짝 투명으로 구분한다 */
+/* 친구 핀 — 색은 그대로 두고 살짝 투명하게만(종류 구분이 먼저다). 팝업에 '친구' 표시가 따로 있다 */
 .pin-icon--other > span {
-  opacity: 0.82;
+  opacity: 0.78;
 }
 .pin-icon > span > i {
   display: block;

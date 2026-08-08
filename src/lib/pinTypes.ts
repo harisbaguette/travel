@@ -73,8 +73,9 @@ export const PIN_TYPE_LIST: PinTypeConfig[] = [
   PIN_TYPES.etc,
 ];
 
-/** 지도 마커 안에 넣을 아이콘 SVG 문자열 — Leaflet divIcon은 React 부품 대신 글자(HTML)만 받아서. */
-export function pinMarkerSvg(type: PinType, size = 15): string {
+/** 지도 마커 안에 넣을 아이콘 SVG 문자열 — Leaflet divIcon은 React 부품 대신 글자(HTML)만 받아서.
+ *  마커가 타입 색으로 꽉 찬 물방울이라 아이콘은 흰색으로 그린다(멀리서도 딱 보이게). */
+export function pinMarkerSvg(type: PinType, size = 16): string {
   const cfg = PIN_TYPES[type] ?? PIN_TYPES.etc;
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="${cfg.color}" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${cfg.iconPaths}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="#ffffff" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${cfg.iconPaths}</svg>`;
 }
