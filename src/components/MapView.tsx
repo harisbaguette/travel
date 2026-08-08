@@ -29,6 +29,7 @@ import "leaflet.gridlayer.googlemutant";
 import type { Pin } from "@/lib/types";
 import { PIN_TYPES, pinMarkerSvg } from "@/lib/pinTypes";
 import { googleMapsUrl } from "@/lib/mapLinks";
+import { hoursViewKo } from "@/lib/openingHours";
 import { hasGoogleKey, loadGoogleMaps, onGoogleAuthFailure } from "@/lib/googleMaps";
 
 /** 하루치 동선 — 일정 화면에서 짠 순서대로 핀 자리를 이은 선 하나. */
@@ -150,6 +151,35 @@ interface PoiInfo {
   website?: string;
   /** 아직 무슨 곳인지 알아보는 중 — 이때는 일정에 넣지 못하게 막는다. */
   pending?: boolean;
+}
+
+// 여는 시간 한 줄 — "영업 중 · 22:00에 닫아요" 판정을 초록/빨강으로 먼저, 시간표를 그 아래에.
+// 판정은 그 나라 시각으로 계산하고, 애매하면(시간대 어림이 흔들리면) 시간표만 보여 준다.
+function HoursLine({ spec, lng }: { spec: string; lng: number }) {
+  const view = useMemo(() => hoursViewKo(spec, lng), [spec, lng]);
+  const showText = view.text !== view.state?.label;
+  return (
+    <div className="mt-1 flex items-start gap-1 text-xs text-[var(--text-muted)]">
+      <Clock size={11} aria-hidden className="mt-0.5 shrink-0" />
+      <span className="min-w-0">
+        {view.state && (
+          <>
+            <span
+              className={
+                view.state.open
+                  ? "font-semibold text-[#0e7a4f]"
+                  : "font-semibold text-[var(--danger)]"
+              }
+            >
+              {view.state.label}
+            </span>
+            {showText && <br />}
+          </>
+        )}
+        {showText && view.text}
+      </span>
+    </div>
+  );
 }
 
 // 그 좌표에 뭐가 있는지 서버(/api/poi-at)에 조용히 물어봐 두는 재료 — 검색 표식 카드가 쓴다.
@@ -319,12 +349,7 @@ function PoiTapLayer({
           {poi.category && (
             <div className="mt-0.5 text-xs text-[var(--text-muted)]">{poi.category}</div>
           )}
-          {poi.hours && (
-            <div className="mt-1 flex items-center gap-1 text-xs text-[var(--text-muted)]">
-              <Clock size={11} aria-hidden className="shrink-0" />
-              {poi.hours}
-            </div>
-          )}
+          {poi.hours && <HoursLine spec={poi.hours} lng={poi.lng} />}
           {poi.phone && (
             <div className="mt-0.5 flex items-center gap-1 text-xs text-[var(--text-muted)]">
               <Phone size={11} aria-hidden className="shrink-0" />
@@ -581,12 +606,7 @@ function SearchTargetMarker({
               {[detail?.category, address].filter(Boolean).join(" · ")}
             </div>
           )}
-          {detail?.hours && (
-            <div className="mt-1 flex items-start gap-1 text-xs text-[var(--text-muted)]">
-              <Clock size={11} aria-hidden className="mt-0.5 shrink-0" />
-              <span className="min-w-0">{detail.hours}</span>
-            </div>
-          )}
+          {detail?.hours && <HoursLine spec={detail.hours} lng={target.lng} />}
           {detail?.phone && (
             <div className="mt-0.5 flex items-center gap-1 text-xs text-[var(--text-muted)]">
               <Phone size={11} aria-hidden className="shrink-0" />
