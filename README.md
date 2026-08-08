@@ -51,19 +51,23 @@ Neon은 데이터베이스만 제공하고, Supabase처럼 "바뀌면 즉시 알
 
 ## 비서 켜기 (선택)
 
-비서(채팅으로 시키는 화면)는 열쇠 두 종류가 있어야 움직인다. 없으면 비서 화면에만
+비서(채팅으로 시키는 화면)는 AI 열쇠 하나만 있으면 움직인다. 없으면 비서 화면에만
 안내가 뜨고 나머지 기능은 그대로 쓸 수 있다.
 
-- `DEEPSEEK_API_KEY` — [platform.deepseek.com](https://platform.deepseek.com)에서 발급
-- `NAVER_CLIENT_ID` / `NAVER_CLIENT_SECRET` —
-  [developers.naver.com](https://developers.naver.com)에서 애플리케이션 등록 →
-  사용 API에 "검색" 선택
+- **필수(둘 중 하나)** — `DEEPSEEK_API_KEY`
+  ([platform.deepseek.com](https://platform.deepseek.com)) 또는 `OPENROUTER_API_KEY`
+  ([openrouter.ai](https://openrouter.ai), `sk-or-`로 시작하면 자동으로 중개소 통로를 쓴다)
+- **선택** — `NAVER_CLIENT_ID` / `NAVER_CLIENT_SECRET`
+  ([developers.naver.com](https://developers.naver.com) → 애플리케이션 등록 →
+  사용 API에 "검색" 선택). 없으면 블로그 홈의 공개 목록을 읽어 후기를 찾고,
+  넣으면 공식 창구로 바뀌어 더 안정적이며 국내 가게 좌표도 정확해진다.
 
 비서는 네이버 블로그 후기만 근거로 삼는다. 검색 결과에 없는 링크를 붙인 후보는
-서버가 버리므로, 화면에 나오는 출처 링크는 실제로 열리는 글이다.
+서버가 버리므로, 화면에 나오는 출처 링크는 실제로 열리는 글이다. 좌표는 AI가 부르는
+값을 믿지 않고 서버가 이름·지역으로 직접 찾는다.
 
 ## 배포
 
 Vercel에 그대로 올라간다. 함께 편집을 쓰려면 `DATABASE_URL`,
-비서까지 쓰려면 `DEEPSEEK_API_KEY`·`NAVER_CLIENT_ID`·`NAVER_CLIENT_SECRET`을
+비서까지 쓰려면 `DEEPSEEK_API_KEY`(또는 `OPENROUTER_API_KEY`)를
 Vercel 프로젝트 환경 변수에 등록한다.
