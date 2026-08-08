@@ -57,13 +57,15 @@ export interface FlightInfo {
   memo: string;
 }
 
-// 숙소 기록 — 이름 + 체크인/아웃 + 메모.
+// 숙소 기록 — 이름 + 체크인/아웃 + 주소 + 메모.
 export interface StayInfo {
   id: string;
   name: string;
   checkIn: string; // YYYY-MM-DD
   checkOut: string; // YYYY-MM-DD
   memo: string;
+  // 구글 지도에서 찾을 주소 — 옛 저장본에는 없으므로 선택 사항.
+  address?: string;
 }
 
 // 체크리스트 한 줄 — 짐 챙기기·회의 안건·장보기가 같은 모양을 쓴다.

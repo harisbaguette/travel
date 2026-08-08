@@ -1,8 +1,17 @@
 "use client";
 
-import { ArrowRight, BedDouble, PlaneLanding, PlaneTakeoff, Plus, X } from "lucide-react";
+import {
+  ArrowRight,
+  BedDouble,
+  MapPin,
+  PlaneLanding,
+  PlaneTakeoff,
+  Plus,
+  X,
+} from "lucide-react";
 import type { FlightInfo, Itinerary, StayInfo } from "@/lib/types";
 import { EMPTY_FLIGHT } from "@/lib/types";
+import { addDays, daysBetween, shortDate, weekdayOf } from "@/lib/dates";
 
 interface TravelInfoPanelProps {
   itinerary: Itinerary;
@@ -47,6 +56,22 @@ export default function TravelInfoPanel({ itinerary, onChange, part }: TravelInf
   const removeStay = (id: string) => {
     onChange({ ...itinerary, stays: stays.filter((s) => s.id !== id) });
   };
+
+  // 여행 기간의 날짜 목록 — 숙소 날짜는 여기서만 고르게 해서 여행 밖 날짜가 섞이지 않는다.
+  const tripDays: string[] = [];
+  if (itinerary.startDate) {
+    const span = itinerary.endDate
+      ? Math.max(daysBetween(itinerary.startDate, itinerary.endDate), 0)
+      : 0;
+    for (let i = 0; i <= span; i++) tripDays.push(addDays(itinerary.startDate, i));
+  }
+  const dayLabel = (d: string) => `${shortDate(d)}(${weekdayOf(d)})`;
+  // 여행 날짜를 나중에 바꾸면 예전에 적어 둔 숙소 날짜가 목록 밖으로 밀려난다.
+  // 그 값이 조용히 사라진 것처럼 보이지 않게, 밀려난 날짜도 한 줄로 보여 준다.
+  const outsideOption = (cur: string) =>
+    cur && !tripDays.includes(cur) ? (
+      <option value={cur}>여행 밖 · {shortDate(cur)}</option>
+    ) : null;
 
   if (part === "flights") {
     return (
@@ -109,25 +134,81 @@ export default function TravelInfoPanel({ itinerary, onChange, part }: TravelInf
                       <X size={16} strokeWidth={2.2} />
                     </button>
                   </div>
-                  <div className="mb-2 flex items-center gap-2">
+                  {/* 묵는 날은 여행 날짜 중에서만 고른다 — 날짜를 아직 안 정했으면 먼저 정하라고 알린다. */}
+                  {tripDays.length === 0 ? (
+                    <p className="mb-2 text-[11px] text-[var(--text-muted)]">
+                      위 여행 일정에서 날짜를 먼저 골라 주세요
+                    </p>
+                  ) : (
+                    <div className="mb-2 flex items-center gap-2">
+                      <label className="flex min-w-0 flex-1 flex-col gap-1">
+                        <span className="text-[11px] font-semibold text-[var(--text-muted)]">
+                          들어가는 날
+                        </span>
+                        <select
+                          value={s.checkIn}
+                          onChange={(e) => patchStay(s.id, { checkIn: e.target.value })}
+                          className="dw-input dw-input--sm text-xs"
+                        >
+                          <option value="">고르기</option>
+                          {outsideOption(s.checkIn)}
+                          {tripDays.map((d, i) => (
+                            <option key={d} value={d}>
+                              {i + 1}일차 {dayLabel(d)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="flex min-w-0 flex-1 flex-col gap-1">
+                        <span className="text-[11px] font-semibold text-[var(--text-muted)]">
+                          나오는 날
+                        </span>
+                        <select
+                          value={s.checkOut}
+                          onChange={(e) => patchStay(s.id, { checkOut: e.target.value })}
+                          className="dw-input dw-input--sm text-xs"
+                        >
+                          <option value="">고르기</option>
+                          {outsideOption(s.checkOut)}
+                          {tripDays.map((d, i) => (
+                            <option key={d} value={d} disabled={!!s.checkIn && d <= s.checkIn}>
+                              {i + 1}일차 {dayLabel(d)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                  )}
+                  {/* 주소 — 적어 두면 옆 단추로 구글 지도에서 바로 열린다. */}
+                  <div className="mb-2 flex items-end gap-2">
                     <label className="flex min-w-0 flex-1 flex-col gap-1">
-                      <span className="text-[11px] font-semibold text-[var(--text-muted)]">체크인</span>
+                      <span className="text-[11px] font-semibold text-[var(--text-muted)]">
+                        구글 주소
+                      </span>
                       <input
-                        type="date"
-                        value={s.checkIn}
-                        onChange={(e) => patchStay(s.id, { checkIn: e.target.value })}
+                        type="text"
+                        value={s.address ?? ""}
+                        onChange={(e) => patchStay(s.id, { address: e.target.value })}
+                        placeholder="주소나 호텔 이름"
                         className="dw-input dw-input--sm text-xs"
                       />
                     </label>
-                    <label className="flex min-w-0 flex-1 flex-col gap-1">
-                      <span className="text-[11px] font-semibold text-[var(--text-muted)]">체크아웃</span>
-                      <input
-                        type="date"
-                        value={s.checkOut}
-                        onChange={(e) => patchStay(s.id, { checkOut: e.target.value })}
-                        className="dw-input dw-input--sm text-xs"
-                      />
-                    </label>
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                        (s.address || s.name).trim()
+                      )}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-disabled={!(s.address || s.name).trim()}
+                      className={`dw-btn-ghost h-10 min-h-0 shrink-0 gap-1 px-3 text-xs${
+                        (s.address || s.name).trim()
+                          ? ""
+                          : " pointer-events-none opacity-40"
+                      }`}
+                    >
+                      <MapPin size={14} strokeWidth={2.4} aria-hidden />
+                      지도
+                    </a>
                   </div>
                   <input
                     type="text"

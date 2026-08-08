@@ -491,6 +491,50 @@ body {
   }
 }
 
+/* ── 접이식 구역 머리 — 일정 화면의 "1일차·2일차" 카드가 쓴다 ── */
+.trip-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.trip-section-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 14px;
+  border: none;
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+}
+.trip-section-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+.trip-section-hint {
+  margin-left: auto;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.trip-section-chevron {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: transform 0.16s var(--ease);
+}
+.trip-section-chevron.up {
+  transform: rotate(180deg);
+}
+.trip-section-body {
+  padding: 0 2px 4px;
+}
+
 /* ── 준비 화면 항목 고르기 — Doweek 필터 줄 이식(접이식 머리 대체) ──
    흰 알약 판 안에서 하나만 채워지고, 남은 개수는 오른쪽 작은 원에 붙는다.
    칩이 화면보다 길면 줄 안에서 옆으로 밀려 스크롤된다. */

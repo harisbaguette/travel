@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarDays, ListChecks, Luggage, ShoppingCart } from "lucide-react";
+import { CalendarDays, ListChecks, Luggage, Plane, ShoppingCart } from "lucide-react";
 import type { ChecklistItem, Itinerary, Pin } from "@/lib/types";
 import ChecklistCard from "./ChecklistCard";
 import ItineraryPanel from "./ItineraryPanel";
@@ -67,11 +67,9 @@ export default function PreparePanel({
       count: flightCount + stayCount + planned,
       body: () => (
         <div className="flex flex-col gap-4">
-          {/* 짧게 적고 끝나는 예약 정보가 위, 계속 손대는 날짜별 계획이 아래. */}
-          <TravelInfoPanel itinerary={itinerary} onChange={onItineraryChange} part="flights" />
-          <TravelInfoPanel itinerary={itinerary} onChange={onItineraryChange} part="stays" />
+          {/* 여행 날짜가 모든 것의 뿌리 — 숙소 날짜도 여기서 고른 날 중에서만 고른다. */}
           <div className="flex flex-col gap-2">
-            <GroupTitle Icon={CalendarDays} text="날짜별 계획" />
+            <GroupTitle Icon={CalendarDays} text="여행 일정" />
             <ItineraryPanel
               pins={pins}
               itinerary={itinerary}
@@ -79,6 +77,11 @@ export default function PreparePanel({
               onShowOnMap={onShowOnMap}
             />
           </div>
+          <div className="flex flex-col gap-2">
+            <GroupTitle Icon={Plane} text="항공" />
+            <TravelInfoPanel itinerary={itinerary} onChange={onItineraryChange} part="flights" />
+          </div>
+          <TravelInfoPanel itinerary={itinerary} onChange={onItineraryChange} part="stays" />
         </div>
       ),
     },
