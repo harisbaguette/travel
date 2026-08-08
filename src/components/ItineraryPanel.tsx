@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { ArrowDown, ArrowUp, Map as MapIcon, X } from "lucide-react";
 import type { Itinerary, Pin } from "@/lib/types";
+import { PIN_TYPES } from "@/lib/pinTypes";
 
 interface ItineraryPanelProps {
   pins: Pin[];
@@ -201,6 +202,7 @@ export default function ItineraryPanel({
                     {day.pinIds.map((pid, order) => {
                       const pin = pinById.get(pid);
                       if (!pin) return null;
+                      const cfg = PIN_TYPES[pin.type];
                       return (
                         <li key={pid} className="relative flex items-center gap-2 py-1">
                           <span className="z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--accent-bg)] text-[11px] font-bold tabular-nums text-[var(--accent)]">
@@ -214,7 +216,9 @@ export default function ItineraryPanel({
                             aria-label={`${pin.name} 방문 시각`}
                           />
                           <span className="flex min-w-0 flex-1 items-center gap-1.5">
-                            <span className="shrink-0 text-sm">{pin.emoji}</span>
+                            <span className="shrink-0" aria-hidden>
+                              <cfg.Icon size={14} color={cfg.color} />
+                            </span>
                             <span className="truncate text-sm text-[var(--text)]">
                               {pin.name}
                             </span>
@@ -223,7 +227,7 @@ export default function ItineraryPanel({
                             <button
                               type="button"
                               onClick={() => onShowOnMap(pin)}
-                              className="rounded p-1 hover:text-[var(--accent)]"
+                              className="flex h-9 w-9 items-center justify-center rounded-lg hover:text-[var(--accent)]"
                               aria-label={`${pin.name} 지도에서 보기`}
                             >
                               <MapIcon size={14} strokeWidth={2.2} />
@@ -232,7 +236,7 @@ export default function ItineraryPanel({
                               type="button"
                               onClick={() => move(day.date, pid, -1)}
                               disabled={order === 0}
-                              className="rounded p-1 disabled:opacity-30"
+                              className="flex h-9 w-9 items-center justify-center rounded-lg disabled:opacity-30"
                               aria-label={`${pin.name} 위로`}
                             >
                               <ArrowUp size={14} strokeWidth={2.2} />
@@ -241,7 +245,7 @@ export default function ItineraryPanel({
                               type="button"
                               onClick={() => move(day.date, pid, 1)}
                               disabled={order === day.pinIds.length - 1}
-                              className="rounded p-1 disabled:opacity-30"
+                              className="flex h-9 w-9 items-center justify-center rounded-lg disabled:opacity-30"
                               aria-label={`${pin.name} 아래로`}
                             >
                               <ArrowDown size={14} strokeWidth={2.2} />
@@ -249,7 +253,7 @@ export default function ItineraryPanel({
                             <button
                               type="button"
                               onClick={() => unassign(day.date, pid)}
-                              className="rounded p-1 hover:text-[var(--danger)]"
+                              className="flex h-9 w-9 items-center justify-center rounded-lg hover:text-[var(--danger)]"
                               aria-label={`${pin.name} 이 날짜에서 빼기`}
                             >
                               <X size={14} strokeWidth={2.2} />

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Check } from "lucide-react";
 import type { Pin } from "@/lib/types";
 import { PIN_TYPES } from "@/lib/pinTypes";
+import { useSheet } from "@/lib/useSheet";
 
 interface AIPickSheetProps {
   /** AI가 찾아온 후보들 — 아직 지도에는 꽂히지 않은 상태. */
@@ -18,6 +19,7 @@ export default function AIPickSheet({ found, onAdd, onClose }: AIPickSheetProps)
   const [picked, setPicked] = useState<Set<string>>(
     () => new Set(found.map((p) => p.id))
   );
+  useSheet(onClose);
 
   const toggle = (id: string) =>
     setPicked((cur) => {
@@ -76,7 +78,9 @@ export default function AIPickSheet({ found, onAdd, onClose }: AIPickSheetProps)
                   >
                     {on && <Check size={14} strokeWidth={3} />}
                   </span>
-                  <span className="shrink-0 text-base">{pin.emoji}</span>
+                  <span className="shrink-0" aria-hidden>
+                    <cfg.Icon size={16} color={cfg.color} />
+                  </span>
                   <span className="flex min-w-0 flex-col">
                     <span className="truncate text-sm font-semibold text-[var(--text)]">
                       {pin.name}

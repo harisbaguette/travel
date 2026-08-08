@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { PinType } from "@/lib/types";
 import { PIN_TYPE_LIST } from "@/lib/pinTypes";
+import { useSheet } from "@/lib/useSheet";
 
 interface PinModalProps {
   lat: number;
@@ -19,6 +20,7 @@ export default function PinModal({ lat, lng, initialName, onAdd, onClose }: PinM
   const [type, setType] = useState<PinType>("food");
   const [name, setName] = useState(initialName ?? "");
   const [memo, setMemo] = useState("");
+  useSheet(onClose);
 
   const activeIdx = PIN_TYPE_LIST.findIndex((c) => c.type === type);
   const activeColor = PIN_TYPE_LIST[activeIdx]?.color;
@@ -62,7 +64,7 @@ export default function PinModal({ lat, lng, initialName, onAdd, onClose }: PinM
                 style={{ "--chip-color": cfg.color } as React.CSSProperties}
                 aria-pressed={type === cfg.type}
               >
-                <span className="cat-chip-dot" aria-hidden />
+                <cfg.Icon size={14} className="cat-chip-ico" aria-hidden />
                 {cfg.label}
               </button>
             ))}

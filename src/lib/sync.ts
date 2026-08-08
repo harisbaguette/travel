@@ -46,7 +46,22 @@ interface ItineraryPollResponse {
 
 interface PushResponse {
   ok?: boolean;
+  configured?: boolean;
   updatedAt?: number;
+}
+
+// 보내는 도중에 "DB 없음"으로 바뀔 수 있으므로 그때그때 다시 읽는다.
+function isNotConfigured(): boolean {
+  return dbConfigured === false;
+}
+
+// 서버가 "DB 없음"이라고 답하면 혼자 쓰기 모드로 내려간다 — 이건 실패가 아니다.
+function noteNotConfigured(data: PushResponse): boolean {
+  if (data.configured === false) {
+    dbConfigured = false;
+    return true;
+  }
+  return false;
 }
 
 // ---------- 저장 상태 알림 ----------
@@ -77,6 +92,11 @@ function beginWrite(): void {
 
 function endWrite(ok: boolean): void {
   pendingWrites = Math.max(pendingWrites - 1, 0);
+  // 서버 DB가 아예 없는 설정이면 혼자 쓰기 모드다 — 실패로 겁주지 않는다.
+  if (dbConfigured === false) {
+    if (pendingWrites === 0) emitSave("idle");
+    return;
+  }
   if (!ok) {
     emitSave("failed");
     return;
@@ -103,20 +123,43 @@ export function useSaveStatus(): SaveStatus {
   return useSyncExternalStore(subscribeSave, getSaveSnapshot, getSaveServerSnapshot);
 }
 
-// 실패 표시를 지우고 방 안의 모든 핀과 일정을 처음부터 다시 보낸다.
-export async function resendAll(
-  room: string,
-  pins: Pin[],
-  itinerary: Itinerary
-): Promise<boolean> {
+// 못 보낸 것만 따로 적어 둔다. 전부 다시 보내면 그 사이 친구가 바꾼 것까지 내 옛 사본으로
+// 덮어써 버리므로, 실패한 그 항목만 다시 보낸다.
+const failedPins = new Map<string, Pin>();
+const failedDeletes = new Set<string>();
+let failedItinerary: Itinerary | null = null;
+let failedRoom = "";
+
+function noteFailure(room: string): void {
+  failedRoom = room;
+}
+
+// 못 보낸 것만 다시 보낸다.
+export async function retryFailed(): Promise<boolean> {
+  const room = failedRoom;
   if (!room || dbConfigured === false) return false;
+  const pins = [...failedPins.values()];
+  const deletes = [...failedDeletes];
+  const itinerary = failedItinerary;
+  if (pins.length === 0 && deletes.length === 0 && !itinerary) {
+    emitSave("idle");
+    return true;
+  }
   if (saveStatus === "failed") emitSave("idle");
   beginWrite();
   let ok = true;
   for (const pin of pins) {
-    if (!(await sendPin(room, pin))) ok = false;
+    if (await sendPin(room, pin)) failedPins.delete(pin.id);
+    else ok = false;
   }
-  if (!(await sendItinerary(room, itinerary))) ok = false;
+  for (const id of deletes) {
+    if (await sendPinDelete(room, id)) failedDeletes.delete(id);
+    else ok = false;
+  }
+  if (itinerary) {
+    if (await sendItinerary(room, itinerary)) failedItinerary = null;
+    else ok = false;
+  }
   endWrite(ok);
   return ok;
 }
@@ -128,6 +171,11 @@ export async function pushPin(room: string, pin: Pin): Promise<boolean> {
   if (!room || dbConfigured === false) return false;
   beginWrite();
   const ok = await sendPin(room, pin);
+  if (ok) failedPins.delete(pin.id);
+  else if (!isNotConfigured()) {
+    failedPins.set(pin.id, pin);
+    noteFailure(room);
+  }
   endWrite(ok);
   return ok;
 }
@@ -140,6 +188,7 @@ async function sendPin(room: string, pin: Pin): Promise<boolean> {
       body: JSON.stringify({ room, pin }),
     });
     const data = (await res.json()) as PushResponse;
+    if (noteNotConfigured(data)) return false;
     if (!res.ok || !data.ok) return false;
     if (typeof data.updatedAt === "number") {
       ownPinWrites.set(pin.id, data.updatedAt);
@@ -154,6 +203,12 @@ export async function pushPinDelete(room: string, id: string): Promise<boolean> 
   if (!room || dbConfigured === false) return false;
   beginWrite();
   const ok = await sendPinDelete(room, id);
+  failedPins.delete(id); // 지운 핀은 다시 보낼 필요가 없다
+  if (ok) failedDeletes.delete(id);
+  else if (!isNotConfigured()) {
+    failedDeletes.add(id);
+    noteFailure(room);
+  }
   endWrite(ok);
   return ok;
 }
@@ -165,6 +220,7 @@ async function sendPinDelete(room: string, id: string): Promise<boolean> {
       { method: "DELETE" }
     );
     const data = (await res.json()) as PushResponse;
+    if (noteNotConfigured(data)) return false;
     if (!res.ok || !data.ok) return false;
     if (typeof data.updatedAt === "number") {
       ownPinWrites.set(id, data.updatedAt);
@@ -185,7 +241,14 @@ export function pushItinerary(room: string, it: Itinerary): void {
   itineraryTimer = setTimeout(() => {
     itineraryTimer = null;
     beginWrite();
-    void sendItinerary(room, it).then(endWrite);
+    void sendItinerary(room, it).then((ok) => {
+      if (ok) failedItinerary = null;
+      else if (!isNotConfigured()) {
+        failedItinerary = it;
+        noteFailure(room);
+      }
+      endWrite(ok);
+    });
   }, ITINERARY_DEBOUNCE_MS);
 }
 
@@ -198,6 +261,7 @@ async function sendItinerary(room: string, it: Itinerary): Promise<boolean> {
       body: JSON.stringify({ room, itinerary: it }),
     });
     const data = (await res.json()) as PushResponse;
+    if (noteNotConfigured(data)) return false;
     if (!res.ok || !data.ok) return false;
     if (typeof data.updatedAt === "number") {
       ownItineraryWriteAt = Math.max(ownItineraryWriteAt, data.updatedAt);

@@ -58,11 +58,10 @@ export default function PinList({
               key={t}
               className="inline-flex items-center gap-1.5 rounded-full bg-[var(--surface)] px-3 py-1.5 text-xs font-semibold text-[var(--text)] shadow-[var(--shadow-1)]"
             >
-              <span
-                className="h-[7px] w-[7px] rounded-full"
-                style={{ background: PIN_TYPES[t].color }}
-                aria-hidden
-              />
+              {(() => {
+                const C = PIN_TYPES[t].Icon;
+                return <C size={13} color={PIN_TYPES[t].color} aria-hidden />;
+              })()}
               {PIN_TYPES[t].label}
               <span className="tabular-nums text-[var(--text-muted)]">{n}</span>
             </span>
@@ -90,10 +89,10 @@ export default function PinList({
                   aria-expanded={isOpen}
                 >
                   <span
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-base"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
                     style={{ background: `${cfg.color}14` }}
                   >
-                    {pin.emoji}
+                    <cfg.Icon size={16} color={cfg.color} aria-hidden />
                   </span>
                   <span className="flex min-w-0 flex-col">
                     <span className="truncate text-sm font-semibold text-[var(--text)]">
@@ -117,7 +116,7 @@ export default function PinList({
                 <button
                   type="button"
                   onClick={() => onShowOnMap(pin)}
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors hover:text-[var(--accent)]"
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors hover:text-[var(--accent)]"
                   aria-label={`${pin.name} 지도에서 보기`}
                 >
                   <MapIcon size={16} strokeWidth={2.2} />
@@ -125,7 +124,7 @@ export default function PinList({
                 <button
                   type="button"
                   onClick={() => setConfirmId(pin.id)}
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors hover:text-[var(--danger)]"
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors hover:text-[var(--danger)]"
                   aria-label={`${pin.name} 삭제`}
                 >
                   <Trash2 size={16} strokeWidth={2.2} />

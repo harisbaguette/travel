@@ -32,10 +32,14 @@ export function loadRooms(): Room[] {
   try {
     const raw = window.localStorage.getItem(KEY);
     const parsed: unknown = raw ? JSON.parse(raw) : [];
-    const list = Array.isArray(parsed) ? parsed.filter(isRoom) : [];
+    const list = (Array.isArray(parsed) ? parsed.filter(isRoom) : []).filter(
+      (r) => !OLD_ROOMS.includes(r.id)
+    );
+    // 기본 여행은 이름을 바꿨을 수 있으므로 저장본이 있으면 그것을 쓴다.
+    const saved = list.find((r) => r.id === DEFAULT_ROOM.id);
     return [
-      DEFAULT_ROOM,
-      ...list.filter((r) => r.id !== DEFAULT_ROOM.id && !OLD_ROOMS.includes(r.id)),
+      saved ?? DEFAULT_ROOM,
+      ...list.filter((r) => r.id !== DEFAULT_ROOM.id),
     ];
   } catch {
     return [DEFAULT_ROOM];
@@ -45,13 +49,17 @@ export function loadRooms(): Room[] {
 export function saveRooms(rooms: Room[]): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(
-      KEY,
-      JSON.stringify(rooms.filter((r) => r.id !== DEFAULT_ROOM.id))
-    );
+    window.localStorage.setItem(KEY, JSON.stringify(rooms));
   } catch {
     // 용량 초과 등은 무시
   }
+}
+
+// 여행 이름 바꾸기 — 초대 링크로 들어와 이름이 암호처럼 보이는 여행을 알아보기 쉽게.
+export function renameRoom(rooms: Room[], id: string, label: string): Room[] {
+  const name = label.trim();
+  if (!name) return rooms;
+  return rooms.map((r) => (r.id === id ? { ...r, label: name } : r));
 }
 
 // 처음 보는 여행이면 목록에 넣는다(초대 링크로 들어온 경우 포함).

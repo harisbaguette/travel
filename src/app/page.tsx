@@ -10,12 +10,12 @@ import {
 import dynamic from "next/dynamic";
 import type { Map as LeafletMap } from "leaflet";
 import {
+  Bot,
   Map as MapIcon,
   MapPin,
   NotebookPen,
   Plus,
   Search,
-  Sparkles,
   X,
 } from "lucide-react";
 import {
@@ -40,6 +40,7 @@ import {
   DEFAULT_ROOM,
   loadRooms,
   OLD_ROOMS,
+  renameRoom,
   saveRooms,
   type Room,
 } from "@/lib/rooms";
@@ -48,7 +49,7 @@ import {
   pushItinerary,
   pushPin,
   pushPinDelete,
-  resendAll,
+  retryFailed,
   useRoomSync,
   useSaveStatus,
 } from "@/lib/sync";
@@ -149,11 +150,6 @@ function distanceMeters(
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
-// 랜덤 방 ID — 초대 링크용. 짧게.
-function newRoomId(): string {
-  return `room-${Math.random().toString(36).slice(2, 8)}`;
-}
-
 // 브라우저에 저장된 값(방·핀·일정)은 서버가 알 수 없다. 서버가 그린 화면과 첫 화면을
 // 똑같이 맞춰야 React가 화면을 이어받을 수 있으므로, 이어받기가 끝난 뒤에만 저장값을 보여준다.
 const NOOP_SUBSCRIBE = () => () => {};
@@ -214,7 +210,6 @@ export default function Home() {
   const [aiLoading, setAILoading] = useState(false);
   // AI가 찾아온 후보들 — 고르는 시트가 열려 있는 동안만 들고 있는다.
   const [aiFound, setAIFound] = useState<Pin[] | null>(null);
-  const [copied, setCopied] = useState(false);
   const [tab, setTab] = useState<Tab>("map");
 
   // 로그인 없이 브라우저를 구분하는 ID — 렌더에도 쓰이므로 state(첫 렌더에 한 번만 계산).
@@ -239,6 +234,13 @@ export default function Home() {
   useEffect(() => {
     if (searchOpen) searchRef.current?.focus();
   }, [searchOpen]);
+
+  // 알림 한 줄은 4초 뒤 저절로 사라진다 — 계속 남아 지도를 밀어내지 않게.
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(""), 4000);
+    return () => clearTimeout(timer);
+  }, [notice]);
 
   // 글자를 칠 때마다(0.3초 숨 고르고) 장소 사전에 물어봐 후보 목록을 띄운다.
   // 지금 보고 있는 지도 근처를 먼저 보여주므로, 같은 이름이 여럿이어도 가까운 곳이 위로 온다.
@@ -300,10 +302,10 @@ export default function Home() {
   // 서버로 잘 보내지고 있는지 — 머리 아래 한 줄로 보여준다.
   const saveStatus = useSaveStatus();
 
-  // 보내기 실패했을 때 이 방의 핀과 일정을 통째로 다시 보낸다.
+  // 보내기 실패했을 때 못 간 것만 다시 보낸다(전부 다시 보내면 친구 변경분을 덮어쓴다).
   const handleResend = useCallback(() => {
-    void resendAll(room, pins, itinerary);
-  }, [room, pins, itinerary]);
+    void retryFailed();
+  }, []);
 
   const handleMapReady = useCallback((map: LeafletMap) => {
     mapRef.current = map;
@@ -358,20 +360,14 @@ export default function Home() {
     [flyToRoom]
   );
 
-  // 새 여행 만들기 — 랜덤 ID + 사용자가 붙인 이름으로 목록에 남긴다.
-  const handleCreateRoom = useCallback(
-    (label: string) => {
-      const id = newRoomId();
-      setRooms((cur) => {
-        const next = addRoom(cur, id, label);
-        saveRooms(next);
-        return next;
-      });
-      switchRoom(id);
-      setTab("map");
-    },
-    [switchRoom]
-  );
+  // 여행 이름 바꾸기 — 초대 링크로 들어와 이름이 암호처럼 보일 때 알아보기 쉽게.
+  const handleRenameRoom = useCallback((id: string, label: string) => {
+    setRooms((cur) => {
+      const next = renameRoom(cur, id, label);
+      saveRooms(next);
+      return next;
+    });
+  }, []);
 
   // 후보 목록 닫기 — 목록과 고른 자리 표시를 함께 정리
   const closeSuggestions = useCallback(() => {
@@ -519,13 +515,19 @@ export default function Home() {
     (id: string) => {
       setPins((prev) => prev.filter((p) => p.id !== id));
       void pushPinDelete(room, id);
-      // 일정에서도 해당 핀 제거
-      setItinerary((prev) => ({
-        ...prev,
-        days: prev.days.map((d) => ({ ...d, pinIds: d.pinIds.filter((pid) => pid !== id) })),
-      }));
+      // 일정에서도 빼고, 그 사실을 서버에도 알린다(안 그러면 서버 일정에 유령 자리가 남는다).
+      const wasPlanned = itinerary.days.some((d) => d.pinIds.includes(id));
+      const nextItinerary = {
+        ...itinerary,
+        days: itinerary.days.map((d) => ({
+          ...d,
+          pinIds: d.pinIds.filter((pid) => pid !== id),
+        })),
+      };
+      setItinerary(nextItinerary);
+      if (wasPlanned) pushItinerary(room, nextItinerary);
     },
-    [room]
+    [room, itinerary]
   );
 
   const handlePinDragEnd = useCallback(
@@ -614,20 +616,6 @@ export default function Home() {
     [room]
   );
 
-  // 초대 링크 복사
-  const handleCopyInvite = useCallback(async () => {
-    if (!room) return;
-    const url = `${window.location.origin}${window.location.pathname}?room=${encodeURIComponent(room)}`;
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      setNotice("초대 링크를 복사했어요 — 친구에게 보내 주세요");
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setNotice("링크 복사에 실패했어요");
-    }
-  }, [room]);
-
   // 이어받기 전(서버가 그린 첫 화면)에는 저장값 대신 빈 상태를 그린다.
   const viewRoom = hydrated ? room : "";
   const viewRooms = hydrated ? rooms : INITIAL_ROOMS;
@@ -644,10 +632,7 @@ export default function Home() {
             rooms={viewRooms}
             currentId={viewRoom || DEFAULT_ROOM.id}
             onSelect={switchRoom}
-            onCreate={handleCreateRoom}
-            onCopyInvite={handleCopyInvite}
-            canInvite={syncEnabled}
-            copied={copied}
+            onRename={handleRenameRoom}
           />
           <button
             type="button"
@@ -722,8 +707,11 @@ export default function Home() {
                           sugIdx === i ? "bg-[var(--surface-hover)]" : ""
                         }`}
                       >
-                        <span className="w-5 shrink-0 text-center text-base leading-none" aria-hidden>
-                          {p.emoji}
+                        <span className="flex w-5 shrink-0 items-center justify-center" aria-hidden>
+                          {(() => {
+                            const c = PIN_TYPES[p.type];
+                            return <c.Icon size={16} color={c.color} />;
+                          })()}
                         </span>
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-semibold text-[var(--text)]">

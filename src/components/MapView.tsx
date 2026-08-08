@@ -1,12 +1,12 @@
 "use client";
 
-import { forwardRef, useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from "react-leaflet";
 import { LocateFixed } from "lucide-react";
 import L, { type Map as LeafletMap } from "leaflet";
 import "@maplibre/maplibre-gl-leaflet";
 import type { Pin } from "@/lib/types";
-import { PIN_TYPES } from "@/lib/pinTypes";
+import { PIN_TYPES, pinMarkerSvg } from "@/lib/pinTypes";
 
 export type MapViewHandle = LeafletMap | null;
 
@@ -316,18 +316,19 @@ function PinMarker({
   // 지우기는 한 번 더 물어본다 — 손이 스쳐 사라지면 되돌릴 길이 없다.
   const [asking, setAsking] = useState(false);
 
-  const icon = L.divIcon({
-    className: isMine ? "pin-icon" : "pin-icon pin-icon--other",
-    html: `<span>${pin.emoji}</span>`,
-    iconSize: [28, 28],
-    iconAnchor: [14, 28],
-    popupAnchor: [0, -28],
-  });
-
-  const setMarkerColor = (el: HTMLElement | null) => {
-    if (!el) return;
-    el.style.borderColor = borderColor;
-  };
+  // 테두리 색은 아이콘 안에 직접 써 넣는다. 바깥에서 나중에 칠하면 화면이 다시 그려질 때
+  // 마커 조각이 통째로 교체되면서 색이 지워진다. 아이콘도 값이 바뀔 때만 새로 만든다.
+  const icon = useMemo(
+    () =>
+      L.divIcon({
+        className: isMine ? "pin-icon" : "pin-icon pin-icon--other",
+        html: `<span style="border-color:${borderColor}"><i>${pinMarkerSvg(pin.type)}</i></span>`,
+        iconSize: [28, 28],
+        iconAnchor: [14, 28],
+        popupAnchor: [0, -28],
+      }),
+    [isMine, borderColor, pin.type]
+  );
 
   return (
     <Marker
@@ -341,15 +342,11 @@ function PinMarker({
           onDragEnd?.(pin.id, ll.lat, ll.lng);
         },
       }}
-      ref={(m) => {
-        const el = (m as L.Marker | null)?.getElement() ?? null;
-        setMarkerColor(el);
-      }}
     >
       <Popup className="pin-popup">
         <div className="min-w-[180px]">
           <div className="mb-1 flex items-center gap-1.5 font-semibold text-[var(--text)]">
-            <span>{pin.emoji}</span>
+            <cfg.Icon size={15} color={cfg.color} aria-hidden className="shrink-0" />
             <span>{pin.name}</span>
             {pin.isAI && (
               <span className="rounded bg-[var(--accent-soft)] px-1 text-[10px] font-medium text-[var(--accent)]">

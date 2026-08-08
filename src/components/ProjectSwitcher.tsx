@@ -1,18 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Link2, Plus } from "lucide-react";
+import { Check, ChevronDown, Pencil } from "lucide-react";
 import type { Room } from "@/lib/rooms";
 
 interface ProjectSwitcherProps {
   rooms: Room[];
   currentId: string;
   onSelect: (id: string) => void;
-  onCreate: (label: string) => void;
-  onCopyInvite: () => void;
-  /** 서버 동기화가 켜져 있을 때만 초대 링크가 뜻이 있다. */
-  canInvite: boolean;
-  copied: boolean;
+  onRename: (id: string, label: string) => void;
 }
 
 // 상단 여행 전환 알약 — Doweek ProjectSwitcher 문법 이식.
@@ -20,13 +16,11 @@ export default function ProjectSwitcher({
   rooms,
   currentId,
   onSelect,
-  onCreate,
-  onCopyInvite,
-  canInvite,
-  copied,
+  onRename,
 }: ProjectSwitcherProps) {
   const [open, setOpen] = useState(false);
-  const [creating, setCreating] = useState(false);
+  // 지금 여행 이름을 고쳐 쓰는 중인지
+  const [editing, setEditing] = useState(false);
   const [label, setLabel] = useState("");
   const pillRef = useRef<HTMLButtonElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -38,7 +32,7 @@ export default function ProjectSwitcher({
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       setOpen(false);
-      setCreating(false);
+      setEditing(false);
       pillRef.current?.focus();
     };
     window.addEventListener("keydown", onKey);
@@ -46,19 +40,19 @@ export default function ProjectSwitcher({
   }, [open]);
 
   useEffect(() => {
-    if (creating) inputRef.current?.focus();
-  }, [creating]);
+    if (editing) inputRef.current?.focus();
+  }, [editing]);
 
   const close = () => {
     setOpen(false);
-    setCreating(false);
+    setEditing(false);
     setLabel("");
   };
 
-  const submitNew = () => {
+  const submit = () => {
     const name = label.trim();
     if (!name) return;
-    onCreate(name);
+    onRename(currentId, name);
     close();
   };
 
@@ -106,7 +100,7 @@ export default function ProjectSwitcher({
 
             <div className="ps-sep" role="separator" />
 
-            {creating ? (
+            {editing ? (
               <div className="ps-new">
                 <input
                   ref={inputRef}
@@ -114,18 +108,18 @@ export default function ProjectSwitcher({
                   value={label}
                   onChange={(e) => setLabel(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") submitNew();
+                    if (e.key === "Enter") submit();
                   }}
                   placeholder="예: 다낭 맵"
                   className="dw-input dw-input--sm min-w-0 flex-1"
-                  aria-label="새 여행 이름"
+                  aria-label="여행 이름"
                 />
                 <button
                   type="button"
-                  onClick={submitNew}
+                  onClick={submit}
                   className="dw-btn-primary h-11 min-h-0 shrink-0 px-3 text-sm"
                 >
-                  만들기
+                  바꾸기
                 </button>
               </div>
             ) : (
@@ -133,32 +127,15 @@ export default function ProjectSwitcher({
                 type="button"
                 role="menuitem"
                 className="ps-item"
-                onClick={() => setCreating(true)}
+                onClick={() => {
+                  setLabel(active?.label ?? "");
+                  setEditing(true);
+                }}
               >
-                <Plus size={16} strokeWidth={2.4} className="ps-item-icon" />
-                <span className="ps-item-name">새 여행 만들기</span>
+                <Pencil size={16} strokeWidth={2.2} className="ps-item-icon" />
+                <span className="ps-item-name">이 여행 이름 바꾸기</span>
               </button>
             )}
-
-            <button
-              type="button"
-              role="menuitem"
-              className="ps-item"
-              disabled={!canInvite}
-              onClick={() => {
-                onCopyInvite();
-                setOpen(false);
-              }}
-            >
-              <Link2 size={16} strokeWidth={2.2} className="ps-item-icon" />
-              <span className="ps-item-name">
-                {copied
-                  ? "링크를 복사했어요"
-                  : canInvite
-                    ? "친구 초대 링크 복사"
-                    : "초대는 서버 연결 뒤에 가능해요"}
-              </span>
-            </button>
           </div>
         </>
       )}

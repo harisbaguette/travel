@@ -221,7 +221,8 @@ body {
   align-items: center;
   justify-content: center;
   height: 51px;
-  color: rgba(0, 0, 0, 0.28);
+  /* 안 고른 탭 글씨 — 흰 유리판 위에서 읽히도록 대비를 올렸다(4.5:1 이상) */
+  color: rgba(0, 0, 0, 0.56);
   background: transparent;
   border: none;
   cursor: pointer;
@@ -264,7 +265,7 @@ body {
 }
 @media (hover: hover) and (pointer: fine) {
   .dock-item:not(.active):hover {
-    color: rgba(0, 0, 0, 0.45);
+    color: rgba(0, 0, 0, 0.72);
   }
   .dock-item:not(.active):hover::before {
     background: rgba(0, 0, 0, 0.05);
@@ -565,15 +566,12 @@ body {
   color: #fff;
   font-weight: 600;
 }
-.cat-chip-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--chip-color);
+.cat-chip-ico {
+  color: var(--chip-color);
   flex-shrink: 0;
 }
-.cat-chip.active .cat-chip-dot {
-  background: rgba(255, 255, 255, 0.7);
+.cat-chip.active .cat-chip-ico {
+  color: #fff;
 }
 
 /* 입력칸 — Doweek modal-input */
@@ -750,8 +748,17 @@ body {
   cursor: not-allowed;
 }
 
-/* 핀 마커 — 흰 원 + 이모지, 타입별 테두리 */
+/* 핀 마커 — 흰 물방울 + 종류별 아이콘(Lucide), 타입별 테두리.
+   테두리 색은 마커 글자 안에 직접 써 넣으므로 물방울 모양을 안쪽 칸이 맡는다
+   (바깥에서 나중에 칠하면 화면이 다시 그려질 때 색이 지워진다). */
 .pin-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+}
+.pin-icon > span {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -763,14 +770,18 @@ body {
   border: 3px solid var(--accent-ink);
   box-shadow: 0 2px 8px rgba(36, 30, 25, 0.25);
 }
-.pin-icon--other {
+.pin-icon--other > span {
   border-style: dashed;
   opacity: 0.85;
 }
-.pin-icon > span {
+.pin-icon > span > i {
+  display: block;
   transform: rotate(45deg);
-  font-size: 15px;
   line-height: 1;
+  font-style: normal;
+}
+.pin-icon > span > i > svg {
+  display: block;
 }
 
 /* 검색 결과 표식 — 파란 점 둘레로 물결이 퍼진다 */
