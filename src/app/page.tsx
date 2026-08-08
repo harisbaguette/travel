@@ -17,7 +17,6 @@ import {
   Luggage,
   Map as MapIcon,
   MapPin,
-  Plus,
   Search,
   X,
 } from "lucide-react";
@@ -183,8 +182,7 @@ function useHydrated(): boolean {
 }
 
 // 아래 메뉴 다섯 — 손으로 꽂는 지도, 꽂아 둔 곳을 줄줄이 보는 리스트, AI에게 시키는 비서,
-// 떠나기 전에 채우는 준비, 현지에서 보는 일정. 원본 Doweek 메뉴도 한 줄에 다섯 칸이고
-// + 단추는 그 가운데 칸 위에 얹힌다 — 원본 그대로 쓴다(globals.css의 .dock-fab 설명 참고).
+// 떠나기 전에 채우는 준비, 현지에서 보는 일정. 원본 Doweek 메뉴도 한 줄에 다섯 칸.
 const DOCK_ITEMS = [
   { key: "map", icon: MapIcon, label: "지도" },
   { key: "list", icon: List, label: "리스트" },
@@ -237,8 +235,6 @@ export default function Home() {
   } | null>(null);
   // 이미 꽂힌 핀을 고치는 중 — 같은 입력 시트를 "수정" 모드로 띄운다.
   const [editPin, setEditPin] = useState<Pin | null>(null);
-  // + 를 눌러 "자리 고르기"를 켠 상태 — 지도 가운데 십자를 보여 준다.
-  const [picking, setPicking] = useState(false);
   // 지도 말풍선에서 "일정에 넣기"를 누른 곳 — 며칠째에 넣을지 고르는 창이 뜬다.
   const [schedulePick, setSchedulePick] = useState<{
     lat: number;
@@ -401,7 +397,6 @@ export default function Home() {
       // 다른 여행으로 넘어가면 이전 검색·비서 대화 흔적은 지운다
       setSearchTarget(null);
       setSugOpen(false);
-      setPicking(false);
       setChat([]);
       void flyToRoom(value, nextPins);
     },
@@ -534,21 +529,6 @@ export default function Home() {
       name: searchTarget.name,
     });
   };
-
-  // + 단추 — 바로 꽂지 않고 "자리 고르기"를 켠다. 지도를 움직여 가운데 십자에
-  // 원하는 곳을 맞춘 다음 확인을 눌러야 핀이 꽂힌다(지도를 눌러선 꽂히지 않는다).
-  const handleFab = useCallback(() => {
-    setTab("map");
-    setPicking(true);
-  }, []);
-
-  const confirmPick = useCallback(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    const c = map.getCenter();
-    setPicking(false);
-    setModalCoord({ lat: c.lat, lng: c.lng });
-  }, []);
 
   const handleAddPin = (data: {
     type: PinType;
@@ -1090,17 +1070,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* 자리 고르기 — 가운데 십자. 지도 한가운데가 곧 화면 한가운데라야 십자가 가리키는
-          곳에 핀이 꽂힌다. 손가락 입력은 그대로 지도로 통과시킨다. */}
-      {mapFull && picking && (
-        <div
-          className="pointer-events-none absolute inset-0 z-[1000] flex items-center justify-center"
-          aria-hidden
-        >
-          <span className="map-crosshair" />
-        </div>
-      )}
-
       {/* 지도 — 위 알약 줄과 아래 메뉴 뒤까지 화면 전체에 깔린다(그림은 맨 뒤, 순서는 머리 다음:
           탭키를 누르면 위 단추들을 먼저 지나고 그다음 지도 핀에 닿는다). 탭을 바꿔도 그대로
           남아 있다(다시 그리면 느리다). 다만 덮여 있는 동안에는 보이지도 않는 핀 수십 개가
@@ -1127,26 +1096,6 @@ export default function Home() {
       {/* 몸통 — 지도 위에 여행 화면이 통째로 덮인다. 아무것도 덮이지 않은 자리는 손가락
           입력을 뒤 지도로 흘려보낸다(pointer-events-none). 덮개마다 다시 켜 준다. */}
       <div className="pointer-events-none relative min-h-0 flex-1 overflow-hidden">
-        {/* 지도 위 떠 있는 막대 — 자리를 고르는 중에만. 핀 추가 단추는 아래 메뉴 가운데로 옮겼다. */}
-        {tab === "map" && picking && (
-          <div className="anim-rise pointer-events-auto absolute inset-x-4 bottom-4 z-[1001] flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setPicking(false)}
-              className="press h-12 shrink-0 rounded-[14px] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--text-muted)] shadow-[var(--shadow-2)] transition-colors duration-200 hover:bg-[var(--surface-hover)] hover:text-[var(--text)]"
-            >
-              취소
-            </button>
-            <button
-              type="button"
-              onClick={confirmPick}
-              className="h-12 min-w-0 flex-1 rounded-[14px] bg-[var(--accent)] text-sm font-bold text-white shadow-[var(--shadow-2)] transition-[background,transform,box-shadow] duration-200 ease-[var(--ease-out)] hover:bg-[var(--accent-hover)] hover:shadow-[var(--shadow-lift)] active:scale-[0.98]"
-            >
-              여기에 핀 꽂기
-            </button>
-          </div>
-        )}
-
         {/* 리스트 — 지도를 덮는 판. 종류는 준비 탭과 같은 알약 필터 줄에서 하나 눌러
             걸러 보고, 지도 단추를 누르면 그 자리로 지도가 넘어간다. */}
         {listing && (
@@ -1242,9 +1191,8 @@ export default function Home() {
         )}
       </div>
 
-      {/* 하단 독 — Doweek BottomNav.jsx를 그대로 옮긴 것: 유리판 다섯 칸 + 가운데로
-          튀어나온 파란 + 단추(FAB). 지도를 볼 때는 바탕을 비워 유리판 옆·뒤로 지도가
-          그대로 보이게 한다. */}
+      {/* 하단 독 — Doweek BottomNav.jsx를 그대로 옮긴 유리판 다섯 칸. 지도를 볼 때는
+          바탕을 비워 유리판 옆·뒤로 지도가 그대로 보이게 한다. */}
       <nav
         className={`dock-nav${mapFull ? " dock-nav--float" : ""}`}
         aria-label="화면 이동"
@@ -1259,11 +1207,7 @@ export default function Home() {
                   key={item.key}
                   type="button"
                   className={`dock-item${active ? " active" : ""}`}
-                  onClick={() => {
-                    // 다른 화면으로 넘어가면 고르던 자리는 접는다
-                    if (item.key !== "map") setPicking(false);
-                    setTab(item.key);
-                  }}
+                  onClick={() => setTab(item.key)}
                   aria-current={active ? "page" : undefined}
                 >
                   <Icon size={21} strokeWidth={active ? 2.5 : 1.5} />
@@ -1272,17 +1216,6 @@ export default function Home() {
               );
             })}
           </div>
-          {/* 지도를 볼 때만 보여 준다 — 이 단추는 메뉴 막대 위로 솟아 있어서, 다른 화면에서는
-              적는 칸(준비 화면의 날짜 칸 같은 것)을 가려 버린다. 자리를 고르는 중에도 숨긴다
-              (지도 위 확인/취소 막대가 같은 자리를 쓴다). */}
-          <button
-            type="button"
-            onClick={handleFab}
-            aria-label="핀 추가"
-            className={`dock-fab${tab !== "map" || picking ? " dock-fab--hidden" : ""}`}
-          >
-            <Plus size={22} strokeWidth={2.5} aria-hidden />
-          </button>
         </div>
       </nav>
 
