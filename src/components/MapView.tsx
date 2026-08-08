@@ -152,6 +152,38 @@ interface PoiInfo {
   pending?: boolean;
 }
 
+// 그 좌표에 뭐가 있는지 서버(/api/poi-at)에 조용히 물어봐 두는 재료 — 검색 표식 카드가 쓴다.
+function usePlaceDetails(lat: number, lng: number) {
+  const [details, setDetails] = useState<PoiInfo | null>(null);
+  useEffect(() => {
+    setDetails(null);
+    const ac = new AbortController();
+    void fetch(`/api/poi-at?lat=${lat}&lng=${lng}`, { signal: ac.signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!ac.signal.aborted)
+          setDetails((d as { poi?: PoiInfo | null } | null)?.poi ?? null);
+      })
+      .catch(() => {});
+    return () => ac.abort();
+  }, [lat, lng]);
+  return details;
+}
+
+// 두 자리 사이 거리(m) — 찾아온 정보가 정말 그 가게 것인지 가려낼 때 쓴다.
+function metersApart(aLat: number, aLng: number, bLat: number, bLng: number): number {
+  const kx = Math.cos((aLat * Math.PI) / 180) * 111320;
+  return Math.hypot((aLat - bLat) * 111320, (aLng - bLng) * kx);
+}
+
+// 이름이 서로 겹치는가 — 띄어쓰기와 대소문자를 지우고 한쪽이 다른 쪽을 품으면 같은 곳으로 본다.
+function namesOverlap(a: string, b: string): boolean {
+  const na = a.toLowerCase().replace(/\s+/g, "");
+  const nb = b.toLowerCase().replace(/\s+/g, "");
+  if (na.length < 2 || nb.length < 2) return false;
+  return na.includes(nb) || nb.includes(na);
+}
+
 function PoiTapLayer({
   onAddToSchedule,
   onSavePlace,
@@ -388,6 +420,7 @@ const MapView = forwardRef<LeafletMap, MapViewProps>(function MapView(
         <SearchTargetMarker
           target={searchTarget}
           onAdd={onSearchTargetAdd}
+          onSchedule={onAddToSchedule}
           onClose={onSearchTargetClose}
         />
       )}
@@ -485,17 +518,30 @@ function LocateButton() {
   );
 }
 
-// 검색으로 찾은 자리 표식 — 물결이 퍼지는 파란 점. 말풍선에서 바로 핀으로 저장할 수 있다.
+// 검색으로 찾은 자리 표식 — 물결이 퍼지는 파란 점. 그 가게의 종류·여는 시간·전화·주소를
+// 조용히 알아봐 말풍선에 채워 주고, 핀 저장·일정·구글 지도로 바로 이어 준다.
 function SearchTargetMarker({
   target,
   onAdd,
+  onSchedule,
   onClose,
 }: {
-  target: { lat: number; lng: number; name: string };
+  target: { lat: number; lng: number; name: string; address?: string };
   onAdd?: () => void;
+  onSchedule?: MapViewProps["onAddToSchedule"];
   onClose?: () => void;
 }) {
   const markerRef = useRef<L.Marker | null>(null);
+  const details = usePlaceDetails(target.lat, target.lng);
+  // 옆 가게 정보를 잘못 붙이지 않게 — 아주 가깝거나(30m) 이름이 겹칠 때만 그 가게 것으로 믿는다
+  const detail =
+    details?.kind === "poi" &&
+    (metersApart(target.lat, target.lng, details.lat, details.lng) <= 30 ||
+      namesOverlap(target.name, details.name))
+      ? details
+      : null;
+  const address =
+    target.address ?? (details?.kind === "address" ? details.name : undefined);
 
   const icon = L.divIcon({
     className: "search-target-icon",
@@ -511,6 +557,11 @@ function SearchTargetMarker({
     return () => clearTimeout(timer);
   }, [target.lat, target.lng]);
 
+  // 정보가 뒤늦게 도착하면 말풍선 크기와 자리를 다시 잡는다
+  useEffect(() => {
+    markerRef.current?.getPopup()?.update();
+  }, [details]);
+
   return (
     <Marker
       position={[target.lat, target.lng]}
@@ -523,8 +574,25 @@ function SearchTargetMarker({
       }}
     >
       <Popup className="pin-popup">
-        <div className="min-w-[160px]">
+        <div className="min-w-[200px] max-w-[250px]">
           <div className="font-semibold text-[var(--text)]">{target.name}</div>
+          {(detail?.category || address) && (
+            <div className="mt-0.5 text-xs text-[var(--text-muted)]">
+              {[detail?.category, address].filter(Boolean).join(" · ")}
+            </div>
+          )}
+          {detail?.hours && (
+            <div className="mt-1 flex items-start gap-1 text-xs text-[var(--text-muted)]">
+              <Clock size={11} aria-hidden className="mt-0.5 shrink-0" />
+              <span className="min-w-0">{detail.hours}</span>
+            </div>
+          )}
+          {detail?.phone && (
+            <div className="mt-0.5 flex items-center gap-1 text-xs text-[var(--text-muted)]">
+              <Phone size={11} aria-hidden className="shrink-0" />
+              <span className="min-w-0 truncate">{detail.phone}</span>
+            </div>
+          )}
           <div className="popup-actions">
             {onAdd && (
               <button type="button" onClick={onAdd} className="popup-action popup-action--accent">
@@ -534,6 +602,33 @@ function SearchTargetMarker({
                 핀 저장
               </button>
             )}
+            {onSchedule && (
+              <button
+                type="button"
+                onClick={() =>
+                  onSchedule({ lat: target.lat, lng: target.lng, name: target.name })
+                }
+                className="popup-action"
+              >
+                <span className="popup-action__icon">
+                  <CalendarPlus size={16} strokeWidth={2.2} aria-hidden />
+                </span>
+                일정
+              </button>
+            )}
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                address ? `${target.name} ${address}` : `${target.lat},${target.lng}`
+              )}`}
+              target="_blank"
+              rel="noreferrer"
+              className="popup-action"
+            >
+              <span className="popup-action__icon">
+                <MapIcon size={16} strokeWidth={2.2} aria-hidden />
+              </span>
+              구글 지도
+            </a>
             {onClose && (
               <button type="button" onClick={onClose} className="popup-action">
                 <span className="popup-action__icon">

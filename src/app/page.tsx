@@ -213,6 +213,8 @@ export default function Home() {
     lat: number;
     lng: number;
     name: string;
+    /** 후보 목록이 알려 준 주소 — 말풍선에 그대로 보여 준다. */
+    address?: string;
   } | null>(null);
   const sugAbortRef = useRef<AbortController | null>(null);
   // 후보를 골라서 입력칸 글자를 바꿀 땐 다시 검색하지 않게 하는 표시
@@ -421,7 +423,7 @@ export default function Home() {
       closeSuggestions();
       setNotice("");
       setTab("map");
-      setSearchTarget({ lat: s.lat, lng: s.lng, name: s.name });
+      setSearchTarget({ lat: s.lat, lng: s.lng, name: s.name, address: s.address || undefined });
       const map = mapRef.current;
       if (!map) return;
       // 도시처럼 넓은 곳은 영역 전체가 보이게, 가게는 가까이 확대해서 보여준다.
