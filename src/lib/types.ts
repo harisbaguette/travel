@@ -22,6 +22,14 @@ export interface PinSource {
   url: string;
 }
 
+// 옛 AI 메모 청소 — 예전 비서는 "구글 ★4.8 (리뷰 3,084개) · 해산물 · 다낭 · 2026-08-08 AI 조사"처럼
+// 별점·분류·지역·날짜를 나열해 저장했다. 지금은 금지된 형식인데, 이미 저장된 핀에는 그대로 남아
+// 있으므로 읽고 쓰는 길목마다 이 함수로 걸러 낸다. 그 형식에만 나오는 표식("구글 ★", "AI 조사")이
+// 보이면 통째로 지운다 — 사이에 낀 분류·지역 낱말도 전부 도움 안 되는 나열이기 때문.
+export function cleanLegacyAiMemo(memo: string): string {
+  return /★ ?\d|\(리뷰 [\d,]+개\)|AI 조사/.test(memo) ? "" : memo;
+}
+
 export interface Pin {
   id: string;
   lat: number;

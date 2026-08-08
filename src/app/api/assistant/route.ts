@@ -1,4 +1,4 @@
-import { PIN_TYPE_VALUES, type Pin, type PinSource, type PinType } from "@/lib/types";
+import { cleanLegacyAiMemo, PIN_TYPE_VALUES, type Pin, type PinSource, type PinType } from "@/lib/types";
 import {
   fetchBlogPost,
   searchNaverBlog,
@@ -708,7 +708,8 @@ async function buildPins(
       card,
       anchor,
       type,
-      memo: typeof p.memo === "string" ? p.memo : "",
+      // 말로만 금지하면 AI가 어기고 또 적을 수 있다 — 코드로도 별점 나열식 메모를 걸러 낸다.
+      memo: cleanLegacyAiMemo(typeof p.memo === "string" ? p.memo : ""),
       sources,
     });
   }

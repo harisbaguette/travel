@@ -1,4 +1,4 @@
-import { PIN_TYPE_VALUES, type Pin, type PinSource } from "@/lib/types";
+import { cleanLegacyAiMemo, PIN_TYPE_VALUES, type Pin, type PinSource } from "@/lib/types";
 import { getDb } from "@/lib/db";
 
 // 핀 CRUD — Neon(Postgres) pins 테이블. 스키마: src/lib/schema.sql
@@ -56,7 +56,8 @@ function rowToPin(r: PinRow): Pin & { updatedAt: number; deleted: boolean } {
     lng: r.lng,
     type: r.type as Pin["type"],
     name: r.name,
-    memo: r.memo ?? "",
+    // 옛 AI 핀에 별점 나열식 메모가 저장돼 있다 — 내려보낼 때 걸러 화면에 안 나가게 한다.
+    memo: cleanLegacyAiMemo(r.memo ?? ""),
     emoji: r.emoji ?? "",
     isAI: Boolean(r.is_ai),
     createdAt: Number(r.created_at),
@@ -162,7 +163,7 @@ export async function POST(request: Request): Promise<Response> {
     const rows = (await sql`
       insert into pins (id, room_id, lat, lng, type, name, memo, emoji, is_ai, created_at, created_by, deleted, sources, address)
       values (${p.id}, ${room}, ${p.lat}, ${p.lng}, ${p.type}, ${p.name},
-              ${p.memo ?? ""}, ${p.emoji ?? ""}, ${Boolean(p.isAI)},
+              ${cleanLegacyAiMemo(p.memo ?? "")}, ${p.emoji ?? ""}, ${Boolean(p.isAI)},
               ${Number(p.createdAt) || Date.now()}, ${p.createdBy === "AI" ? "" : p.createdBy ?? ""}, false,
               ${JSON.stringify(cleanSources(p.sources))}::jsonb, ${typeof p.address === "string" ? p.address.slice(0, 300) : ""})
       on conflict (id) do update set
