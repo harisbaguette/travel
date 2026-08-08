@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, Check, ExternalLink, Pin as PinIcon, RotateCcw } from "lucide-react";
+import {
+  ArrowUp,
+  Check,
+  ExternalLink,
+  MessageCircleQuestionMark,
+  Pin as PinIcon,
+  RotateCcw,
+} from "lucide-react";
 import type { Pin } from "@/lib/types";
 import { PIN_TYPES } from "@/lib/pinTypes";
 import { googleMapsUrl } from "@/lib/mapLinks";
@@ -172,107 +179,122 @@ export default function AssistantPanel({
   // 실패했을 때 "다시 물어보기" — 마지막으로 보낸 부탁을 그대로 한 번 더 보낸다.
   const lastUserText = [...messages].reverse().find((m) => m.role === "user")?.text ?? "";
 
+  // 아직 한 마디도 안 나눈 상태 — 리스트 화면과 같은 문법(그림 하나 + 한 줄)으로 둔다.
+  const empty = messages.length === 0 && !loading;
+
   return (
     <div className="flex h-full flex-col">
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-3">
-        <ul className="flex flex-col gap-2.5 pb-3">
-          {messages.map((m, i) => {
-            const hasPins = Boolean(m.pins && m.pins.length > 0);
-            const unpinned = hasPins ? m.pins!.filter((p) => !pinnedIds.has(p.id)) : [];
-            const showRetry = Boolean(
-              m.isError && !loading && i === messages.length - 1 && lastUserText
-            );
-            return (
-              <li key={i} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
-                <div
-                  className={`rounded-[var(--radius-card)] px-3.5 py-2.5 text-sm leading-relaxed ${
-                    m.role === "user" ? "msg-in-me" : "msg-in-ai"
-                  } ${hasPins ? "w-full" : "max-w-[85%]"} ${
-                    m.role === "user"
-                      ? "rounded-br-[6px] bg-[var(--accent)] text-white"
-                      : m.isError
-                        ? "rounded-bl-[6px] bg-[var(--surface)] text-[var(--danger)] shadow-[var(--shadow-1)]"
-                        : "rounded-bl-[6px] bg-[var(--surface)] text-[var(--text)] shadow-[var(--shadow-1)]"
-                  }`}
-                >
-                  <p className="whitespace-pre-wrap">{m.text}</p>
+      {empty ? (
+        // 위아래가 통째로 빈 화면이라 글자를 가운데(눈으로 보는 가운데는 살짝 위)에 앉힌다.
+        <div className="flex min-h-0 flex-1 items-center justify-center px-4 pb-10">
+          <div className="dw-empty">
+            <span className="dw-empty-art" aria-hidden>
+              <MessageCircleQuestionMark size={30} strokeWidth={1.8} />
+            </span>
+            <span className="dw-empty-title">어디로 갈지 물어보세요</span>
+          </div>
+        </div>
+      ) : (
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-3">
+          <ul className="flex flex-col gap-2.5 pb-3">
+            {messages.map((m, i) => {
+              const hasPins = Boolean(m.pins && m.pins.length > 0);
+              const unpinned = hasPins ? m.pins!.filter((p) => !pinnedIds.has(p.id)) : [];
+              const showRetry = Boolean(
+                m.isError && !loading && i === messages.length - 1 && lastUserText
+              );
+              return (
+                <li key={i} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
+                  <div
+                    className={`rounded-[var(--radius-card)] px-3.5 py-2.5 text-sm leading-relaxed ${
+                      m.role === "user" ? "msg-in-me" : "msg-in-ai"
+                    } ${hasPins ? "w-full" : "max-w-[85%]"} ${
+                      m.role === "user"
+                        ? "rounded-br-[6px] bg-[var(--accent)] text-white"
+                        : m.isError
+                          ? "rounded-bl-[6px] bg-[var(--surface)] text-[var(--danger)] shadow-[var(--shadow-1)]"
+                          : "rounded-bl-[6px] bg-[var(--surface)] text-[var(--text)] shadow-[var(--shadow-1)]"
+                    }`}
+                  >
+                    <p className="whitespace-pre-wrap">{m.text}</p>
 
-                  {showRetry && (
-                    <button
-                      type="button"
-                      onClick={() => onSend(lastUserText)}
-                      className="mt-2 flex items-center gap-1.5 rounded-[var(--radius-control)] border border-[var(--border-strong)] px-3 py-1.5 text-xs font-semibold text-[var(--text)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"
-                    >
-                      <RotateCcw size={12} strokeWidth={2.5} aria-hidden />
-                      다시 물어보기
-                    </button>
-                  )}
+                    {showRetry && (
+                      <button
+                        type="button"
+                        onClick={() => onSend(lastUserText)}
+                        className="mt-2 flex items-center gap-1.5 rounded-[var(--radius-control)] border border-[var(--border-strong)] px-3 py-1.5 text-xs font-semibold text-[var(--text)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                      >
+                        <RotateCcw size={12} strokeWidth={2.5} aria-hidden />
+                        다시 물어보기
+                      </button>
+                    )}
 
-                  {hasPins && (
-                    <div className="mt-2.5">
-                      <ul className="flex flex-col gap-1.5">
-                        {m.pins!.map((pin) => (
-                          <CandidateCard
-                            key={pin.id}
-                            pin={pin}
-                            pinned={pinnedIds.has(pin.id)}
-                            onPin={() => onPin([pin])}
-                          />
-                        ))}
-                      </ul>
-                      {unpinned.length >= 2 && (
-                        <button
-                          type="button"
-                          onClick={() => onPin(unpinned)}
-                          className="press mt-2 w-full rounded-[var(--radius-control)] border border-[var(--border-strong)] px-3 py-2 text-sm text-[var(--accent)] transition-[background,border-color,transform] duration-200 hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]"
-                        >
-                          {unpinned.length}곳 모두 꽂기
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  {m.sources && m.sources.length > 0 && (
-                    <div className="mt-2.5 border-t border-[var(--border)] pt-2">
-                      <p className="text-xs text-[var(--text-faint)]">출처</p>
-                      <ul className="mt-1 flex flex-col gap-2">
-                        {m.sources.slice(0, MAX_SHOWN_SOURCES).map((s) => (
-                          <li key={s.url} className="flex items-center gap-1.5 py-0.5">
-                            <a
-                              href={s.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="min-w-0 truncate text-xs text-[var(--text-muted)] underline underline-offset-2 transition-colors hover:text-[var(--accent)]"
-                            >
-                              {s.title}
-                            </a>
-                            <ExternalLink
-                              size={11}
-                              className="shrink-0 text-[var(--text-faint)]"
-                              aria-hidden
+                    {hasPins && (
+                      <div className="mt-2.5">
+                        <ul className="flex flex-col gap-1.5">
+                          {m.pins!.map((pin) => (
+                            <CandidateCard
+                              key={pin.id}
+                              pin={pin}
+                              pinned={pinnedIds.has(pin.id)}
+                              onPin={() => onPin([pin])}
                             />
-                            {s.blogger && (
-                              <span className="shrink-0 text-xs text-[var(--text-faint)]">
-                                {s.blogger}
-                              </span>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
+                          ))}
+                        </ul>
+                        {unpinned.length >= 2 && (
+                          <button
+                            type="button"
+                            onClick={() => onPin(unpinned)}
+                            className="press mt-2 w-full rounded-[var(--radius-control)] border border-[var(--border-strong)] px-3 py-2 text-sm text-[var(--accent)] transition-[background,border-color,transform] duration-200 hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]"
+                          >
+                            {unpinned.length}곳 모두 꽂기
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {m.sources && m.sources.length > 0 && (
+                      <div className="mt-2.5 border-t border-[var(--border)] pt-2">
+                        <p className="text-xs text-[var(--text-faint)]">출처</p>
+                        <ul className="mt-1 flex flex-col gap-2">
+                          {m.sources.slice(0, MAX_SHOWN_SOURCES).map((s) => (
+                            <li key={s.url} className="flex items-center gap-1.5 py-0.5">
+                              <a
+                                href={s.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="min-w-0 truncate text-xs text-[var(--text-muted)] underline underline-offset-2 transition-colors hover:text-[var(--accent)]"
+                              >
+                                {s.title}
+                              </a>
+                              <ExternalLink
+                                size={11}
+                                className="shrink-0 text-[var(--text-faint)]"
+                                aria-hidden
+                              />
+                              {s.blogger && (
+                                <span className="shrink-0 text-xs text-[var(--text-faint)]">
+                                  {s.blogger}
+                                </span>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+            {loading && (
+              <li className="flex justify-start">
+                <LoadingBubble />
               </li>
-            );
-          })}
-          {loading && (
-            <li className="flex justify-start">
-              <LoadingBubble />
-            </li>
-          )}
-        </ul>
-        <div ref={bottomRef} />
-      </div>
+            )}
+          </ul>
+          <div ref={bottomRef} />
+        </div>
+      )}
 
       <div className="shrink-0 border-t border-[var(--border)] bg-[var(--surface)] px-4 pb-3 pt-2.5">
         <div className="flex items-center gap-2">
