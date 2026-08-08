@@ -681,6 +681,11 @@ body {
 .dw-input--icon {
   padding-left: 40px;
 }
+/* 체크리스트 담당자 칸 — "누가" 한 단어만 들어갈 좁은 폭 고정.
+   Tailwind 폭 유틸(w-20)은 레이어 밖 .dw-input의 width:100%에 지므로 여기서 못 박는다. */
+.dw-input--who {
+  width: 5rem;
+}
 /* 타임라인 속 작은 시각 입력칸 — 폭을 고정해 이름 자리를 지킨다 */
 .dw-input--time {
   width: 4.9rem;

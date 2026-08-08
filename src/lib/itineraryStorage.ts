@@ -55,7 +55,8 @@ export function sanitizeItinerary(value: unknown): Itinerary {
   for (const key of ["packing", "agenda", "shopping"] as const) {
     const raw = parsed[key];
     if (!Array.isArray(raw)) continue;
-    const list = raw.filter(isChecklistItem);
+    // 글자가 하나도 없는 유령 항목은 걷어낸다 — 빈 줄이 남아 칩 숫자만 올리는 것 방지.
+    const list = raw.filter(isChecklistItem).filter((i) => i.text.trim() !== "");
     if (list.length > 0) it[key] = list;
   }
   if (Array.isArray(parsed.meetups)) {

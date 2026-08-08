@@ -105,7 +105,7 @@ export default function ChecklistCard({
                     value={item.assignee ?? ""}
                     onChange={(e) => patch(item.id, { assignee: e.target.value })}
                     placeholder="누가"
-                    className="dw-input dw-input--sm w-20 shrink-0 text-xs"
+                    className="dw-input dw-input--sm dw-input--who shrink-0 text-xs"
                     aria-label={`${item.text} 담당자`}
                   />
                 )}
