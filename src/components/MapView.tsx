@@ -31,6 +31,7 @@ import type { Pin } from "@/lib/types";
 import { PIN_TYPES, pinMarkerSvg } from "@/lib/pinTypes";
 import { googleMapsUrl, placeSearchUrl } from "@/lib/mapLinks";
 import { importMapsLibrary } from "@/lib/googleMaps";
+import { splitMemoLines } from "@/lib/memoLines";
 
 /** 하루치 동선 — 일정 화면에서 짠 순서대로 핀 자리를 이은 선 하나. */
 export interface DayRoute {
@@ -930,6 +931,10 @@ function PinMarker({
   const cfg = PIN_TYPES[pin.type];
   // 지우기는 한 번 더 물어본다 — 손이 스쳐 사라지면 되돌릴 길이 없다.
   const [asking, setAsking] = useState(false);
+  // 근거 글은 평소엔 접어 둔다 — 고리 그림을 눌러야 펼쳐진다.
+  const [showSources, setShowSources] = useState(false);
+  const memoLines = useMemo(() => splitMemoLines(pin.memo), [pin.memo]);
+  const sources = pin.sources ?? [];
 
   // 기울기는 핀마다 고정된 값(-2~2도) — 이름표(id) 글자 합으로 정해져 새로고침해도 같다.
   const icon = useMemo<google.maps.Icon>(() => {
@@ -953,7 +958,10 @@ function PinMarker({
       // 핀은 누를 수 있는 단추다 — 이름을 붙여 읽어 주는 프로그램에도 들리게 한다.
       title={pin.name}
       opacity={isMine ? 1 : 0.78}
-      onClose={() => setAsking(false)}
+      onClose={() => {
+        setAsking(false);
+        setShowSources(false);
+      }}
     >
       <div className="map-popup">
         <div className="map-popup__title flex items-center gap-1.5 font-semibold text-[var(--text)]">
@@ -973,29 +981,47 @@ function PinMarker({
             </span>
           )}
         </div>
-        {pin.memo && (
-          <div className="mt-1 whitespace-pre-wrap text-xs text-[var(--text-muted)]">
-            {pin.memo}
-          </div>
+        {memoLines.length > 0 && (
+          <ul className="mt-1 flex flex-col gap-0.5 text-xs text-[var(--text-muted)]">
+            {memoLines.map((line, i) => (
+              <li key={i} className="flex items-start gap-1.5">
+                <span
+                  aria-hidden
+                  className="mt-[6px] h-1 w-1 shrink-0 rounded-full bg-[var(--text-faint)]"
+                />
+                <span className="min-w-0">{line}</span>
+              </li>
+            ))}
+          </ul>
         )}
-        {pin.address && (
-          <div className="mt-1 flex items-start gap-1 text-xs text-[var(--text-faint)]">
-            <MapPin size={11} aria-hidden className="mt-0.5 shrink-0" />
-            <span className="min-w-0">{pin.address}</span>
+        {sources.length > 0 && (
+          <div className="mt-1.5">
+            <button
+              type="button"
+              onClick={() => setShowSources((v) => !v)}
+              aria-expanded={showSources}
+              aria-label="추천 근거 글"
+              title="추천 근거 글"
+              className="press flex h-7 w-7 items-center justify-center rounded-full text-[var(--text-faint)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--accent)]"
+            >
+              <Link2 size={13} strokeWidth={2.2} aria-hidden />
+            </button>
+            {showSources && (
+              <div className="mt-1 flex flex-col gap-0.5">
+                {sources.map((source) => (
+                  <a
+                    key={source.url}
+                    href={source.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block min-w-0 truncate text-xs text-[var(--text-faint)] underline underline-offset-2"
+                  >
+                    {source.title}
+                  </a>
+                ))}
+              </div>
+            )}
           </div>
-        )}
-        {pin.sources?.[0] && (
-          <a
-            href={pin.sources[0].url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-1 flex items-center gap-1 text-xs text-[var(--text-faint)]"
-          >
-            <Link2 size={11} aria-hidden className="shrink-0" />
-            <span className="min-w-0 truncate underline underline-offset-2">
-              {pin.sources[0].title}
-            </span>
-          </a>
         )}
         {asking ? (
           <div className="popup-actions items-center">

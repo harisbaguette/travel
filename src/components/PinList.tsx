@@ -1,10 +1,19 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ExternalLink, Map as MapIcon, MapPin, Pencil, Sparkles, Trash2 } from "lucide-react";
+import {
+  ExternalLink,
+  Link2,
+  Map as MapIcon,
+  MapPin,
+  Pencil,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
 import type { Pin } from "@/lib/types";
 import { PIN_TYPES } from "@/lib/pinTypes";
 import { googleMapsUrl } from "@/lib/mapLinks";
+import { splitMemoLines } from "@/lib/memoLines";
 
 interface PinListProps {
   pins: Pin[];
@@ -29,6 +38,8 @@ export default function PinList({
 }: PinListProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  // 근거 글은 평소엔 접어 둔다 — 고리 그림을 누른 핀 하나만 펼친다.
+  const [sourceOpenId, setSourceOpenId] = useState<string | null>(null);
 
   const sortedPins = useMemo(
     () => [...pins].sort((a, b) => b.createdAt - a.createdAt),
@@ -56,6 +67,9 @@ export default function PinList({
         const mine = isMine(pin);
         const isOpen = expandedId === pin.id;
         const asking = confirmId === pin.id;
+        const memoLines = splitMemoLines(pin.memo);
+        const sources = pin.sources ?? [];
+        const sourceOpen = sourceOpenId === pin.id;
         return (
           <li key={pin.id} className={isOpen ? "bg-[var(--surface-raised)]" : ""}>
             <div className="flex items-center pr-1 transition-colors hover:bg-[var(--surface-hover)]">
@@ -63,6 +77,7 @@ export default function PinList({
                 type="button"
                 onClick={() => {
                   setConfirmId(null);
+                  setSourceOpenId(null);
                   setExpandedId((cur) => (cur === pin.id ? null : pin.id));
                 }}
                 className="dw-row min-w-0 flex-1"
@@ -100,27 +115,52 @@ export default function PinList({
 
             {isOpen && (
               <div className="pb-3 pl-[3.25rem] pr-3">
-                {pin.memo && (
-                  <p className="whitespace-pre-wrap text-xs leading-relaxed text-[var(--text-muted)]">
-                    {pin.memo}
-                  </p>
+                {memoLines.length > 0 && (
+                  <ul className="flex flex-col gap-1 text-xs leading-relaxed text-[var(--text-muted)]">
+                    {memoLines.map((line, i) => (
+                      <li key={i} className="flex items-start gap-1.5">
+                        <span
+                          aria-hidden
+                          className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-[var(--text-faint)]"
+                        />
+                        <span className="min-w-0">{line}</span>
+                      </li>
+                    ))}
+                  </ul>
                 )}
-                {pin.address && (
-                  <p className="mt-1.5 text-xs text-[var(--text-faint)]">{pin.address}</p>
-                )}
-                {pin.sources?.[0] && (
-                  <a
-                    href={pin.sources[0].url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-1.5 flex items-center gap-1 text-xs text-[var(--text-faint)] transition-colors hover:text-[var(--accent)]"
-                  >
-                    <span className="shrink-0">출처:</span>
-                    <span className="min-w-0 truncate underline underline-offset-2">
-                      {pin.sources[0].title}
-                    </span>
-                    <ExternalLink size={11} className="shrink-0" aria-hidden />
-                  </a>
+                {sources.length > 0 && (
+                  <div className="mt-1.5">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSourceOpenId((cur) => (cur === pin.id ? null : pin.id))
+                      }
+                      aria-expanded={sourceOpen}
+                      aria-label="추천 근거 글"
+                      title="추천 근거 글"
+                      className="press flex h-7 w-7 items-center justify-center rounded-full text-[var(--text-faint)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--accent)]"
+                    >
+                      <Link2 size={14} strokeWidth={2.2} aria-hidden />
+                    </button>
+                    {sourceOpen && (
+                      <div className="mt-1 flex flex-col gap-1">
+                        {sources.map((source) => (
+                          <a
+                            key={source.url}
+                            href={source.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 text-xs text-[var(--text-faint)] transition-colors hover:text-[var(--accent)]"
+                          >
+                            <span className="min-w-0 truncate underline underline-offset-2">
+                              {source.title}
+                            </span>
+                            <ExternalLink size={11} className="shrink-0" aria-hidden />
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 )}
 
                 {asking ? (
