@@ -897,10 +897,18 @@ body {
   color: var(--text);
   border-color: var(--border-strong);
 }
-/* 확대·축소 단추 — 내 위치 단추 바로 위에 세로로. 손가락 화면(터치)에서는 숨긴다
-   (구글맵 앱처럼 벌려서 확대하면 되고, 화면만 좁아진다). */
+/* 확대·축소 단추 — 내 위치 단추 바로 위에 세로로 붙인다. 손가락 화면(터치)에서는 숨긴다
+   (구글맵 앱처럼 벌려서 확대하면 되고, 화면만 좁아진다).
+   같은 구석에 있는 출처 ⓘ 위에 차곡차곡 쌓이면 화면 한가운데까지 밀려 올라가므로,
+   쌓임에서 빼내(absolute) 지도 모서리에서 바로 잰 자리에 고정한다. */
 .leaflet-bottom.leaflet-right .leaflet-control-zoom {
-  margin: 0 18px calc(var(--dock-space) + 128px) 0;
+  position: absolute;
+  /* 내 위치 단추와 세로 중심선 맞춤 — 오른쪽 38px 지점(내 위치 단추 가운데)에
+     제 너비의 절반을 밀어 넣어, 단추 너비가 달라져도 늘 가운데가 맞는다 */
+  right: 38px;
+  transform: translateX(50%);
+  bottom: calc(var(--dock-space) + 88px);
+  margin: 0;
   border: 1px solid rgba(255, 255, 255, 0.8);
   border-radius: 12px;
   box-shadow: var(--shadow-2);
@@ -964,12 +972,12 @@ body {
   color: var(--text-faint) !important;
 }
 
-/* 내 위치 단추 — 지도 오른쪽 아래. 지도가 아래 메뉴 뒤까지 깔리므로 메뉴 높이만큼 올리고,
-   자리 고르는 중엔 확인/취소 막대(48px+16px)가 그 위를 쓰므로 다시 72px 더 올려 둔다. */
+/* 내 위치 단추 — 지도 오른쪽 아래, 아래 메뉴 바로 위(엄지 닿는 자리). 지도가 메뉴 뒤까지
+   깔리므로 메뉴 높이만큼 올리고, 그 아래 출처 ⓘ(20px)와 겹치지 않게 조금 더 띄운다. */
 .map-locate-btn {
   position: absolute;
   right: 16px;
-  bottom: calc(var(--dock-space) + 72px);
+  bottom: calc(var(--dock-space) + 34px);
   z-index: 1000;
   width: 44px;
   height: 44px;
@@ -989,26 +997,55 @@ body {
   cursor: not-allowed;
 }
 
-/* 핀 마커 — 종류 색으로 꽉 찬 물방울 + 흰 아이콘(Lucide), 흰 테두리 링.
-   채움 색은 마커 글자 안에 직접 써 넣으므로 물방울 모양을 안쪽 칸이 맡는다
-   (바깥에서 나중에 칠하면 화면이 다시 그려질 때 색이 지워진다). */
+/* 핀 마커 — 종이 지도에 꽂은 압정: 종류 색 둥근 머리 + 흰 아이콘 + 가는 바늘대.
+   구글 지도가 그리는 물방울 핀과 모양 문법 자체가 달라서 멀리서도 우리 핀이 바로 보인다.
+   채움 색은 마커 글자 안에 직접 써 넣는다(바깥에서 나중에 칠하면 화면이 다시
+   그려질 때 색이 지워진다). 바늘대는 머리 색을 그대로 물려받는다(background: inherit). */
 .pin-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
+  position: relative;
+  width: 34px;
+  height: 42px;
+}
+/* 바늘 끝이 닿는 자리의 옅은 그림자 — 지도에 "꽂혀 있다"는 느낌을 준다 */
+.pin-icon::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -1px;
+  width: 10px;
+  height: 3px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: rgba(36, 30, 25, 0.25);
 }
 .pin-icon > span {
+  position: absolute;
+  top: 0;
+  left: 2px;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 50% 50% 50% 0;
-  transform: rotate(-45deg);
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
   border: 2.5px solid #fff;
   box-shadow: 0 2px 8px rgba(36, 30, 25, 0.35);
+  /* 커질 때 바늘 끝(땅에 닿은 점)을 붙잡고 커진다 — 가리키는 자리가 안 흔들린다 */
+  transform-origin: 15px 42px;
+}
+/* 바늘대 — 머리 밑에서 내려오는 가는 기둥, 흰 테두리를 둘러 지도 위에서도 또렷하다 */
+.pin-icon > span::before {
+  content: "";
+  position: absolute;
+  top: 24px;
+  left: 50%;
+  z-index: -1;
+  width: 4px;
+  height: 18px;
+  margin-left: -2px;
+  background: inherit;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1.5px #fff, 0 2px 4px rgba(36, 30, 25, 0.3);
 }
 /* 친구 핀 — 색은 그대로 두고 살짝 투명하게만(종류 구분이 먼저다). 팝업에 '친구' 표시가 따로 있다 */
 .pin-icon--other > span {
@@ -1016,7 +1053,6 @@ body {
 }
 .pin-icon > span > i {
   display: block;
-  transform: rotate(45deg);
   line-height: 1;
   font-style: normal;
 }
@@ -1211,19 +1247,19 @@ body {
     background-position: -200% 0;
   }
 }
-/* 지도 핀이 톡 튀어나오는 모양 — 물방울은 -45도 돌아 있으니 그 각도를 유지한 채 커진다 */
+/* 지도 핀이 톡 꽂히는 모양 — 바늘 끝을 붙잡고(transform-origin) 땅에서 솟듯 커진다 */
 @keyframes dw-pin-in {
   0% {
     opacity: 0;
-    transform: rotate(-45deg) scale(0.2);
+    transform: scale(0.2);
   }
   64% {
     opacity: 1;
-    transform: rotate(-45deg) scale(1.14);
+    transform: scale(1.14);
   }
   100% {
     opacity: 1;
-    transform: rotate(-45deg) scale(1);
+    transform: scale(1);
   }
 }
 /* ── 어디서나 쓰는 움직임 딱지 ──
@@ -1586,7 +1622,7 @@ li.dw-card:nth-child(n + 7) {
 }
 @media (hover: hover) and (pointer: fine) {
   .pin-icon:hover > span {
-    transform: rotate(-45deg) scale(1.16);
+    transform: scale(1.16);
     box-shadow: 0 6px 16px rgba(36, 30, 25, 0.42);
   }
 }
