@@ -173,14 +173,19 @@ function toEnglishQuery(query: string): string | null {
   return q;
 }
 
-// 테이블 우선 → 주소 사전(한국어 그대로) → 주소 사전(영어로 바꿔서) 순서로 찾는다.
+// 테이블 → 주소 사전(한국어) → 주소 사전(영어) → 구글(열쇠 없이) 순서로 찾는다.
 export async function resolveCity(query: string): Promise<LatLng | null> {
   const fromTable = findCity(query);
   if (fromTable) return fromTable;
   const direct = await searchCity(query);
   if (direct) return direct;
   const en = toEnglishQuery(query);
-  if (en) return searchCity(en);
+  if (en) {
+    const fromEn = await searchCity(en);
+    if (fromEn) return fromEn;
+  }
+  const fromGoogle = await googleEmbedSearch(query);
+  if (fromGoogle.length > 0) return [fromGoogle[0].lat, fromGoogle[0].lng];
   return null;
 }
 
@@ -350,7 +355,37 @@ async function googlePlacesSearch(
   return out;
 }
 
-// 구글(열쇠 있을 때) → 무료 사전 한국어 → 무료 사전 영어 순서로 찾는다.
+// ── 구글 검색(열쇠 없이) — 우리 서버가 구글 지도 끼워넣기 화면을 대신 읽어 준다 ──
+// 무료 사전(Photon/Nominatim)이 모르는 한국 상호("누리플렉스" 등)까지 찾는다.
+// 위치가 아니라 이름으로만 찾으므로, 지도 근처 우선이 필요한 일반 낱말 검색에서는
+// 무료 사전을 먼저 쓰고 이건 마지막 예비로만 부른다.
+async function googleEmbedSearch(
+  query: string,
+  signal?: AbortSignal
+): Promise<PlaceSuggestion[]> {
+  try {
+    const res = await fetch(`/api/search-place?q=${encodeURIComponent(query)}`, {
+      signal,
+    });
+    if (!res.ok) return [];
+    const data = (await res.json()) as {
+      results?: { name?: string; lat?: number; lng?: number }[];
+    };
+    const out: PlaceSuggestion[] = [];
+    for (const r of data.results ?? []) {
+      if (typeof r?.lat !== "number" || typeof r?.lng !== "number") continue;
+      out.push({ name: r.name || query, address: "", lat: r.lat, lng: r.lng, zoom: 16 });
+      if (out.length >= 3) break;
+    }
+    return out;
+  } catch (e) {
+    // 도중 취소는 그대로 알리고, 그 밖의 실패는 "못 찾음"으로 처리
+    if (e instanceof DOMException && e.name === "AbortError") throw e;
+    return [];
+  }
+}
+
+// 구글 공식(열쇠 있을 때) → 무료 사전 한국어 → 무료 사전 영어 → 구글(열쇠 없이) 순서.
 export async function suggestPlaces(
   query: string,
   near?: LatLng,
@@ -370,6 +405,9 @@ export async function suggestPlaces(
   const direct = await photonSearch(q, near, signal);
   if (direct.length > 0) return direct;
   const en = toEnglishQuery(q);
-  if (en) return photonSearch(en, near, signal);
-  return [];
+  if (en) {
+    const fromEn = await photonSearch(en, near, signal);
+    if (fromEn.length > 0) return fromEn;
+  }
+  return googleEmbedSearch(q, signal);
 }

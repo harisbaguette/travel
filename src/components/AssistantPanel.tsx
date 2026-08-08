@@ -1,17 +1,26 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, MapPin, Sparkles } from "lucide-react";
+import { ArrowUp, ExternalLink, Sparkles } from "lucide-react";
 import type { Pin } from "@/lib/types";
 
 // 비서 화면 — AI에게 채팅으로 시키는 곳.
 // 지도는 손으로 꽂고, 여기서는 "다낭 맛집 찾아줘"처럼 말로 부탁한다.
+
+/** 답변의 근거가 된 블로그 글 — 화면 아래 "출처" 줄에 그대로 보여 준다. */
+export interface AssistantSource {
+  title: string;
+  url: string;
+  blogger?: string;
+}
 
 export interface AssistantMsg {
   role: "user" | "assistant";
   text: string;
   /** AI가 찾아온 핀 후보 — "골라서 꽂기" 단추로 시트를 연다 */
   pins?: Pin[];
+  /** 근거로 삼은 블로그 글 목록 */
+  sources?: AssistantSource[];
   /** 실패 안내 등 — 회색이 아닌 경고 톤으로 보여준다 */
   isError?: boolean;
 }
@@ -31,6 +40,8 @@ const EXAMPLES = [
   "아이랑 가기 좋은 관광지 추천해줘",
   "분위기 좋은 카페 알려줘",
 ];
+
+const MAX_SHOWN_SOURCES = 6;
 
 export default function AssistantPanel({
   messages,
@@ -59,12 +70,10 @@ export default function AssistantPanel({
     <div className="flex h-full flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-3">
         {messages.length === 0 && (
-          <div className="mx-auto mt-10 max-w-[300px] text-center">
-            <Sparkles size={28} strokeWidth={1.8} className="mx-auto text-[var(--accent)]" aria-hidden />
-            <p className="dw-display mt-3 text-[1.2rem] text-[var(--text)]">비서에게 시켜 보세요</p>
-            <p className="mt-1.5 text-xs leading-relaxed text-[var(--text-muted)]">
-              맛집·관광지·카페를 말로 부탁하면 AI가 조사해서 핀 후보를 만들어 와요. 마음에 드는 곳만
-              골라 꽂으면 끝.
+          <div className="mx-auto mt-12 max-w-[300px]">
+            <Sparkles size={22} strokeWidth={1.5} className="text-[var(--text-faint)]" aria-hidden />
+            <p className="mt-3 text-sm leading-relaxed text-[var(--text-muted)]">
+              찾고 싶은 곳을 말로 부탁하면 네이버 블로그 후기를 찾아 핀 후보를 만들어 와요.
             </p>
             <div className="mt-5 flex flex-col gap-2">
               {EXAMPLES.map((ex) => (
@@ -72,20 +81,20 @@ export default function AssistantPanel({
                   key={ex}
                   type="button"
                   onClick={() => onSend(ex)}
-                  className="rounded-[13px] bg-[var(--surface)] px-4 py-2.5 text-left text-sm text-[var(--text)] shadow-[var(--shadow-1)]"
+                  className="rounded-[var(--radius-control)] border border-[var(--border-strong)] px-3.5 py-2.5 text-left text-sm text-[var(--text)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"
                 >
                   {ex}
                 </button>
               ))}
-              <button
-                type="button"
-                onClick={onQuickFood}
-                disabled={quickLoading}
-                className="rounded-[13px] bg-[var(--accent-bg)] px-4 py-2.5 text-left text-sm font-semibold text-[var(--accent)] disabled:opacity-60"
-              >
-                {quickLoading ? "지도에서 찾는 중…" : "🍜 지도 화면 안 음식점 바로 긁어오기"}
-              </button>
             </div>
+            <button
+              type="button"
+              onClick={onQuickFood}
+              disabled={quickLoading}
+              className="mt-1 inline-flex min-h-11 items-center text-xs text-[var(--text-muted)] underline underline-offset-2 transition-colors hover:text-[var(--accent)] disabled:opacity-60"
+            >
+              {quickLoading ? "지도에서 찾는 중…" : "지도 화면 안 음식점 바로 긁어오기"}
+            </button>
           </div>
         )}
 
@@ -93,22 +102,52 @@ export default function AssistantPanel({
           {messages.map((m, i) => (
             <li key={i} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
               <div
-                className={`max-w-[85%] whitespace-pre-wrap rounded-[16px] px-3.5 py-2.5 text-sm leading-relaxed ${
+                className={`max-w-[85%] rounded-[var(--radius-card)] px-3.5 py-2.5 text-sm leading-relaxed ${
                   m.role === "user"
                     ? "bg-[var(--accent)] text-white"
                     : m.isError
-                      ? "bg-[var(--surface)] text-[var(--danger)] shadow-[var(--shadow-1)]"
-                      : "bg-[var(--surface)] text-[var(--text)] shadow-[var(--shadow-1)]"
+                      ? "border border-[var(--border-strong)] text-[var(--danger)]"
+                      : "border border-[var(--border-strong)] text-[var(--text)]"
                 }`}
               >
-                {m.text}
+                <p className="whitespace-pre-wrap">{m.text}</p>
+
+                {m.sources && m.sources.length > 0 && (
+                  <div className="mt-2.5 border-t border-[var(--border)] pt-2">
+                    <p className="text-xs text-[var(--text-faint)]">출처</p>
+                    <ul className="mt-1 flex flex-col gap-2">
+                      {m.sources.slice(0, MAX_SHOWN_SOURCES).map((s) => (
+                        <li key={s.url} className="flex items-center gap-1.5 py-0.5">
+                          <a
+                            href={s.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="min-w-0 truncate text-xs text-[var(--text-muted)] underline underline-offset-2 transition-colors hover:text-[var(--accent)]"
+                          >
+                            {s.title}
+                          </a>
+                          <ExternalLink
+                            size={11}
+                            className="shrink-0 text-[var(--text-faint)]"
+                            aria-hidden
+                          />
+                          {s.blogger && (
+                            <span className="shrink-0 text-xs text-[var(--text-faint)]">
+                              {s.blogger}
+                            </span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
                 {m.pins && m.pins.length > 0 && (
                   <button
                     type="button"
                     onClick={() => onPickPins(m.pins!)}
-                    className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-[12px] bg-[var(--accent-bg)] px-3 py-2 text-sm font-bold text-[var(--accent)]"
+                    className="mt-2.5 w-full rounded-[var(--radius-control)] border border-[var(--border-strong)] px-3 py-2 text-sm text-[var(--accent)] transition-colors hover:border-[var(--accent)]"
                   >
-                    <MapPin size={15} strokeWidth={2.4} aria-hidden />
                     {m.pins.length}곳 골라서 꽂기
                   </button>
                 )}
@@ -117,9 +156,9 @@ export default function AssistantPanel({
           ))}
           {loading && (
             <li className="flex justify-start">
-              <div className="flex items-center gap-2 rounded-[16px] bg-[var(--surface)] px-3.5 py-2.5 text-sm text-[var(--text-muted)] shadow-[var(--shadow-1)]">
+              <div className="flex items-center gap-2 rounded-[var(--radius-card)] border border-[var(--border-strong)] px-3.5 py-2.5 text-sm text-[var(--text-muted)]">
                 <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-[var(--border-strong)] border-t-[var(--accent)]" />
-                조사하는 중… (30초쯤 걸릴 수 있어요)
+                후기 찾는 중…
               </div>
             </li>
           )}

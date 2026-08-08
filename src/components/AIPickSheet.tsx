@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check } from "lucide-react";
+import { Check, ExternalLink } from "lucide-react";
 import type { Pin } from "@/lib/types";
 import { PIN_TYPES } from "@/lib/pinTypes";
 import { useSheet } from "@/lib/useSheet";
@@ -58,21 +58,27 @@ export default function AIPickSheet({ found, onAdd, onClose }: AIPickSheetProps)
           {found.map((pin) => {
             const cfg = PIN_TYPES[pin.type];
             const on = picked.has(pin.id);
+            // 근거 글은 첫 번째 것만 보여 준다 — 줄이 길어지지 않게.
+            const src = pin.sources?.[0];
             return (
-              <li key={pin.id}>
+              // 고르는 단추와 출처 링크를 형제로 둔다(단추 안에 링크를 넣으면 안 된다).
+              <li
+                key={pin.id}
+                className={`overflow-hidden rounded-[var(--radius-control)] border transition-colors ${
+                  on ? "border-[var(--accent)]" : "border-[var(--border-strong)]"
+                }`}
+              >
                 <button
                   type="button"
                   onClick={() => toggle(pin.id)}
                   aria-pressed={on}
-                  className={`flex w-full items-center gap-3 rounded-[13px] px-3 py-2.5 text-left transition-colors ${
-                    on ? "bg-[var(--accent-bg)]" : "bg-[var(--surface-raised)]"
-                  }`}
+                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left"
                 >
                   <span
                     className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
                       on
                         ? "bg-[var(--accent)] text-white"
-                        : "border-2 border-[var(--border-strong)] bg-[var(--surface)]"
+                        : "border-2 border-[var(--border-strong)]"
                     }`}
                     aria-hidden
                   >
@@ -85,11 +91,23 @@ export default function AIPickSheet({ found, onAdd, onClose }: AIPickSheetProps)
                     <span className="truncate text-sm font-semibold text-[var(--text)]">
                       {pin.name}
                     </span>
-                    <span className="text-[11px] text-[var(--text-muted)]">
-                      {cfg.label}
-                    </span>
+                    <span className="text-xs text-[var(--text-muted)]">{cfg.label}</span>
                   </span>
                 </button>
+                {src && (
+                  <a
+                    href={src.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex items-center gap-1.5 border-t border-[var(--border)] px-3 py-2 text-xs text-[var(--text-muted)] transition-colors hover:text-[var(--accent)]"
+                  >
+                    <span className="min-w-0 truncate underline underline-offset-2">
+                      {src.title}
+                    </span>
+                    <ExternalLink size={11} className="shrink-0" aria-hidden />
+                  </a>
+                )}
               </li>
             );
           })}

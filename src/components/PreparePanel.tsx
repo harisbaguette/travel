@@ -3,38 +3,36 @@
 import { useState } from "react";
 import {
   AlarmClock,
+  BedDouble,
   CalendarDays,
   ChevronDown,
   ListChecks,
   Luggage,
-  MapPin,
   Plane,
   ShoppingCart,
 } from "lucide-react";
 import type { ChecklistItem, Itinerary, Pin } from "@/lib/types";
+import { daysBetween } from "@/lib/dates";
 import ChecklistCard from "./ChecklistCard";
 import ItineraryPanel from "./ItineraryPanel";
 import MeetupPanel from "./MeetupPanel";
-import PinList from "./PinList";
 import TravelInfoPanel from "./TravelInfoPanel";
 
-interface TripPanelProps {
+interface PreparePanelProps {
   pins: Pin[];
   itinerary: Itinerary;
-  currentUserId: string;
   onShowOnMap: (pin: Pin) => void;
-  onPinDelete: (id: string) => void;
   onItineraryChange: (it: Itinerary) => void;
 }
 
 type SectionKey =
+  | "flights"
   | "plan"
-  | "pins"
-  | "info"
+  | "stays"
+  | "meetup"
   | "packing"
-  | "agenda"
   | "shopping"
-  | "meetup";
+  | "agenda";
 
 // 체크된 개수 — 섹션 머리의 "2/5" 힌트용.
 function doneOf(items: ChecklistItem[]): number {
@@ -43,29 +41,25 @@ function doneOf(items: ChecklistItem[]): number {
 
 function nightsOf(it: Itinerary): number {
   if (!it.startDate || !it.endDate) return 0;
-  const a = new Date(`${it.startDate}T00:00:00Z`).getTime();
-  const b = new Date(`${it.endDate}T00:00:00Z`).getTime();
-  if (Number.isNaN(a) || Number.isNaN(b)) return 0;
-  return Math.max(Math.floor((b - a) / 86400000), 0);
+  return Math.max(daysBetween(it.startDate, it.endDate), 0);
 }
 
-// 여행 관리 한 화면 — 날짜별 계획·핀 목록·항공/숙소를 접었다 폈다 하며 한 곳에서 본다.
-export default function TripPanel({
+// 떠나기 전에 채우는 화면 — 항공·날짜·숙소·집합·짐·장보기·안건을 접었다 폈다 한 곳에서 채운다.
+export default function PreparePanel({
   pins,
   itinerary,
-  currentUserId,
   onShowOnMap,
-  onPinDelete,
   onItineraryChange,
-}: TripPanelProps) {
+}: PreparePanelProps) {
+  // 비행기 날짜가 여행 날짜의 뿌리라 항공 칸만 펼쳐 둔다.
   const [open, setOpen] = useState<Record<SectionKey, boolean>>({
-    plan: true,
-    pins: true,
-    info: false,
-    packing: false,
-    agenda: false,
-    shopping: false,
+    flights: true,
+    plan: false,
+    stays: false,
     meetup: false,
+    packing: false,
+    shopping: false,
+    agenda: false,
   });
 
   const toggle = (key: SectionKey) =>
@@ -113,9 +107,17 @@ export default function TripPanel({
     <div className="flex h-full flex-col overflow-y-auto bg-[var(--bg)] px-4 pb-6 pt-3">
       <div className="flex flex-col gap-3">
         {section(
+          "flights",
+          Plane,
+          "항공",
+          flightCount > 0 ? `${flightCount}편` : "아직 비어 있음",
+          <TravelInfoPanel itinerary={itinerary} onChange={onItineraryChange} part="flights" />
+        )}
+
+        {section(
           "plan",
           CalendarDays,
-          "날짜별 계획",
+          "일정 설정",
           nights > 0 ? `${nights}박 ${nights + 1}일 · ${planned}곳` : "날짜 고르기",
           <ItineraryPanel
             pins={pins}
@@ -126,29 +128,11 @@ export default function TripPanel({
         )}
 
         {section(
-          "pins",
-          MapPin,
-          "꽂아 둔 곳",
-          `${pins.length}곳`,
-          <PinList
-            pins={pins}
-            currentUserId={currentUserId}
-            onShowOnMap={onShowOnMap}
-            onPinDelete={onPinDelete}
-          />
-        )}
-
-        {section(
-          "info",
-          Plane,
-          "항공 · 숙소",
-          flightCount + stayCount > 0
-            ? `비행 ${flightCount} · 숙소 ${stayCount}`
-            : "아직 비어 있음",
-          <div className="flex flex-col gap-3">
-            <TravelInfoPanel itinerary={itinerary} onChange={onItineraryChange} part="flights" />
-            <TravelInfoPanel itinerary={itinerary} onChange={onItineraryChange} part="stays" />
-          </div>
+          "stays",
+          BedDouble,
+          "숙소",
+          stayCount > 0 ? `${stayCount}곳` : "아직 비어 있음",
+          <TravelInfoPanel itinerary={itinerary} onChange={onItineraryChange} part="stays" />
         )}
 
         {section(

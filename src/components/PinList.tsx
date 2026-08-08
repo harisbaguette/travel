@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Map as MapIcon, Trash2 } from "lucide-react";
+import { ExternalLink, Map as MapIcon, Trash2 } from "lucide-react";
 import type { Pin } from "@/lib/types";
 import { PIN_TYPES } from "@/lib/pinTypes";
 
@@ -41,7 +41,7 @@ export default function PinList({
   if (sortedPins.length === 0) {
     return (
       <p className="px-1 py-2 text-sm text-[var(--text-muted)]">
-        아직 핀이 없어요 — 지도 화면 오른쪽 아래 + 를 눌러 꽂아 보세요
+        아직 핀이 없어요 — 아래 메뉴 가운데 + 를 눌러 꽂아 보세요
       </p>
     );
   }
@@ -159,9 +159,25 @@ export default function PinList({
               )}
 
               {isOpen && !asking && (
-                <p className="whitespace-pre-wrap px-3 pb-3 pl-[3.75rem] text-xs leading-relaxed text-[var(--text-muted)]">
-                  {pin.memo || "적어 둔 메모가 없어요"}
-                </p>
+                <div className="px-3 pb-3 pl-[3.75rem]">
+                  <p className="whitespace-pre-wrap text-xs leading-relaxed text-[var(--text-muted)]">
+                    {pin.memo || "적어 둔 메모가 없어요"}
+                  </p>
+                  {pin.sources?.[0] && (
+                    <a
+                      href={pin.sources[0].url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-1.5 flex items-center gap-1 text-xs text-[var(--text-faint)] transition-colors hover:text-[var(--accent)]"
+                    >
+                      <span className="shrink-0">출처:</span>
+                      <span className="min-w-0 truncate underline underline-offset-2">
+                        {pin.sources[0].title}
+                      </span>
+                      <ExternalLink size={11} className="shrink-0" aria-hidden />
+                    </a>
+                  )}
+                </div>
               )}
             </li>
           );

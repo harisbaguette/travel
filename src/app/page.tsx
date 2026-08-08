@@ -11,9 +11,10 @@ import dynamic from "next/dynamic";
 import type { Map as LeafletMap } from "leaflet";
 import {
   Bot,
+  CalendarDays,
+  Luggage,
   Map as MapIcon,
   MapPin,
-  NotebookPen,
   Plus,
   Search,
   X,
@@ -26,7 +27,7 @@ import {
   type PlaceSuggestion,
 } from "@/lib/cities";
 import type { Itinerary, Pin, PinType, MapBounds } from "@/lib/types";
-import { PIN_TYPES } from "@/lib/pinTypes";
+import { PIN_TYPES, PIN_TYPE_LIST } from "@/lib/pinTypes";
 import { loadPins, savePins } from "@/lib/pinStorage";
 import {
   loadItinerary,
@@ -54,9 +55,11 @@ import {
 } from "@/lib/sync";
 import AIPickSheet from "@/components/AIPickSheet";
 import AssistantPanel, { type AssistantMsg } from "@/components/AssistantPanel";
+import PinList from "@/components/PinList";
 import PinModal from "@/components/PinModal";
+import PreparePanel from "@/components/PreparePanel";
 import ProjectSwitcher from "@/components/ProjectSwitcher";
-import TripPanel from "@/components/TripPanel";
+import SchedulePanel from "@/components/SchedulePanel";
 
 const MapView = dynamic(() => import("@/components/MapView"), {
   ssr: false,
@@ -161,14 +164,18 @@ function useHydrated(): boolean {
   );
 }
 
-// 화면은 셋 — 손으로 꽂는 지도, AI에게 시키는 비서, 계획을 모아 둔 여행.
+// 화면은 넷 — 손으로 꽂는 지도, AI에게 시키는 비서, 떠나기 전에 채우는 준비, 현지에서 보는 일정.
 const DOCK_ITEMS = [
   { key: "map", icon: MapIcon, label: "지도" },
   { key: "assistant", icon: Bot, label: "비서" },
-  { key: "trip", icon: NotebookPen, label: "여행" },
+  { key: "prepare", icon: Luggage, label: "준비" },
+  { key: "schedule", icon: CalendarDays, label: "일정" },
 ] as const;
 
 type Tab = (typeof DOCK_ITEMS)[number]["key"];
+
+// 지도 탭 안에서 지도로 볼지 목록으로 볼지.
+type MapMode = "map" | "list";
 
 export default function Home() {
   const hydrated = useHydrated();
@@ -637,6 +644,7 @@ export default function Home() {
           ok: boolean;
           reply?: string;
           pins?: Pin[];
+          sources?: { title: string; url: string; blogger?: string }[];
           error?: string;
         };
         if (!data.ok) {
@@ -657,6 +665,7 @@ export default function Home() {
             role: "assistant",
             text: data.reply ?? "",
             pins: fresh.length > 0 ? fresh : undefined,
+            sources: data.sources && data.sources.length > 0 ? data.sources : undefined,
           },
         ]);
       } catch {
@@ -887,25 +896,30 @@ export default function Home() {
 
       {/* 몸통 — 지도 위에 여행 화면이 통째로 덮인다 */}
       <div className="relative min-h-0 flex-1 overflow-hidden">
-        <MapView
-          onReady={handleMapReady}
-          pins={viewPins}
-          currentUserId={viewUserId}
-          initialCenter={initialView.center}
-          initialZoom={initialView.zoom}
-          onPinDelete={handlePinDelete}
-          onPinDragEnd={handlePinDragEnd}
-          searchTarget={searchTarget}
-          onSearchTargetAdd={handleSearchTargetAdd}
-          onSearchTargetClose={() => setSearchTarget(null)}
-          className="h-full w-full"
-        />
+        {/* 지도는 탭을 바꿔도 그대로 남아 있다(다시 그리면 느리다). 다만 덮여 있는 동안에는
+            지도 핀들이 키보드 순서에 끼어 있어, 탭키로 비서·여행 화면에 닿기 전에 보이지도 않는
+            핀 수십 개를 지나가게 된다. inert로 덮인 동안만 통째로 건너뛰게 한다. */}
+        <div className="absolute inset-0" inert={tab !== "map"}>
+          <MapView
+            onReady={handleMapReady}
+            pins={viewPins}
+            currentUserId={viewUserId}
+            initialCenter={initialView.center}
+            initialZoom={initialView.zoom}
+            onPinDelete={handlePinDelete}
+            onPinDragEnd={handlePinDragEnd}
+            searchTarget={searchTarget}
+            onSearchTargetAdd={handleSearchTargetAdd}
+            onSearchTargetClose={() => setSearchTarget(null)}
+            className="h-full w-full"
+          />
+        </div>
 
         {/* 첫 안내 — 핀이 하나도 없을 때만. 검색 중이거나 자리를 고르는 중엔 가리지 않게 숨긴다. */}
         {tab === "map" && viewPins.length === 0 && !searchTarget && !picking && (
           <div className="pointer-events-none absolute inset-x-8 top-1/2 z-[999] -translate-y-1/2 rounded-[16px] bg-[var(--surface)] px-5 py-4 text-center shadow-[var(--shadow-2)]">
             <p className="dw-display text-[1.25rem] text-[var(--text)]">
-              오른쪽 아래 + 를 눌러 보세요
+              아래 가운데 + 를 눌러 보세요
             </p>
             <p className="mt-1 text-xs text-[var(--text-muted)]">
               지도를 움직여 자리를 맞추면 핀이 꽂혀요
@@ -923,35 +937,25 @@ export default function Home() {
           </div>
         )}
 
-        {/* 지도 위 떠 있는 단추 — 평소엔 +, 자리를 고르는 중엔 확인/취소 막대 */}
-        {tab === "map" &&
-          (picking ? (
-            <div className="absolute inset-x-4 bottom-4 z-[1001] flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setPicking(false)}
-                className="h-12 shrink-0 rounded-[14px] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--text-muted)] shadow-[var(--shadow-2)]"
-              >
-                취소
-              </button>
-              <button
-                type="button"
-                onClick={confirmPick}
-                className="h-12 min-w-0 flex-1 rounded-[14px] bg-[var(--accent)] text-sm font-bold text-white shadow-[var(--shadow-2)] active:scale-[0.98]"
-              >
-                여기에 핀 꽂기
-              </button>
-            </div>
-          ) : (
+        {/* 지도 위 떠 있는 막대 — 자리를 고르는 중에만. 핀 추가 단추는 아래 메뉴 가운데로 옮겼다. */}
+        {tab === "map" && picking && (
+          <div className="absolute inset-x-4 bottom-4 z-[1001] flex items-center gap-2">
             <button
               type="button"
-              onClick={handleFab}
-              aria-label="핀 추가"
-              className="absolute bottom-4 right-4 z-[1000] flex h-14 w-14 items-center justify-center rounded-full bg-[var(--accent)] text-white shadow-[var(--shadow-2)] active:scale-95"
+              onClick={() => setPicking(false)}
+              className="h-12 shrink-0 rounded-[14px] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--text-muted)] shadow-[var(--shadow-2)]"
             >
-              <Plus size={24} strokeWidth={2.5} aria-hidden />
+              취소
             </button>
-          ))}
+            <button
+              type="button"
+              onClick={confirmPick}
+              className="h-12 min-w-0 flex-1 rounded-[14px] bg-[var(--accent)] text-sm font-bold text-white shadow-[var(--shadow-2)] active:scale-[0.98]"
+            >
+              여기에 핀 꽂기
+            </button>
+          </div>
+        )}
 
         {/* 비서 — AI에게 말로 시키는 화면. 대화는 페이지가 들고 있어 탭을 오가도 남는다. */}
         {tab === "assistant" && (
@@ -981,7 +985,7 @@ export default function Home() {
         )}
       </div>
 
-      {/* 하단 독 — Doweek 문법: 유리판 세 칸. 핀 추가 단추는 지도 위로 옮겼다. */}
+      {/* 하단 독 — Doweek 문법: 유리판 세 칸 + 가운데로 튀어나온 파란 + 단추(FAB) */}
       <nav className="dock-nav" aria-label="화면 이동">
         <div className="dock-wrap">
           <div className="dock-glass dock-glass--3">
@@ -1006,6 +1010,15 @@ export default function Home() {
               );
             })}
           </div>
+          {/* 자리를 고르는 중엔 지도 위 확인/취소 막대가 같은 자리를 쓰므로 숨긴다 */}
+          <button
+            type="button"
+            onClick={handleFab}
+            aria-label="핀 추가"
+            className={`dock-fab${picking ? " dock-fab--hidden" : ""}`}
+          >
+            <Plus size={24} strokeWidth={2.5} aria-hidden />
+          </button>
         </div>
       </nav>
 

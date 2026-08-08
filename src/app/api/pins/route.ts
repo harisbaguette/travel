@@ -1,4 +1,4 @@
-import type { Pin } from "@/lib/types";
+import type { Pin, PinSource } from "@/lib/types";
 import { getDb } from "@/lib/db";
 
 // 핀 CRUD — Neon(Postgres) pins 테이블. 스키마: src/lib/schema.sql
@@ -24,7 +24,27 @@ interface PinRow {
   created_at: number | string;
   created_by: string;
   deleted: boolean;
+  sources: unknown; // jsonb — [{title, url}]
   updated_ms: number | string; // extract(epoch from updated_at) * 1000
+}
+
+// 추천 근거 링크 정리 — 배열 3개까지, 제목 200자·주소 500자까지,
+// 주소는 http(s)로 시작하는 것만. 어긋나는 항목만 골라 버린다.
+const MAX_SOURCES = 3;
+
+function cleanSources(value: unknown): PinSource[] {
+  if (!Array.isArray(value)) return [];
+  const out: PinSource[] = [];
+  for (const raw of value) {
+    if (out.length >= MAX_SOURCES) break;
+    if (!raw || typeof raw !== "object") continue;
+    const s = raw as Record<string, unknown>;
+    if (typeof s.title !== "string" || s.title.length === 0 || s.title.length > 200) continue;
+    if (typeof s.url !== "string" || s.url.length === 0 || s.url.length > 500) continue;
+    if (!/^https?:\/\//i.test(s.url)) continue;
+    out.push({ title: s.title, url: s.url });
+  }
+  return out;
 }
 
 function rowToPin(r: PinRow): Pin & { updatedAt: number; deleted: boolean } {
@@ -41,6 +61,7 @@ function rowToPin(r: PinRow): Pin & { updatedAt: number; deleted: boolean } {
     // 예전 데이터에 created_by='AI'로 저장된 핀이 남아 있다 — 사람이 아니므로
     // 주인 없음으로 취급해야 모든 기기에서 "친구 핀"(회색 점선)으로 오인되지 않는다.
     createdBy: !r.created_by || r.created_by === "AI" ? undefined : r.created_by,
+    sources: cleanSources(r.sources),
     updatedAt: Math.round(Number(r.updated_ms)),
     deleted: Boolean(r.deleted),
   };
@@ -71,7 +92,9 @@ function validPin(pin: unknown): pin is Pin {
     p.name.length <= 200 &&
     (p.memo === undefined || (typeof p.memo === "string" && p.memo.length <= 2000)) &&
     (p.emoji === undefined || (typeof p.emoji === "string" && p.emoji.length <= 8)) &&
-    (p.createdBy === undefined || (typeof p.createdBy === "string" && p.createdBy.length <= 100))
+    (p.createdBy === undefined || (typeof p.createdBy === "string" && p.createdBy.length <= 100)) &&
+    // 근거 링크는 배열이기만 하면 받고, 항목별 어긋남은 cleanSources가 골라 버린다.
+    (p.sources === undefined || Array.isArray(p.sources))
   );
 }
 
@@ -89,7 +112,7 @@ export async function GET(request: Request): Promise<Response> {
   try {
     const rows = (await sql`
       select id, room_id, lat, lng, type, name, memo, emoji, is_ai,
-             created_at, created_by, deleted,
+             created_at, created_by, deleted, sources,
              extract(epoch from updated_at) * 1000 as updated_ms,
              extract(epoch from now()) * 1000 as server_now
       from pins
@@ -133,13 +156,15 @@ export async function POST(request: Request): Promise<Response> {
   const p = body.pin;
   try {
     const rows = (await sql`
-      insert into pins (id, room_id, lat, lng, type, name, memo, emoji, is_ai, created_at, created_by, deleted)
+      insert into pins (id, room_id, lat, lng, type, name, memo, emoji, is_ai, created_at, created_by, deleted, sources)
       values (${p.id}, ${room}, ${p.lat}, ${p.lng}, ${p.type}, ${p.name},
               ${p.memo ?? ""}, ${p.emoji ?? ""}, ${Boolean(p.isAI)},
-              ${Number(p.createdAt) || Date.now()}, ${p.createdBy === "AI" ? "" : p.createdBy ?? ""}, false)
+              ${Number(p.createdAt) || Date.now()}, ${p.createdBy === "AI" ? "" : p.createdBy ?? ""}, false,
+              ${JSON.stringify(cleanSources(p.sources))}::jsonb)
       on conflict (id) do update set
         lat = excluded.lat, lng = excluded.lng, type = excluded.type,
         name = excluded.name, memo = excluded.memo, emoji = excluded.emoji,
+        sources = excluded.sources,
         deleted = false, updated_at = now()
       returning extract(epoch from updated_at) * 1000 as updated_ms
     `) as { updated_ms: number | string }[];

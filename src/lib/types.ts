@@ -1,6 +1,12 @@
 // 핀(지도 마커) 데이터 모델 — 모든 핀 기능의 중심 타입
 export type PinType = "food" | "spot" | "cafe" | "stay" | "etc";
 
+// 이 핀을 왜 추천했는지 보여 주는 근거 글(네이버 블로그 후기) 링크.
+export interface PinSource {
+  title: string;
+  url: string;
+}
+
 export interface Pin {
   id: string;
   lat: number;
@@ -13,6 +19,8 @@ export interface Pin {
   createdAt: number;
   // 누가 찍었는지 구분(같이 편집). 없으면 본인이 찍은 것으로 간주.
   createdBy?: string;
+  // 추천 근거 링크(최대 3개). 옛 저장본에는 없으므로 선택 사항.
+  sources?: PinSource[];
 }
 
 // Overpass API 검색용 화면 범위 — Leaflet getBounds() 그대로 매핑

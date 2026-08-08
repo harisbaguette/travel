@@ -314,6 +314,8 @@ function SearchTargetMarker({
     <Marker
       position={[target.lat, target.lng]}
       icon={icon}
+      title={target.name}
+      alt={target.name}
       zIndexOffset={500}
       ref={(m) => {
         markerRef.current = m as L.Marker | null;
@@ -381,6 +383,10 @@ function PinMarker({
     <Marker
       position={[pin.lat, pin.lng]}
       icon={icon}
+      // 핀은 키보드로도 고를 수 있는 단추다 — 이름이 없으면 읽어 주는 프로그램이
+      // "단추"라고만 말한다. 이름을 붙여 어떤 핀인지 들리게 한다.
+      title={pin.name}
+      alt={pin.name}
       draggable={isMine}
       eventHandlers={{
         dragend(e) {
@@ -410,6 +416,19 @@ function PinMarker({
             <p className="mb-2 whitespace-pre-wrap text-xs text-[var(--text-muted)]">
               {pin.memo}
             </p>
+          )}
+          {pin.sources?.[0] && (
+            <a
+              href={pin.sources[0].url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mb-2 flex items-center gap-1 text-xs text-[var(--text-faint)]"
+            >
+              <span className="shrink-0">출처:</span>
+              <span className="min-w-0 truncate underline underline-offset-2">
+                {pin.sources[0].title}
+              </span>
+            </a>
           )}
           {onDelete &&
             (asking ? (

@@ -7,13 +7,21 @@ import { EMPTY_FLIGHT } from "@/lib/types";
 interface TravelInfoPanelProps {
   itinerary: Itinerary;
   onChange: (it: Itinerary) => void;
+  /** 항공 칸만 볼지 숙소 칸만 볼지 — 준비 화면이 둘을 따로 접었다 편다. */
+  part: "flights" | "stays";
 }
 
 // 여행 기록 — 비행(가는/오는 편) + 숙소. 종이 배경 위 흰 카드(DW 문법).
-export default function TravelInfoPanel({ itinerary, onChange }: TravelInfoPanelProps) {
+export default function TravelInfoPanel({ itinerary, onChange, part }: TravelInfoPanelProps) {
   const patchFlight = (key: "outbound" | "inbound", patch: Partial<FlightInfo>) => {
     const cur = itinerary[key] ?? { ...EMPTY_FLIGHT };
-    onChange({ ...itinerary, [key]: { ...cur, ...patch } });
+    const next: Itinerary = { ...itinerary, [key]: { ...cur, ...patch } };
+    // 여행 날짜의 뿌리는 비행기 날짜 — 가는 편 날짜가 첫날, 오는 편 날짜가 마지막 날이 된다.
+    if (patch.date) {
+      if (key === "outbound") next.startDate = patch.date;
+      else next.endDate = patch.date;
+    }
+    onChange(next);
   };
 
   const stays = itinerary.stays ?? [];
@@ -40,8 +48,8 @@ export default function TravelInfoPanel({ itinerary, onChange }: TravelInfoPanel
     onChange({ ...itinerary, stays: stays.filter((s) => s.id !== id) });
   };
 
-  return (
-    <div className="flex flex-col">
+  if (part === "flights") {
+    return (
       <div className="flex flex-col gap-3">
         <FlightCard
           title="가는 편"
@@ -59,7 +67,13 @@ export default function TravelInfoPanel({ itinerary, onChange }: TravelInfoPanel
           toPlaceholder="인천"
           onPatch={(p) => patchFlight("inbound", p)}
         />
+      </div>
+    );
+  }
 
+  return (
+    <div className="flex flex-col">
+      <div className="flex flex-col gap-3">
         {/* 숙소 */}
         <section className="dw-card p-4">
           <div className="mb-3 flex items-center justify-between">

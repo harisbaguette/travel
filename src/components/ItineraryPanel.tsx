@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { ArrowDown, ArrowUp, Map as MapIcon, X } from "lucide-react";
 import type { Itinerary, Pin } from "@/lib/types";
 import { PIN_TYPES } from "@/lib/pinTypes";
+import { addDays, daysBetween, weekdayOf } from "@/lib/dates";
 
 interface ItineraryPanelProps {
   pins: Pin[];
@@ -15,28 +16,6 @@ interface ItineraryPanelProps {
 
 // 날짜 범위가 실수로 너무 길어져도 카드가 무한히 생기지 않도록 막는 상한.
 const MAX_DAYS = 60;
-
-// "YYYY-MM-DD" 문자열 하루 더하기 — UTC 기준이라 시간대 때문에 날짜가 밀리지 않음.
-function addDays(date: string, n: number): string {
-  const d = new Date(`${date}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + n);
-  return d.toISOString().slice(0, 10);
-}
-
-function daysBetween(start: string, end: string): number {
-  const a = new Date(`${start}T00:00:00Z`).getTime();
-  const b = new Date(`${end}T00:00:00Z`).getTime();
-  if (Number.isNaN(a) || Number.isNaN(b)) return 0;
-  return Math.floor((b - a) / 86400000);
-}
-
-const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
-
-function weekdayOf(date: string): string {
-  const d = new Date(`${date}T00:00:00Z`);
-  if (Number.isNaN(d.getTime())) return "";
-  return WEEKDAYS[d.getUTCDay()];
-}
 
 export default function ItineraryPanel({
   pins,

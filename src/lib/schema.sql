@@ -18,8 +18,13 @@ create table if not exists pins (
   created_at  bigint      not null,
   created_by  text        not null default '',
   deleted     boolean     not null default false,
+  -- 비서가 추천 근거로 쓴 블로그 글 링크 목록 [{title, url}] — 없으면 빈 목록.
+  sources     jsonb       not null default '[]'::jsonb,
   updated_at  timestamptz not null default now()
 );
+
+-- 이미 만들어 둔 DB에도 위 칸을 붙인다(여러 번 실행해도 안전하다).
+alter table pins add column if not exists sources jsonb not null default '[]'::jsonb;
 
 create index if not exists pins_room_idx on pins (room_id);
 -- "이 시각 이후 바뀐 것만 주세요" 조회를 빠르게 하기 위한 색인

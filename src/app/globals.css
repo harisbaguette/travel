@@ -141,7 +141,7 @@ body {
 .dock-nav {
   display: flex;
   justify-content: center;
-  /* 위 여백은 예전 가운데 + 단추가 튀어나올 자리였다 — 단추가 지도로 옮겨져 줄임 */
+  /* 위 여백은 가운데 + 단추가 튀어나올 자리 — dock-wrap이 relative라 여기 안에서 겹치지 않는다 */
   padding: 12px 14px calc(12px + env(safe-area-inset-bottom)) 14px;
   background: var(--bg);
   flex-shrink: 0;
@@ -244,9 +244,41 @@ body {
 .dock-glass--2 {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
-/* 화면이 셋일 때 — 가운데 단추 없이 세 칸을 고르게 */
+/* 화면이 셋일 때 — 아래 가운데 + 단추와 겹치지 않게 세 칸을 고르게 */
 .dock-glass--3 {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+/* 화면이 넷일 때 — 가운데 + 단추가 두 번째·세 번째 칸 사이 빈 자리에 앉는다 */
+.dock-glass--4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+/* 독 가운데서 위로 튀어나온 파란 + 단추 — Doweek FAB 이식 */
+.dock-fab {
+  position: absolute;
+  /* 가운데 탭(비서) 아이콘과 겹쳐 못 누르지 않도록, 살짝만 걸치고 대부분 막대 위로 뜨게 */
+  top: -50px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border: none;
+  border-radius: 9999px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 0 0 4px var(--bg), 0 10px 20px -6px rgba(0, 0, 0, 0.35);
+  transition: opacity 0.18s, transform 0.12s;
+}
+.dock-fab:active {
+  transform: translateX(-50%) scale(0.93);
+}
+.dock-fab--hidden {
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* ── 상단 여행 전환 알약 — Doweek ProjectSwitcher 이식 ── */
@@ -429,6 +461,37 @@ body {
 }
 .trip-section-body {
   padding: 0 2px 4px;
+}
+
+/* ── 지도 위 보기 전환(지도 | 리스트) — 독과 같은 유리판 문법 ── */
+.map-seg {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: saturate(180%) blur(24px);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow: var(--shadow-2), 0 0 0 0.5px rgba(0, 0, 0, 0.04);
+}
+.map-seg-item {
+  min-width: 76px;
+  height: 44px;
+  border: none;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.18s var(--ease), color 0.18s var(--ease);
+}
+.map-seg-item.active {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
 }
 
 /* ── 바닥에서 올라오는 입력 시트 — Doweek add-modal 이식 ── */
@@ -685,12 +748,12 @@ body {
   color: var(--text-faint) !important;
 }
 
-/* 내 위치 단추 — 오른쪽 아래 + 단추 바로 위에 한 줄로 세운다(겹치지 않게).
-   + 단추가 오른쪽 16px·아래 16px·지름 56px이므로 그 위 88px 자리에 가운데를 맞춘다. */
+/* 내 위치 단추 — 지도 오른쪽 아래. 자리 고르는 중엔 아래 확인/취소 막대(48px+16px)가
+   같은 자리를 쓰므로, 겹치지 않게 그 위 72px에 둔다. */
 .map-locate-btn {
   position: absolute;
-  right: 22px;
-  bottom: 88px;
+  right: 16px;
+  bottom: 72px;
   z-index: 1000;
   width: 44px;
   height: 44px;
