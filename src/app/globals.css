@@ -495,10 +495,47 @@ body {
   color: var(--text);
   border-color: var(--border-strong);
 }
+/* 지도 출처 표기 — 평소엔 작은 ⓘ 동그라미로 접고, 누르면 펼쳐진다 */
 .leaflet-control-attribution {
-  background: rgba(255, 255, 255, 0.85) !important;
-  color: var(--text-faint) !important;
+  background: rgba(255, 255, 255, 0.82) !important;
+  color: transparent !important;
+  width: 20px;
+  height: 20px;
+  padding: 0 !important;
+  margin: 0 6px 6px 0 !important;
+  font-size: 0;
+  line-height: 0;
+  border-radius: 999px;
+  overflow: hidden;
+  box-shadow: var(--shadow-1);
+  cursor: pointer;
+  outline: none;
+}
+.leaflet-control-attribution::before {
+  content: "ⓘ";
+  display: block;
+  width: 20px;
+  height: 20px;
+  font-size: 13px;
+  line-height: 20px;
+  text-align: center;
+  color: var(--text-faint);
+}
+.leaflet-control-attribution:hover,
+.leaflet-control-attribution:focus,
+.leaflet-control-attribution:focus-within {
+  width: auto;
+  height: auto;
+  padding: 2px 6px !important;
   font-size: 10px;
+  line-height: 1.5;
+  color: var(--text-faint) !important;
+  border-radius: 8px;
+}
+.leaflet-control-attribution:hover::before,
+.leaflet-control-attribution:focus::before,
+.leaflet-control-attribution:focus-within::before {
+  display: none;
 }
 .leaflet-control-attribution a {
   color: var(--text-faint) !important;

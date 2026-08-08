@@ -73,6 +73,15 @@ function VectorBaseLayer() {
     () => typeof window !== "undefined" && !webglAvailable()
   );
 
+  // 출처 표기는 평소 작은 ⓘ 동그라미로 접어 둔다(지도를 가리지 않게).
+  // "Leaflet" 링크는 지우고, 손가락으로 눌러도 펼쳐지도록 초점을 받게 한다.
+  useEffect(() => {
+    const control = map.attributionControl;
+    if (!control) return;
+    control.setPrefix(false);
+    control.getContainer()?.setAttribute("tabindex", "0");
+  }, [map]);
+
   useEffect(() => {
     if (fallback) return;
     let cancelled = false;
