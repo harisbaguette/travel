@@ -9,8 +9,21 @@ import {
   Popup,
   useMap,
   useMapEvents,
+  ZoomControl,
 } from "react-leaflet";
-import { CalendarPlus, LocateFixed } from "lucide-react";
+import {
+  CalendarPlus,
+  Clock,
+  Link2,
+  LocateFixed,
+  Map as MapIcon,
+  MapPin,
+  MapPinPlus,
+  Pencil,
+  Phone,
+  Trash2,
+  X,
+} from "lucide-react";
 import L, { type Map as LeafletMap } from "leaflet";
 import "leaflet.gridlayer.googlemutant";
 import type { Pin } from "@/lib/types";
@@ -37,10 +50,14 @@ interface MapViewProps {
   initialCenter?: [number, number];
   initialZoom?: number;
   /** 검색으로 찾은 자리 — 파란 점으로 잠시 표시해 둔다. */
-  searchTarget?: { lat: number; lng: number; name: string } | null;
+  searchTarget?: { lat: number; lng: number; name: string; address?: string } | null;
   onSearchTargetAdd?: () => void;
   onSearchTargetClose?: () => void;
   onPinDelete?: (id: string) => void;
+  /** 핀 말풍선의 "수정" — 이름·종류·메모 고치는 창을 부모가 띄운다. */
+  onPinEdit?: (pin: Pin) => void;
+  /** 지도 카드의 "핀 저장" — 그 자리를 새 핀으로 꽂는 창을 부모가 띄운다. */
+  onSavePlace?: (place: { lat: number; lng: number; name: string }) => void;
   /** 말풍선의 "일정에 넣기" — 며칠째에 넣을지 고르는 창을 부모가 띄운다. */
   onAddToSchedule?: (place: {
     lat: number;
@@ -137,8 +154,10 @@ interface PoiInfo {
 
 function PoiTapLayer({
   onAddToSchedule,
+  onSavePlace,
 }: {
   onAddToSchedule?: MapViewProps["onAddToSchedule"];
+  onSavePlace?: MapViewProps["onSavePlace"];
 }) {
   const [poi, setPoi] = useState<PoiInfo | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -177,7 +196,17 @@ function PoiTapLayer({
           }
         );
       })
-      .catch(() => {});
+      .catch(() => {
+        // 알아보기가 실패해도 "알아보는 중…"에 갇히지 않게 좌표 카드로 바꿔 준다
+        if (!ac.signal.aborted) {
+          setPoi({
+            kind: "address",
+            name: `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+            lat,
+            lng,
+          });
+        }
+      });
   };
 
   useMapEvents({
@@ -212,6 +241,15 @@ function PoiTapLayer({
         clickTimerRef.current = null;
       }
     },
+    // 마우스 오른쪽 누름·손가락 길게 누름 — 구글맵처럼 기다림 없이 바로 그 자리를 알아본다
+    contextmenu(e) {
+      if (clickTimerRef.current) {
+        clearTimeout(clickTimerRef.current);
+        clickTimerRef.current = null;
+      }
+      suppressRef.current = false;
+      lookup(e.latlng.lat, e.latlng.lng);
+    },
   });
 
   // 카드 내용이 갱신될 때마다 말풍선을 열어 둔다
@@ -245,45 +283,66 @@ function PoiTapLayer({
     >
       <Popup className="pin-popup">
         <div className="min-w-[180px] max-w-[230px]">
-          <div className="mb-0.5 font-semibold text-[var(--text)]">{poi.name}</div>
+          <div className="font-semibold text-[var(--text)]">{poi.name}</div>
           {poi.category && (
-            <div className="mb-1 text-xs text-[var(--text-muted)]">{poi.category}</div>
+            <div className="mt-0.5 text-xs text-[var(--text-muted)]">{poi.category}</div>
           )}
           {poi.hours && (
-            <div className="mb-0.5 text-xs text-[var(--text-muted)]">⏰ {poi.hours}</div>
+            <div className="mt-1 flex items-center gap-1 text-xs text-[var(--text-muted)]">
+              <Clock size={11} aria-hidden className="shrink-0" />
+              {poi.hours}
+            </div>
           )}
           {poi.phone && (
-            <div className="mb-0.5 text-xs text-[var(--text-muted)]">☎ {poi.phone}</div>
+            <div className="mt-0.5 flex items-center gap-1 text-xs text-[var(--text-muted)]">
+              <Phone size={11} aria-hidden className="shrink-0" />
+              {poi.phone}
+            </div>
           )}
-          {onAddToSchedule && !poi.pending && (
-            <button
-              type="button"
-              onClick={() =>
-                onAddToSchedule({ lat: poi.lat, lng: poi.lng, name: poi.name })
-              }
-              className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-lg bg-[var(--accent)] px-2 py-1.5 text-xs font-bold !text-white"
-            >
-              <CalendarPlus size={13} strokeWidth={2.4} aria-hidden />
-              일정에 넣기
-            </button>
+          {!poi.pending && (
+            <div className="popup-actions">
+              {onSavePlace && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSavePlace({ lat: poi.lat, lng: poi.lng, name: poi.name });
+                    setPoi(null);
+                  }}
+                  className="popup-action popup-action--accent"
+                >
+                  <span className="popup-action__icon">
+                    <MapPinPlus size={16} strokeWidth={2.2} aria-hidden />
+                  </span>
+                  핀 저장
+                </button>
+              )}
+              {onAddToSchedule && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onAddToSchedule({ lat: poi.lat, lng: poi.lng, name: poi.name })
+                  }
+                  className="popup-action"
+                >
+                  <span className="popup-action__icon">
+                    <CalendarPlus size={16} strokeWidth={2.2} aria-hidden />
+                  </span>
+                  일정
+                </button>
+              )}
+              <a
+                href={`https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lng}`}
+                target="_blank"
+                rel="noreferrer"
+                className="popup-action"
+              >
+                <span className="popup-action__icon">
+                  <MapIcon size={16} strokeWidth={2.2} aria-hidden />
+                </span>
+                구글 지도
+              </a>
+            </div>
           )}
-          <div className="mt-1.5 flex items-center gap-1.5">
-            <a
-              href={`https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lng}`}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-md border border-[var(--border)] px-2 py-1 text-xs font-semibold !text-[var(--text-muted)]"
-            >
-              구글맵에서 보기
-            </a>
-            <button
-              type="button"
-              onClick={() => setPoi(null)}
-              className="rounded-md border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-muted)]"
-            >
-              지우기
-            </button>
-          </div>
         </div>
       </Popup>
     </Marker>
@@ -303,6 +362,8 @@ const MapView = forwardRef<LeafletMap, MapViewProps>(function MapView(
     onSearchTargetAdd,
     onSearchTargetClose,
     onPinDelete,
+    onPinEdit,
+    onSavePlace,
     onAddToSchedule,
     className,
   },
@@ -318,8 +379,10 @@ const MapView = forwardRef<LeafletMap, MapViewProps>(function MapView(
       style={{ height: "100%", width: "100%" }}
     >
       <GoogleBaseLayer />
-      <PoiTapLayer onAddToSchedule={onAddToSchedule} />
+      <PoiTapLayer onAddToSchedule={onAddToSchedule} onSavePlace={onSavePlace} />
       {onReady && <MapReadyBridge onReady={onReady} />}
+      {/* 확대·축소 단추 — 마우스 화면에서만 보인다(손가락 화면은 벌려서 확대) */}
+      <ZoomControl position="bottomright" />
       <LocateButton />
       {searchTarget && (
         <SearchTargetMarker
@@ -360,6 +423,7 @@ const MapView = forwardRef<LeafletMap, MapViewProps>(function MapView(
           pin={pin}
           isMine={!pin.createdBy || !currentUserId || pin.createdBy === currentUserId}
           onDelete={onPinDelete}
+          onEdit={onPinEdit}
           onAddToSchedule={onAddToSchedule}
         />
       ))}
@@ -458,25 +522,23 @@ function SearchTargetMarker({
         markerRef.current = m as L.Marker | null;
       }}
     >
-      <Popup>
+      <Popup className="pin-popup">
         <div className="min-w-[160px]">
-          <div className="mb-2 font-semibold text-[var(--text)]">{target.name}</div>
-          <div className="flex items-center gap-1.5">
+          <div className="font-semibold text-[var(--text)]">{target.name}</div>
+          <div className="popup-actions">
             {onAdd && (
-              <button
-                type="button"
-                onClick={onAdd}
-                className="rounded-md bg-[var(--accent)] px-2 py-1 text-xs font-bold text-white"
-              >
-                핀으로 저장
+              <button type="button" onClick={onAdd} className="popup-action popup-action--accent">
+                <span className="popup-action__icon">
+                  <MapPinPlus size={16} strokeWidth={2.2} aria-hidden />
+                </span>
+                핀 저장
               </button>
             )}
             {onClose && (
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-md border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-muted)]"
-              >
+              <button type="button" onClick={onClose} className="popup-action">
+                <span className="popup-action__icon">
+                  <X size={16} strokeWidth={2.2} aria-hidden />
+                </span>
                 지우기
               </button>
             )}
@@ -491,11 +553,13 @@ function PinMarker({
   pin,
   isMine,
   onDelete,
+  onEdit,
   onAddToSchedule,
 }: {
   pin: Pin;
   isMine: boolean;
   onDelete?: (id: string) => void;
+  onEdit?: MapViewProps["onPinEdit"];
   onAddToSchedule?: MapViewProps["onAddToSchedule"];
 }) {
   const cfg = PIN_TYPES[pin.type];
@@ -528,8 +592,8 @@ function PinMarker({
       alt={pin.name}
     >
       <Popup className="pin-popup">
-        <div className="min-w-[180px]">
-          <div className="mb-1 flex items-center gap-1.5 font-semibold text-[var(--text)]">
+        <div className="min-w-[190px] max-w-[230px]">
+          <div className="flex items-center gap-1.5 font-semibold text-[var(--text)]">
             <cfg.Icon size={15} color={cfg.color} aria-hidden className="shrink-0" />
             <span>{pin.name}</span>
             {pin.isAI && (
@@ -544,84 +608,110 @@ function PinMarker({
             )}
           </div>
           {pin.memo && (
-            <p className="mb-2 whitespace-pre-wrap text-xs text-[var(--text-muted)]">
+            <div className="mt-1 whitespace-pre-wrap text-xs text-[var(--text-muted)]">
               {pin.memo}
-            </p>
+            </div>
           )}
           {pin.address && (
-            <p className="mb-1 text-xs text-[var(--text-faint)]">{pin.address}</p>
+            <div className="mt-1 flex items-start gap-1 text-xs text-[var(--text-faint)]">
+              <MapPin size={11} aria-hidden className="mt-0.5 shrink-0" />
+              <span className="min-w-0">{pin.address}</span>
+            </div>
           )}
           {pin.sources?.[0] && (
             <a
               href={pin.sources[0].url}
               target="_blank"
               rel="noopener noreferrer"
-              className="mb-1 flex items-center gap-1 text-xs text-[var(--text-faint)]"
+              className="mt-1 flex items-center gap-1 text-xs text-[var(--text-faint)]"
             >
-              <span className="shrink-0">출처:</span>
+              <Link2 size={11} aria-hidden className="shrink-0" />
               <span className="min-w-0 truncate underline underline-offset-2">
                 {pin.sources[0].title}
               </span>
             </a>
           )}
-          {onAddToSchedule && (
-            <button
-              type="button"
-              onClick={() =>
-                onAddToSchedule({
-                  lat: pin.lat,
-                  lng: pin.lng,
-                  name: pin.name,
-                  pinId: pin.id,
-                })
-              }
-              className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-[var(--accent)] px-2 py-1.5 text-xs font-bold !text-white"
-            >
-              <CalendarPlus size={13} strokeWidth={2.4} aria-hidden />
-              일정에 넣기
-            </button>
-          )}
-          <a
-            href={googleMapsUrl(pin)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mb-2 block text-xs text-[var(--text-faint)] underline underline-offset-2"
-          >
-            구글 지도에서 열기
-          </a>
-          {onDelete &&
-            (asking ? (
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-[var(--text-muted)]">
-                  {isMine ? "지울까요?" : "친구 핀이에요. 지울까요?"}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setAsking(false)}
-                  className="rounded-md border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-muted)]"
-                >
-                  취소
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAsking(false);
-                    onDelete(pin.id);
-                  }}
-                  className="rounded-md bg-[var(--danger)] px-2 py-1 text-xs font-bold text-white"
-                >
-                  지우기
-                </button>
-              </div>
-            ) : (
+          {asking ? (
+            <div className="popup-actions items-center">
+              <span className="min-w-0 flex-1 text-xs text-[var(--text-muted)]">
+                {isMine ? "지울까요?" : "친구 핀이에요. 지울까요?"}
+              </span>
               <button
                 type="button"
-                onClick={() => setAsking(true)}
-                className="rounded-md border border-[var(--border)] px-2 py-1 text-xs text-[var(--danger)] transition-colors hover:bg-[var(--surface-hover)]"
+                onClick={() => setAsking(false)}
+                className="rounded-md border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-muted)]"
               >
-                삭제
+                취소
               </button>
-            ))}
+              <button
+                type="button"
+                onClick={() => {
+                  setAsking(false);
+                  onDelete?.(pin.id);
+                }}
+                className="rounded-md bg-[var(--danger)] px-2 py-1 text-xs font-bold text-white"
+              >
+                지우기
+              </button>
+            </div>
+          ) : (
+            <div className="popup-actions">
+              {onAddToSchedule && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onAddToSchedule({
+                      lat: pin.lat,
+                      lng: pin.lng,
+                      name: pin.name,
+                      pinId: pin.id,
+                    })
+                  }
+                  className="popup-action popup-action--accent"
+                >
+                  <span className="popup-action__icon">
+                    <CalendarPlus size={16} strokeWidth={2.2} aria-hidden />
+                  </span>
+                  일정
+                </button>
+              )}
+              <a
+                href={googleMapsUrl(pin)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="popup-action"
+              >
+                <span className="popup-action__icon">
+                  <MapIcon size={16} strokeWidth={2.2} aria-hidden />
+                </span>
+                구글 지도
+              </a>
+              {onEdit && (
+                <button
+                  type="button"
+                  onClick={() => onEdit(pin)}
+                  className="popup-action"
+                >
+                  <span className="popup-action__icon">
+                    <Pencil size={16} strokeWidth={2.2} aria-hidden />
+                  </span>
+                  수정
+                </button>
+              )}
+              {onDelete && (
+                <button
+                  type="button"
+                  onClick={() => setAsking(true)}
+                  className="popup-action popup-action--danger"
+                >
+                  <span className="popup-action__icon">
+                    <Trash2 size={16} strokeWidth={2.2} aria-hidden />
+                  </span>
+                  삭제
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </Popup>
     </Marker>
