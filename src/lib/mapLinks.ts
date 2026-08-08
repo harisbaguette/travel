@@ -9,6 +9,14 @@ export function googleMapsUrl(pin: Pin): string {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
 }
 
+// 칸에 적힌 글로 열 주소를 만든다.
+// 붙여 넣은 게 이미 링크(공유 링크 등)면 그대로 열고, 글이면 구글 지도 검색으로 연다.
+export function mapHrefForText(text: string): string {
+  const t = text.trim();
+  if (/^https?:\/\/\S+$/i.test(t)) return t;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(t)}`;
+}
+
 // ── 반대 방향: 구글 지도 링크를 읽어 자리(좌표)와 이름을 꺼낸다 ──
 
 /** 구글 지도 링크에서 읽어 낸 것 — 좌표가 없고 이름만 있을 수도 있다. */

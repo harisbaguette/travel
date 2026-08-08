@@ -12,6 +12,7 @@ import {
 import type { FlightInfo, Itinerary, StayInfo } from "@/lib/types";
 import { EMPTY_FLIGHT } from "@/lib/types";
 import { addDays, daysBetween, shortDate, weekdayOf } from "@/lib/dates";
+import { mapHrefForText } from "@/lib/mapLinks";
 
 interface TravelInfoPanelProps {
   itinerary: Itinerary;
@@ -226,9 +227,7 @@ export default function TravelInfoPanel({ itinerary, onChange, part }: TravelInf
                   />
                 </label>
                 <a
-                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                    (s.address || s.name).trim()
-                  )}`}
+                  href={mapHrefForText(s.address || s.name)}
                   target="_blank"
                   rel="noreferrer"
                   aria-disabled={!(s.address || s.name).trim()}
