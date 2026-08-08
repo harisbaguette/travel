@@ -1,12 +1,20 @@
-// 핀(지도 마커) 데이터 모델 — 모든 핀 기능의 중심 타입
-export type PinType =
-  | "food"
-  | "spot"
-  | "cafe"
-  | "stay"
-  | "massage"
-  | "airport"
-  | "etc";
+// 핀(지도 마커) 데이터 모델 — 모든 핀 기능의 중심 타입.
+// 종류 목록은 여기 한 곳에만 적는다 — 화면(pinTypes.ts)·서버 검사(api/pins)·
+// 비서(api/assistant)가 전부 이 목록을 가져다 쓴다(따로 적으면 서로 어긋난다).
+export const PIN_TYPE_VALUES = [
+  "food",
+  "spot",
+  "cafe",
+  "stay",
+  "massage",
+  "airport",
+  "fruit",
+  "shopping",
+  "market",
+  "etc",
+] as const;
+
+export type PinType = (typeof PIN_TYPE_VALUES)[number];
 
 // 이 핀을 왜 추천했는지 보여 주는 근거 글(네이버 블로그 후기) 링크.
 export interface PinSource {
@@ -32,12 +40,22 @@ export interface Pin {
   sources?: PinSource[];
 }
 
+// 지도 자리 없이 글로만 적는 일정 한 줄 — "렌트카 받기", "호텔 체크아웃" 같은 것.
+export interface DayTextItem {
+  id: string;
+  text: string;
+}
+
 // 여행 일정 — 날짜별 핀 배정. simplify: 날짜 범위만 저장, 날짜 카드는 자동 생성.
 export interface DayPlan {
   date: string; // YYYY-MM-DD
   pinIds: string[]; // 그 날 방문할 핀 ID, 순서대로
-  // 핀별 방문 시각(HH:MM). 없으면 시간 미정 — 타임라인에 순서만 표시.
+  // 항목별 시각(HH:MM). 키는 핀 ID 또는 글 항목 ID. 없으면 시간 미정.
   times?: Record<string, string>;
+  // 글로만 적은 항목들 — 옛 저장본에는 없으므로 선택 사항.
+  texts?: DayTextItem[];
+  // 핀과 글 항목을 섞어 세운 순서(id 나열). 없으면 핀 먼저, 글 나중(dayEntries.dayOrder).
+  order?: string[];
 }
 
 // 비행 일정 — 가는 편/오는 편 각각 1개.

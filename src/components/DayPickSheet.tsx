@@ -59,7 +59,7 @@ export default function DayPickSheet({
                       {d.label}
                     </span>
                     <span className="block truncate text-xs text-[var(--text-muted)]">
-                      {shortDate(d.date)}({weekdayOf(d.date)}) · {d.count}곳
+                      {shortDate(d.date)}({weekdayOf(d.date)}) · {d.count}개
                     </span>
                   </span>
                   {d.already ? (

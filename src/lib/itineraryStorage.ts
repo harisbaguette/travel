@@ -42,7 +42,9 @@ export function sanitizeItinerary(value: unknown): Itinerary {
   const it: Itinerary = {
     startDate: typeof parsed.startDate === "string" ? parsed.startDate : "",
     endDate: typeof parsed.endDate === "string" ? parsed.endDate : "",
-    days: Array.isArray(parsed.days) ? parsed.days.filter(isDayPlan) : [],
+    days: Array.isArray(parsed.days)
+      ? parsed.days.filter(isDayPlan).map(cleanDay)
+      : [],
   };
   if (isFlight(parsed.outbound)) it.outbound = parsed.outbound;
   if (isFlight(parsed.inbound)) it.inbound = parsed.inbound;
@@ -67,6 +69,40 @@ function isDayPlan(d: unknown): d is Itinerary["days"][number] {
   if (!d || typeof d !== "object") return false;
   const o = d as { date?: unknown; pinIds?: unknown };
   return typeof o.date === "string" && Array.isArray(o.pinIds);
+}
+
+// 하루치 저장분을 안전한 모양으로 다듬는다 — 글 항목·순서표·시간표에 이상한 값이
+// 끼어 있으면 그 값만 걷어낸다(옛 저장본은 세 칸이 아예 없어도 그대로 통과).
+function cleanDay(d: Itinerary["days"][number]): Itinerary["days"][number] {
+  const raw = d as unknown as Record<string, unknown>;
+  const day: Itinerary["days"][number] = {
+    date: d.date,
+    pinIds: d.pinIds.filter((id): id is string => typeof id === "string"),
+  };
+  if (raw.times && typeof raw.times === "object" && !Array.isArray(raw.times)) {
+    const times: Record<string, string> = {};
+    for (const [k, v] of Object.entries(raw.times as Record<string, unknown>)) {
+      if (typeof v === "string" && v) times[k] = v;
+    }
+    if (Object.keys(times).length > 0) day.times = times;
+  }
+  if (Array.isArray(raw.texts)) {
+    const texts = (raw.texts as unknown[]).filter(
+      (t): t is { id: string; text: string } =>
+        Boolean(t) &&
+        typeof t === "object" &&
+        typeof (t as { id?: unknown }).id === "string" &&
+        typeof (t as { text?: unknown }).text === "string"
+    );
+    if (texts.length > 0) day.texts = texts.map((t) => ({ id: t.id, text: t.text }));
+  }
+  if (Array.isArray(raw.order)) {
+    const order = (raw.order as unknown[]).filter(
+      (id): id is string => typeof id === "string"
+    );
+    if (order.length > 0) day.order = order;
+  }
+  return day;
 }
 
 function isFlight(f: unknown): f is FlightInfo {

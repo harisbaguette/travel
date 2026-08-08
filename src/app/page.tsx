@@ -32,6 +32,7 @@ import type { Itinerary, Pin, PinType } from "@/lib/types";
 import { PIN_TYPES, PIN_TYPE_LIST } from "@/lib/pinTypes";
 import { isShortMapLink, parseGoogleMapsUrl } from "@/lib/mapLinks";
 import { dateRange, daysBetween } from "@/lib/dates";
+import { dayOrder, removePinsFromDay } from "@/lib/dayEntries";
 import type { DayRoute } from "@/components/MapView";
 import { loadPins, savePins } from "@/lib/pinStorage";
 import {
@@ -323,10 +324,7 @@ export default function Home() {
       if (deletedIds.length > 0) {
         setItinerary((prev) => ({
           ...prev,
-          days: prev.days.map((d) => ({
-            ...d,
-            pinIds: d.pinIds.filter((pid) => !deletedIds.includes(pid)),
-          })),
+          days: prev.days.map((d) => removePinsFromDay(d, deletedIds)),
         }));
       }
     },
@@ -554,10 +552,7 @@ export default function Home() {
       const wasPlanned = itinerary.days.some((d) => d.pinIds.includes(id));
       const nextItinerary = {
         ...itinerary,
-        days: itinerary.days.map((d) => ({
-          ...d,
-          pinIds: d.pinIds.filter((pid) => pid !== id),
-        })),
+        days: itinerary.days.map((d) => removePinsFromDay(d, [id])),
       };
       setItinerary(nextItinerary);
       if (wasPlanned) pushItinerary(room, nextItinerary);
@@ -571,7 +566,10 @@ export default function Home() {
         prev.map((p) => (p.id === id ? { ...p, lat, lng } : p))
       );
       const moved = pins.find((p) => p.id === id);
-      if (moved) void pushPin(room, { ...moved, lat, lng });
+      if (moved) {
+        void pushPin(room, { ...moved, lat, lng });
+        setNotice(`${moved.name} 자리를 옮겼어요`);
+      }
     },
     [pins, room]
   );
@@ -711,12 +709,16 @@ export default function Home() {
         }
       }
 
-      // 그 날짜 카드에 핀을 넣는다(이미 있으면 그대로)
+      // 그 날짜 카드에 핀을 넣는다(이미 있으면 그대로) — 글 항목과 섞인 순서표 맨 뒤에 붙인다.
       const days = [...itinerary.days];
       const idx = days.findIndex((d) => d.date === date);
       if (idx === -1) days.push({ date, pinIds: [pinId] });
       else if (!days[idx].pinIds.includes(pinId))
-        days[idx] = { ...days[idx], pinIds: [...days[idx].pinIds, pinId] };
+        days[idx] = {
+          ...days[idx],
+          pinIds: [...days[idx].pinIds, pinId],
+          order: [...dayOrder(days[idx]), pinId],
+        };
       const nextIt = { ...itinerary, days };
       setItinerary(nextIt);
       pushItinerary(room, nextIt);
@@ -793,7 +795,8 @@ export default function Home() {
     return viewItinerary.days
       .map((d) => ({
         date: d.date,
-        points: d.pinIds
+        // 글 항목이 섞여 있어도 핀만 골라, 화면에 보이는 그 순서 그대로 선을 잇는다.
+        points: dayOrder(d)
           .map((id) => byId.get(id))
           .filter((p): p is Pin => Boolean(p))
           .map((p) => [p.lat, p.lng] as [number, number]),
@@ -823,7 +826,7 @@ export default function Home() {
       return {
         date,
         label: `${i + 1}일차`,
-        count: day?.pinIds.length ?? 0,
+        count: (day?.pinIds.length ?? 0) + (day?.texts?.length ?? 0),
         already: Boolean(schedulePick.pinId && day?.pinIds.includes(schedulePick.pinId)),
       };
     });
@@ -854,24 +857,25 @@ export default function Home() {
           <button
             type="button"
             onClick={() => setSearchOpen((o) => !o)}
-            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-[12px] shadow-[var(--shadow-1)] transition-colors ${
+            className={`press flex h-11 w-11 shrink-0 items-center justify-center rounded-[12px] shadow-[var(--shadow-1)] transition-[background,color,box-shadow,transform] duration-200 ease-[var(--ease-out)] hover:shadow-[var(--shadow-lift)] ${
               searchOpen
                 ? "bg-[var(--accent)] text-white"
-                : "bg-[var(--surface)] text-[var(--text-muted)]"
+                : "bg-[var(--surface)] text-[var(--text-muted)] hover:text-[var(--accent)]"
             }`}
             aria-label={searchOpen ? "장소 검색 닫기" : "장소 검색 열기"}
             aria-expanded={searchOpen}
           >
+            {/* 돋보기와 X가 제자리에서 빙그르 돌며 바뀐다 — 같은 단추라는 게 눈에 보이게 */}
             {searchOpen ? (
-              <X size={19} strokeWidth={2.2} />
+              <X size={19} strokeWidth={2.2} className="anim-swap" />
             ) : (
-              <Search size={19} strokeWidth={2.2} />
+              <Search size={19} strokeWidth={2.2} className="anim-swap" />
             )}
           </button>
         </div>
 
         {searchOpen && (
-          <div className="mt-2 flex items-center gap-2">
+          <div className="anim-drop mt-2 flex items-center gap-2">
             <div className="relative min-w-0 flex-1">
               <Search
                 size={17}
@@ -912,7 +916,7 @@ export default function Home() {
                   id="place-suggestions"
                   role="listbox"
                   aria-label="장소 후보"
-                  className="absolute left-0 right-0 top-full z-[1200] mt-2 max-h-72 overflow-y-auto rounded-[16px] bg-[var(--surface)] py-1.5 shadow-[var(--shadow-2)]"
+                  className="anim-drop absolute left-0 right-0 top-full z-[1200] mt-2 max-h-72 overflow-y-auto rounded-[16px] bg-[var(--surface)] py-1.5 shadow-[var(--shadow-2)]"
                   onMouseDown={(e) => e.preventDefault()}
                 >
                   {pinMatches.map((p, i) => (
@@ -920,7 +924,7 @@ export default function Home() {
                       <button
                         type="button"
                         onClick={() => goToMyPin(p)}
-                        className={`flex w-full items-center gap-3 px-3.5 py-2.5 text-left ${
+                        className={`flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors duration-150 hover:bg-[var(--surface-hover)] ${
                           sugIdx === i ? "bg-[var(--surface-hover)]" : ""
                         }`}
                       >
@@ -952,7 +956,7 @@ export default function Home() {
                         <button
                           type="button"
                           onClick={() => goToPlace(s)}
-                          className={`flex w-full items-center gap-3 px-3.5 py-2.5 text-left ${
+                          className={`flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors duration-150 hover:bg-[var(--surface-hover)] ${
                             sugIdx === idx ? "bg-[var(--surface-hover)]" : ""
                           }`}
                         >
@@ -995,7 +999,7 @@ export default function Home() {
       </header>
 
       {notice && (
-        <div className="relative z-[1030] shrink-0 bg-[var(--accent-bg)] px-4 py-2 text-sm font-medium text-[var(--accent)]">
+        <div className="notice-bar relative z-[1030] shrink-0 bg-[var(--accent-bg)] px-4 py-2 text-sm font-medium text-[var(--accent)]">
           {notice}
         </div>
       )}
@@ -1003,7 +1007,7 @@ export default function Home() {
       {/* 저장 알림 — 잘 갔는지 눈으로 확인. 실패는 누를 때까지 사라지지 않는다. */}
       {syncEnabled && saveStatus !== "idle" && (
         <div
-          className={`relative z-[1030] flex shrink-0 items-center gap-2 px-4 py-1.5 text-xs font-semibold ${
+          className={`notice-bar relative z-[1030] flex shrink-0 items-center gap-2 px-4 py-1.5 text-xs font-semibold ${
             saveStatus === "failed"
               ? "bg-[var(--danger)] text-white"
               : "bg-[var(--surface-hover)] text-[var(--text-muted)]"
@@ -1067,18 +1071,18 @@ export default function Home() {
       <div className="pointer-events-none relative min-h-0 flex-1 overflow-hidden">
         {/* 지도 위 떠 있는 막대 — 자리를 고르는 중에만. 핀 추가 단추는 아래 메뉴 가운데로 옮겼다. */}
         {tab === "map" && picking && (
-          <div className="pointer-events-auto absolute inset-x-4 bottom-4 z-[1001] flex items-center gap-2">
+          <div className="anim-rise pointer-events-auto absolute inset-x-4 bottom-4 z-[1001] flex items-center gap-2">
             <button
               type="button"
               onClick={() => setPicking(false)}
-              className="h-12 shrink-0 rounded-[14px] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--text-muted)] shadow-[var(--shadow-2)]"
+              className="press h-12 shrink-0 rounded-[14px] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--text-muted)] shadow-[var(--shadow-2)] transition-colors duration-200 hover:bg-[var(--surface-hover)] hover:text-[var(--text)]"
             >
               취소
             </button>
             <button
               type="button"
               onClick={confirmPick}
-              className="h-12 min-w-0 flex-1 rounded-[14px] bg-[var(--accent)] text-sm font-bold text-white shadow-[var(--shadow-2)] active:scale-[0.98]"
+              className="h-12 min-w-0 flex-1 rounded-[14px] bg-[var(--accent)] text-sm font-bold text-white shadow-[var(--shadow-2)] transition-[background,transform,box-shadow] duration-200 ease-[var(--ease-out)] hover:bg-[var(--accent-hover)] hover:shadow-[var(--shadow-lift)] active:scale-[0.98]"
             >
               여기에 핀 꽂기
             </button>
@@ -1088,7 +1092,7 @@ export default function Home() {
         {/* 리스트 — 지도를 덮는 판. 종류는 접힌 목록에서 하나 골라 걸러 보고,
             지도 단추를 누르면 그 자리로 지도가 넘어간다. */}
         {listing && (
-          <div className="pointer-events-auto absolute inset-0 z-[1005] flex flex-col bg-[var(--bg)] pt-2">
+          <div className="screen-in pointer-events-auto absolute inset-0 z-[1005] flex flex-col bg-[var(--bg)] pt-2">
             <div className="shrink-0 px-4 pb-2">
               <div className="relative inline-flex items-center">
                 <select
@@ -1134,7 +1138,7 @@ export default function Home() {
 
         {/* 비서 — AI에게 말로 시키는 화면. 대화는 페이지가 들고 있어 탭을 오가도 남는다. */}
         {tab === "assistant" && (
-          <div className="pointer-events-auto absolute inset-0 z-[1010] bg-[var(--bg)]">
+          <div className="screen-in pointer-events-auto absolute inset-0 z-[1010] bg-[var(--bg)]">
             <AssistantPanel
               messages={chat}
               loading={chatLoading}
@@ -1147,7 +1151,7 @@ export default function Home() {
 
         {/* 준비 — 떠나기 전에 채우는 칸(항공·숙소·장보기·짐 챙기기·회의) */}
         {tab === "prepare" && (
-          <div className="pointer-events-auto absolute inset-0 z-[1010] bg-[var(--bg)]">
+          <div className="screen-in pointer-events-auto absolute inset-0 z-[1010] bg-[var(--bg)]">
             <PreparePanel
               itinerary={viewItinerary}
               onItineraryChange={handleItineraryChange}
@@ -1157,7 +1161,7 @@ export default function Home() {
 
         {/* 일정 — 여행 날짜를 정하고 하루하루 갈 곳을 짜는 화면 */}
         {tab === "schedule" && (
-          <div className="pointer-events-auto absolute inset-0 z-[1010] bg-[var(--bg)]">
+          <div className="screen-in pointer-events-auto absolute inset-0 z-[1010] bg-[var(--bg)]">
             <SchedulePanel
               pins={viewPins}
               itinerary={viewItinerary}

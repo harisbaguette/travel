@@ -8,12 +8,14 @@ import {
   ChevronDown,
   Link2,
   Map as MapIcon,
+  NotebookPen,
   Plane,
   Plus,
   X,
 } from "lucide-react";
-import type { FlightInfo, Itinerary, Pin } from "@/lib/types";
+import type { DayTextItem, FlightInfo, Itinerary, Pin } from "@/lib/types";
 import { PIN_TYPES } from "@/lib/pinTypes";
+import { dayHasContent, dayOrder } from "@/lib/dayEntries";
 import { dateRange, daysBetween, shortDate, todayISO, weekdayOf } from "@/lib/dates";
 
 interface SchedulePanelProps {
@@ -50,7 +52,10 @@ export default function SchedulePanel({
     return dateRange(itinerary.startDate, itinerary.endDate, MAX_DAYS).map((date) => {
       const saved = byDate.get(date);
       const pinIds = (saved?.pinIds ?? []).filter((id) => pinById.has(id));
-      return { date, pinIds, times: saved?.times ?? {} };
+      const texts = saved?.texts ?? [];
+      // 핀과 글 항목을 한 줄로 세운 순서 — 없는 핀은 걸러진 뒤라 순서표도 따라 준다.
+      const order = dayOrder({ pinIds, texts, order: saved?.order });
+      return { date, pinIds, texts, order, times: saved?.times ?? {} };
     });
   }, [itinerary, pinById]);
 
@@ -86,62 +91,101 @@ export default function SchedulePanel({
     onChange({ ...itinerary, ...patch });
   };
 
-  // 날짜 하나의 저장분을 바꿔치기하는 공통 도우미
-  const patchDay = (
-    date: string,
-    fn: (day: { pinIds: string[]; times: Record<string, string> }) => {
-      pinIds: string[];
-      times: Record<string, string>;
-    }
-  ) => {
+  // 날짜 하나의 저장분을 바꿔치기하는 공통 도우미 — 핀·글·시간·순서를 한 묶음으로 다룬다.
+  type DayDraft = {
+    pinIds: string[];
+    times: Record<string, string>;
+    texts: DayTextItem[];
+    order: string[];
+  };
+  const patchDay = (date: string, fn: (day: DayDraft) => DayDraft) => {
     const days = [...itinerary.days];
     const idx = days.findIndex((d) => d.date === date);
-    const cur =
+    const cur: DayDraft =
       idx === -1
-        ? { pinIds: [] as string[], times: {} as Record<string, string> }
-        : { pinIds: [...days[idx].pinIds], times: { ...(days[idx].times ?? {}) } };
+        ? { pinIds: [], times: {}, texts: [], order: [] }
+        : {
+            pinIds: [...days[idx].pinIds],
+            times: { ...(days[idx].times ?? {}) },
+            texts: [...(days[idx].texts ?? [])],
+            order: dayOrder(days[idx]),
+          };
     const next = fn(cur);
-    const entry = { date, pinIds: next.pinIds, times: next.times };
+    const entry: Itinerary["days"][number] = {
+      date,
+      pinIds: next.pinIds,
+      times: next.times,
+    };
+    if (next.texts.length > 0) entry.texts = next.texts;
+    if (next.order.length > 0) entry.order = next.order;
     if (idx === -1) days.push(entry);
     else days[idx] = entry;
-    onChange({
-      ...itinerary,
-      days: days.filter((d) => d.pinIds.length > 0 || Object.keys(d.times ?? {}).length > 0),
-    });
+    onChange({ ...itinerary, days: days.filter(dayHasContent) });
   };
 
   const assign = (date: string, pinId: string) => {
     if (!pinId) return;
     patchDay(date, (day) =>
-      day.pinIds.includes(pinId) ? day : { ...day, pinIds: [...day.pinIds, pinId] }
+      day.pinIds.includes(pinId)
+        ? day
+        : { ...day, pinIds: [...day.pinIds, pinId], order: [...day.order, pinId] }
     );
   };
 
-  const unassign = (date: string, pinId: string) => {
+  // 글로만 적는 항목 넣기 — "렌트카 받기"처럼 지도 자리가 없는 할 일.
+  const addText = (date: string, text: string) => {
+    const t = text.trim();
+    if (!t) return;
+    const id = `txt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    patchDay(date, (day) => ({
+      ...day,
+      texts: [...day.texts, { id, text: t }],
+      order: [...day.order, id],
+    }));
+  };
+
+  // 글 항목 내용 고치기 — 줄을 그대로 두고 글자만 바꾼다.
+  const setText = (date: string, textId: string, text: string) => {
+    patchDay(date, (day) => ({
+      ...day,
+      texts: day.texts.map((t) => (t.id === textId ? { ...t, text } : t)),
+    }));
+  };
+
+  // 핀이든 글이든 한 줄 빼기 — 시간표·순서표에서도 같이 지운다.
+  const removeEntry = (date: string, entryId: string) => {
     patchDay(date, (day) => {
       const times = { ...day.times };
-      delete times[pinId];
-      return { pinIds: day.pinIds.filter((id) => id !== pinId), times };
+      delete times[entryId];
+      return {
+        pinIds: day.pinIds.filter((id) => id !== entryId),
+        texts: day.texts.filter((t) => t.id !== entryId),
+        order: day.order.filter((id) => id !== entryId),
+        times,
+      };
     });
   };
 
-  const setTime = (date: string, pinId: string, time: string) => {
+  const setTime = (date: string, entryId: string, time: string) => {
     patchDay(date, (day) => {
       const times = { ...day.times };
-      if (time) times[pinId] = time;
-      else delete times[pinId];
+      if (time) times[entryId] = time;
+      else delete times[entryId];
       return { ...day, times };
     });
   };
 
-  const move = (date: string, pinId: string, dir: -1 | 1) => {
+  // 위·아래로 한 칸 옮기기 — 핀과 글이 섞인 순서표에서 자리를 바꾼다.
+  // 핀끼리의 상대 순서가 바뀌면 pinIds도 따라 맞춰 지도 동선이 같은 순서를 쓰게 한다.
+  const move = (date: string, entryId: string, dir: -1 | 1) => {
     patchDay(date, (day) => {
-      const i = day.pinIds.indexOf(pinId);
+      const i = day.order.indexOf(entryId);
       const j = i + dir;
-      if (i === -1 || j < 0 || j >= day.pinIds.length) return day;
-      const pinIds = [...day.pinIds];
-      [pinIds[i], pinIds[j]] = [pinIds[j], pinIds[i]];
-      return { ...day, pinIds };
+      if (i === -1 || j < 0 || j >= day.order.length) return day;
+      const order = [...day.order];
+      [order[i], order[j]] = [order[j], order[i]];
+      const pinSet = new Set(day.pinIds);
+      return { ...day, order, pinIds: order.filter((id) => pinSet.has(id)) };
     });
   };
 
@@ -214,7 +258,7 @@ export default function SchedulePanel({
                   <span className="text-xs text-[var(--text-muted)]">
                     · {shortDate(day.date)}({weekdayOf(day.date)})
                   </span>
-                  <span className="trip-section-hint">{day.pinIds.length}곳</span>
+                  <span className="trip-section-hint">{day.order.length}개</span>
                   <ChevronDown
                     size={17}
                     strokeWidth={2.4}
@@ -246,69 +290,97 @@ export default function SchedulePanel({
                       </div>
                     )}
 
-                    {day.pinIds.length > 0 && (
+                    {day.order.length > 0 && (
                       <ol className="relative flex flex-col">
                         {/* 세로 선 — 순번 점들을 잇는 타임라인 줄기 */}
                         <span
                           aria-hidden
                           className="absolute bottom-3 left-[11px] top-3 w-px bg-[var(--border-strong)]"
                         />
-                        {day.pinIds.map((pid, order) => {
-                          const pin = pinById.get(pid);
-                          if (!pin) return null;
-                          const cfg = PIN_TYPES[pin.type];
+                        {day.order.map((entryId, order) => {
+                          const pin = pinById.get(entryId);
+                          const textItem = pin
+                            ? undefined
+                            : day.texts.find((t) => t.id === entryId);
+                          if (!pin && !textItem) return null;
+                          const cfg = pin ? PIN_TYPES[pin.type] : null;
+                          const label = pin ? pin.name : textItem!.text || "할 일";
                           return (
-                            <li key={pid} className="relative flex items-center gap-2 py-1">
+                            <li key={entryId} className="relative flex items-center gap-2 py-1">
                               <span className="z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--accent-bg)] text-[11px] font-bold tabular-nums text-[var(--accent)]">
                                 {order + 1}
                               </span>
                               <input
                                 type="time"
-                                value={day.times[pid] ?? ""}
-                                onChange={(e) => setTime(day.date, pid, e.target.value)}
+                                value={day.times[entryId] ?? ""}
+                                onChange={(e) => setTime(day.date, entryId, e.target.value)}
                                 className="dw-input dw-input--time shrink-0 tabular-nums text-[var(--text-muted)]"
-                                aria-label={`${pin.name} 방문 시각`}
+                                aria-label={`${label} 시각`}
                               />
-                              <span className="flex min-w-0 flex-1 items-center gap-1.5">
-                                <span className="shrink-0" aria-hidden>
-                                  <cfg.Icon size={14} color={cfg.color} />
+                              {pin && cfg ? (
+                                <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                                  <span className="shrink-0" aria-hidden>
+                                    <cfg.Icon size={14} color={cfg.color} />
+                                  </span>
+                                  <span className="truncate text-sm text-[var(--text)]">
+                                    {pin.name}
+                                  </span>
                                 </span>
-                                <span className="truncate text-sm text-[var(--text)]">
-                                  {pin.name}
+                              ) : (
+                                <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                                  <NotebookPen
+                                    size={14}
+                                    strokeWidth={2.2}
+                                    className="shrink-0 text-[var(--text-faint)]"
+                                    aria-hidden
+                                  />
+                                  {/* 글 항목은 줄에서 바로 고칠 수 있는 입력칸 */}
+                                  <input
+                                    type="text"
+                                    value={textItem!.text}
+                                    onChange={(e) =>
+                                      setText(day.date, entryId, e.target.value)
+                                    }
+                                    placeholder="할 일 적기"
+                                    className="min-w-0 flex-1 bg-transparent text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-faint)]"
+                                    aria-label="할 일 내용"
+                                  />
                                 </span>
-                              </span>
+                              )}
                               <span className="flex shrink-0 items-center text-[var(--text-muted)]">
+                                {pin && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onShowOnMap(pin)}
+                                    className="flex h-9 w-9 items-center justify-center rounded-lg hover:text-[var(--accent)]"
+                                    aria-label={`${label} 지도에서 보기`}
+                                  >
+                                    <MapIcon size={14} strokeWidth={2.2} />
+                                  </button>
+                                )}
                                 <button
                                   type="button"
-                                  onClick={() => onShowOnMap(pin)}
-                                  className="flex h-9 w-9 items-center justify-center rounded-lg hover:text-[var(--accent)]"
-                                  aria-label={`${pin.name} 지도에서 보기`}
-                                >
-                                  <MapIcon size={14} strokeWidth={2.2} />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => move(day.date, pid, -1)}
+                                  onClick={() => move(day.date, entryId, -1)}
                                   disabled={order === 0}
                                   className="flex h-9 w-9 items-center justify-center rounded-lg disabled:opacity-30"
-                                  aria-label={`${pin.name} 위로`}
+                                  aria-label={`${label} 위로`}
                                 >
                                   <ArrowUp size={14} strokeWidth={2.2} />
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => move(day.date, pid, 1)}
-                                  disabled={order === day.pinIds.length - 1}
+                                  onClick={() => move(day.date, entryId, 1)}
+                                  disabled={order === day.order.length - 1}
                                   className="flex h-9 w-9 items-center justify-center rounded-lg disabled:opacity-30"
-                                  aria-label={`${pin.name} 아래로`}
+                                  aria-label={`${label} 아래로`}
                                 >
                                   <ArrowDown size={14} strokeWidth={2.2} />
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => unassign(day.date, pid)}
+                                  onClick={() => removeEntry(day.date, entryId)}
                                   className="flex h-9 w-9 items-center justify-center rounded-lg hover:text-[var(--danger)]"
-                                  aria-label={`${pin.name} 이 날짜에서 빼기`}
+                                  aria-label={`${label} 이 날짜에서 빼기`}
                                 >
                                   <X size={14} strokeWidth={2.2} />
                                 </button>
@@ -326,6 +398,7 @@ export default function SchedulePanel({
                       candidates={unassigned}
                       onPick={(pinId) => assign(day.date, pinId)}
                       onAddLink={onAddFromLink}
+                      onAddText={(text) => addText(day.date, text)}
                     />
 
                     {showInbound && <FlightRow flight={showInbound} />}
@@ -341,17 +414,20 @@ export default function SchedulePanel({
 }
 
 // 갈 곳 넣기 — 평소엔 점선 단추 한 칸이고, 누르면 아래로 펼쳐진다.
-// 펼치면 ① 지도에 꽂아 둔 곳을 이름 그대로 눌러 고르고 ② 구글 지도 링크를 붙여넣을 수 있다.
+// 펼치면 ① 지도에 꽂아 둔 곳을 이름 그대로 눌러 고르고 ② 구글 지도 링크를 붙여넣고
+// ③ "렌트카 받기"처럼 지도 자리 없는 할 일을 글로 적어 넣을 수 있다.
 function AddPlaceBox({
   date,
   candidates,
   onPick,
   onAddLink,
+  onAddText,
 }: {
   date: string;
   candidates: Pin[];
   onPick: (pinId: string) => void;
   onAddLink: (date: string, url: string) => Promise<boolean>;
+  onAddText: (text: string) => void;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -420,6 +496,12 @@ function AddPlaceBox({
       )}
 
       <span className="mb-1.5 flex items-center gap-1 text-[11px] font-bold text-[var(--text-muted)]">
+        <NotebookPen size={12} strokeWidth={2.4} aria-hidden />
+        글로 적어 넣기
+      </span>
+      <TextAddRow date={date} onAdd={onAddText} />
+
+      <span className="mb-1.5 mt-3 flex items-center gap-1 text-[11px] font-bold text-[var(--text-muted)]">
         <Link2 size={12} strokeWidth={2.4} aria-hidden />
         구글 지도 링크로 넣기
       </span>
@@ -427,6 +509,51 @@ function AddPlaceBox({
       <p className="mt-2 text-[11px] text-[var(--text-faint)]">
         지도에서 곳을 눌러 “일정에 넣기”로도 넣을 수 있어요
       </p>
+    </div>
+  );
+}
+
+// 할 일 글로 적기 한 줄 — "렌트카 받기"처럼 지도 자리 없는 항목을 이 날짜에 넣는다.
+function TextAddRow({
+  date,
+  onAdd,
+}: {
+  date: string;
+  onAdd: (text: string) => void;
+}) {
+  const [value, setValue] = useState("");
+
+  const submit = () => {
+    const v = value.trim();
+    if (!v) return;
+    onAdd(v);
+    setValue("");
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            submit();
+          }
+        }}
+        placeholder="렌트카 받기, 짐 맡기기…"
+        className="dw-input dw-input--sm min-w-0 flex-1"
+        aria-label={`${date}에 할 일 글로 넣기`}
+      />
+      <button
+        type="button"
+        onClick={submit}
+        disabled={!value.trim()}
+        className="dw-btn-primary h-10 min-h-0 shrink-0 px-3 text-xs disabled:opacity-40"
+      >
+        넣기
+      </button>
     </div>
   );
 }
