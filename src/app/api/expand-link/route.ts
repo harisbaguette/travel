@@ -7,12 +7,14 @@ const ALLOWED_HOSTS = new Set([
   "goo.gl",
   "app.goo.gl",
   "g.co",
-  "google.com",
-  "consent.google.com",
 ]);
 
+// 구글은 나라마다 주소가 다르다(google.com, google.co.kr, google.com.vn, google.de …).
+// 짧은 링크가 보는 나라에 맞는 구글 주소로 튕기므로, 구글 나라별 주소를 전부 받아 준다.
+const GOOGLE_HOST = /^([a-z0-9-]+\.)*google\.(com|[a-z]{2,3}|co\.[a-z]{2}|com\.[a-z]{2})$/;
+
 function isAllowedHost(host: string): boolean {
-  return ALLOWED_HOSTS.has(host) || host.endsWith(".google.com");
+  return ALLOWED_HOSTS.has(host) || GOOGLE_HOST.test(host);
 }
 
 function isAllowed(url: URL): boolean {
