@@ -58,6 +58,24 @@ export interface StayInfo {
   memo: string;
 }
 
+// 체크리스트 한 줄 — 짐 챙기기·회의 안건·장보기가 같은 모양을 쓴다.
+export interface ChecklistItem {
+  id: string;
+  text: string;
+  done: boolean;
+  // 담당자 이름 — 장보기에서만 사용.
+  assignee?: string;
+}
+
+// 집합 약속 — 언제 어디서 모일지.
+export interface MeetupInfo {
+  id: string;
+  place: string;
+  date: string; // YYYY-MM-DD
+  time: string; // HH:MM
+  memo: string;
+}
+
 export interface Itinerary {
   startDate: string; // YYYY-MM-DD, 빈 값 가능
   endDate: string; // YYYY-MM-DD, 빈 값 가능
@@ -66,6 +84,10 @@ export interface Itinerary {
   outbound?: FlightInfo;
   inbound?: FlightInfo;
   stays?: StayInfo[];
+  packing?: ChecklistItem[]; // 짐 챙길 리스트
+  agenda?: ChecklistItem[]; // 회의 안건
+  shopping?: ChecklistItem[]; // 장 볼 리스트(담당자 포함)
+  meetups?: MeetupInfo[]; // 집합 시간
 }
 
 export const EMPTY_FLIGHT: FlightInfo = {

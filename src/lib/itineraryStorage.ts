@@ -1,4 +1,10 @@
-import type { FlightInfo, Itinerary, StayInfo } from "./types";
+import type {
+  ChecklistItem,
+  FlightInfo,
+  Itinerary,
+  MeetupInfo,
+  StayInfo,
+} from "./types";
 
 // localStorage 키 — 방마다 따로 저장. 빈 방명은 "기본".
 const storageKey = (room: string) => `travel-itinerary-${room || "기본"}`;
@@ -44,6 +50,16 @@ export function sanitizeItinerary(value: unknown): Itinerary {
     const stays = parsed.stays.filter(isStay);
     if (stays.length > 0) it.stays = stays;
   }
+  for (const key of ["packing", "agenda", "shopping"] as const) {
+    const raw = parsed[key];
+    if (!Array.isArray(raw)) continue;
+    const list = raw.filter(isChecklistItem);
+    if (list.length > 0) it[key] = list;
+  }
+  if (Array.isArray(parsed.meetups)) {
+    const meetups = parsed.meetups.filter(isMeetup);
+    if (meetups.length > 0) it.meetups = meetups;
+  }
   return it;
 }
 
@@ -63,6 +79,29 @@ function isFlight(f: unknown): f is FlightInfo {
     typeof o.date === "string" &&
     typeof o.depTime === "string" &&
     typeof o.arrTime === "string" &&
+    typeof o.memo === "string"
+  );
+}
+
+function isChecklistItem(i: unknown): i is ChecklistItem {
+  if (!i || typeof i !== "object") return false;
+  const o = i as Record<string, unknown>;
+  return (
+    typeof o.id === "string" &&
+    typeof o.text === "string" &&
+    typeof o.done === "boolean" &&
+    (o.assignee === undefined || typeof o.assignee === "string")
+  );
+}
+
+function isMeetup(m: unknown): m is MeetupInfo {
+  if (!m || typeof m !== "object") return false;
+  const o = m as Record<string, unknown>;
+  return (
+    typeof o.id === "string" &&
+    typeof o.place === "string" &&
+    typeof o.date === "string" &&
+    typeof o.time === "string" &&
     typeof o.memo === "string"
   );
 }

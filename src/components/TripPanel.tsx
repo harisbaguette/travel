@@ -1,9 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarDays, ChevronDown, MapPin, Plane } from "lucide-react";
-import type { Itinerary, Pin } from "@/lib/types";
+import {
+  AlarmClock,
+  CalendarDays,
+  ChevronDown,
+  ListChecks,
+  Luggage,
+  MapPin,
+  Plane,
+  ShoppingCart,
+} from "lucide-react";
+import type { ChecklistItem, Itinerary, Pin } from "@/lib/types";
+import ChecklistCard from "./ChecklistCard";
 import ItineraryPanel from "./ItineraryPanel";
+import MeetupPanel from "./MeetupPanel";
 import PinList from "./PinList";
 import TravelInfoPanel from "./TravelInfoPanel";
 
@@ -16,7 +27,19 @@ interface TripPanelProps {
   onItineraryChange: (it: Itinerary) => void;
 }
 
-type SectionKey = "plan" | "pins" | "info";
+type SectionKey =
+  | "plan"
+  | "pins"
+  | "info"
+  | "packing"
+  | "agenda"
+  | "shopping"
+  | "meetup";
+
+// 체크된 개수 — 섹션 머리의 "2/5" 힌트용.
+function doneOf(items: ChecklistItem[]): number {
+  return items.filter((i) => i.done).length;
+}
 
 function nightsOf(it: Itinerary): number {
   if (!it.startDate || !it.endDate) return 0;
@@ -39,6 +62,10 @@ export default function TripPanel({
     plan: true,
     pins: true,
     info: false,
+    packing: false,
+    agenda: false,
+    shopping: false,
+    meetup: false,
   });
 
   const toggle = (key: SectionKey) =>
@@ -46,6 +73,10 @@ export default function TripPanel({
 
   const nights = nightsOf(itinerary);
   const planned = new Set(itinerary.days.flatMap((d) => d.pinIds)).size;
+  const packing = itinerary.packing ?? [];
+  const agenda = itinerary.agenda ?? [];
+  const shopping = itinerary.shopping ?? [];
+  const meetups = itinerary.meetups ?? [];
   const stayCount = itinerary.stays?.length ?? 0;
   const flightCount =
     (itinerary.outbound?.flightNo ? 1 : 0) + (itinerary.inbound?.flightNo ? 1 : 0);
@@ -115,6 +146,58 @@ export default function TripPanel({
             ? `비행 ${flightCount} · 숙소 ${stayCount}`
             : "아직 비어 있음",
           <TravelInfoPanel itinerary={itinerary} onChange={onItineraryChange} />
+        )}
+
+        {section(
+          "meetup",
+          AlarmClock,
+          "집합 시간",
+          meetups.length > 0 ? `${meetups.length}개` : "약속 잡기",
+          <MeetupPanel
+            meetups={meetups}
+            startDate={itinerary.startDate}
+            onChange={(next) => onItineraryChange({ ...itinerary, meetups: next })}
+          />
+        )}
+
+        {section(
+          "packing",
+          Luggage,
+          "짐 챙기기",
+          packing.length > 0 ? `${doneOf(packing)}/${packing.length} 챙김` : "아직 비어 있음",
+          <ChecklistCard
+            items={packing}
+            placeholder="챙길 것 — 예: 여권, 선크림"
+            emptyText="챙길 짐을 하나씩 적어 보세요 — 챙기면 동그라미를 눌러요"
+            onChange={(next) => onItineraryChange({ ...itinerary, packing: next })}
+          />
+        )}
+
+        {section(
+          "shopping",
+          ShoppingCart,
+          "장보기",
+          shopping.length > 0 ? `${doneOf(shopping)}/${shopping.length} 샀음` : "아직 비어 있음",
+          <ChecklistCard
+            items={shopping}
+            withAssignee
+            placeholder="살 것 — 예: 물, 라면"
+            emptyText="살 것을 적고 담당 칸에 맡을 사람 이름을 써요"
+            onChange={(next) => onItineraryChange({ ...itinerary, shopping: next })}
+          />
+        )}
+
+        {section(
+          "agenda",
+          ListChecks,
+          "회의 안건",
+          agenda.length > 0 ? `${doneOf(agenda)}/${agenda.length} 끝남` : "아직 비어 있음",
+          <ChecklistCard
+            items={agenda}
+            placeholder="이야기할 것 — 예: 예산 정하기"
+            emptyText="같이 정할 것들을 적어 두면 회의 때 빠뜨리지 않아요"
+            onChange={(next) => onItineraryChange({ ...itinerary, agenda: next })}
+          />
         )}
       </div>
     </div>
