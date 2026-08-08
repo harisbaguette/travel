@@ -48,8 +48,11 @@ import {
   pushItinerary,
   pushPin,
   pushPinDelete,
+  resendAll,
   useRoomSync,
+  useSaveStatus,
 } from "@/lib/sync";
+import AIPickSheet from "@/components/AIPickSheet";
 import PinModal from "@/components/PinModal";
 import ProjectSwitcher from "@/components/ProjectSwitcher";
 import TripPanel from "@/components/TripPanel";
@@ -209,6 +212,8 @@ export default function Home() {
     name?: string;
   } | null>(null);
   const [aiLoading, setAILoading] = useState(false);
+  // AI가 찾아온 후보들 — 고르는 시트가 열려 있는 동안만 들고 있는다.
+  const [aiFound, setAIFound] = useState<Pin[] | null>(null);
   const [copied, setCopied] = useState(false);
   const [tab, setTab] = useState<Tab>("map");
 
@@ -243,12 +248,7 @@ export default function Home() {
       return;
     }
     const q = query.trim();
-    if (q.length < 2) {
-      setSugs([]);
-      setSugOpen(false);
-      setSugIdx(-1);
-      return;
-    }
+    if (q.length < 2) return; // 목록 비우기는 입력칸 onChange에서 처리
     const timer = setTimeout(async () => {
       sugAbortRef.current?.abort();
       const ac = new AbortController();
@@ -296,6 +296,14 @@ export default function Home() {
     },
     onItinerary: (remote) => setItinerary(sanitizeItinerary(remote)),
   });
+
+  // 서버로 잘 보내지고 있는지 — 머리 아래 한 줄로 보여준다.
+  const saveStatus = useSaveStatus();
+
+  // 보내기 실패했을 때 이 방의 핀과 일정을 통째로 다시 보낸다.
+  const handleResend = useCallback(() => {
+    void resendAll(room, pins, itinerary);
+  }, [room, pins, itinerary]);
 
   const handleMapReady = useCallback((map: LeafletMap) => {
     mapRef.current = map;
@@ -576,15 +584,26 @@ export default function Home() {
         setNotice("새로운 맛집을 찾지 못했어요");
         return;
       }
-      setNotice(`맛집 ${fresh.length}개를 찾았어요 — 마음에 안 들면 여행 화면에서 지우면 돼요`);
-      setPins((prev) => [...prev, ...fresh]);
-      for (const p of fresh) void pushPin(room, p);
+      // 바로 꽂지 않고 먼저 보여준다 — 고른 것만 지도에 들어간다.
+      setAIFound(fresh);
     } catch {
       setNotice("맛집 검색 중 문제가 생겼어요");
     } finally {
       setAILoading(false);
     }
-  }, [pins, room]);
+  }, [pins]);
+
+  // 고른 후보만 지도에 꽂는다.
+  const handleAIAdd = useCallback(
+    (chosen: Pin[]) => {
+      setAIFound(null);
+      if (chosen.length === 0) return;
+      setPins((prev) => [...prev, ...chosen]);
+      for (const p of chosen) void pushPin(room, p);
+      setNotice(`${chosen.length}곳을 꽂았어요`);
+    },
+    [room]
+  );
 
   // 일정 변경 — 로컬 반영 + 서버 전송(내부에서 0.8초 모아 보냄)
   const handleItineraryChange = useCallback(
@@ -662,7 +681,16 @@ export default function Home() {
                 ref={searchRef}
                 type="text"
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setQuery(v);
+                  // 두 글자가 안 되면 후보 목록을 접는다
+                  if (v.trim().length < 2) {
+                    setSugs([]);
+                    setSugOpen(false);
+                    setSugIdx(-1);
+                  }
+                }}
                 onKeyDown={handleKeyDown}
                 onFocus={() => {
                   if (sugs.length > 0) setSugOpen(true);
@@ -671,6 +699,7 @@ export default function Home() {
                 placeholder="어디로 갈까요?"
                 className="dw-input dw-input--sm dw-input--icon"
                 role="combobox"
+                aria-controls="place-suggestions"
                 aria-expanded={sugOpen && sugCount > 0}
                 aria-autocomplete="list"
               />
@@ -678,6 +707,7 @@ export default function Home() {
               {/* 후보 목록 — 글자를 치면 바로 아래에 뜬다. 내 핀이 먼저, 그다음 장소. */}
               {sugOpen && sugCount > 0 && (
                 <ul
+                  id="place-suggestions"
                   role="listbox"
                   aria-label="장소 후보"
                   className="absolute left-0 right-0 top-full z-[1200] mt-2 max-h-72 overflow-y-auto rounded-[16px] bg-[var(--surface)] py-1.5 shadow-[var(--shadow-2)]"
@@ -771,6 +801,35 @@ export default function Home() {
         </div>
       )}
 
+      {/* 저장 알림 — 잘 갔는지 눈으로 확인. 실패는 누를 때까지 사라지지 않는다. */}
+      {syncEnabled && saveStatus !== "idle" && (
+        <div
+          className={`flex shrink-0 items-center gap-2 px-4 py-1.5 text-xs font-semibold ${
+            saveStatus === "failed"
+              ? "bg-[var(--danger)] text-white"
+              : "bg-[var(--surface-hover)] text-[var(--text-muted)]"
+          }`}
+          role="status"
+        >
+          {saveStatus === "saving" && <span>저장 중…</span>}
+          {saveStatus === "saved" && <span>저장됐어요</span>}
+          {saveStatus === "failed" && (
+            <>
+              <span className="min-w-0 flex-1">
+                친구에게 보내지 못했어요 — 이 기기에는 남아 있어요
+              </span>
+              <button
+                type="button"
+                onClick={handleResend}
+                className="shrink-0 rounded-full bg-white/20 px-3 py-1 font-bold"
+              >
+                다시 보내기
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       {/* 몸통 — 지도 위에 여행 화면이 통째로 덮인다 */}
       <div className="relative min-h-0 flex-1 overflow-hidden">
         <MapView
@@ -788,8 +847,8 @@ export default function Home() {
           className="h-full w-full"
         />
 
-        {/* 첫 안내 — 핀이 하나도 없을 때만. 지도 누르기를 막지 않게 통과시킨다. */}
-        {tab === "map" && viewPins.length === 0 && (
+        {/* 첫 안내 — 핀이 하나도 없을 때만. 검색 결과를 보는 중엔 가리지 않게 숨긴다. */}
+        {tab === "map" && viewPins.length === 0 && !searchTarget && (
           <div className="pointer-events-none absolute inset-x-8 top-1/2 z-[999] -translate-y-1/2 rounded-[16px] bg-[var(--surface)] px-5 py-4 text-center shadow-[var(--shadow-2)]">
             <p className="dw-display text-[1.25rem] text-[var(--text)]">
               가고 싶은 곳을 눌러 보세요
@@ -867,6 +926,14 @@ export default function Home() {
           initialName={modalCoord.name}
           onAdd={handleAddPin}
           onClose={() => setModalCoord(null)}
+        />
+      )}
+
+      {aiFound && (
+        <AIPickSheet
+          found={aiFound}
+          onAdd={handleAIAdd}
+          onClose={() => setAIFound(null)}
         />
       )}
     </div>

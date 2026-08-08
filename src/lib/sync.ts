@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Itinerary, Pin } from "./types";
 
 // 폴링 동기화 — Neon(Postgres)에는 Supabase처럼 "바뀌면 알려주는" 기능이 없어서
@@ -49,11 +49,90 @@ interface PushResponse {
   updatedAt?: number;
 }
 
+// ---------- 저장 상태 알림 ----------
+// 서버로 보내는 중인지, 잘 갔는지, 실패했는지를 화면에 한 줄로 보여주기 위한 작은 알림판.
+// 실패는 사용자가 "다시 보내기"를 누를 때까지 지워지지 않는다(조용히 삼키지 않는다).
+
+export type SaveStatus = "idle" | "saving" | "saved" | "failed";
+
+let saveStatus: SaveStatus = "idle";
+let pendingWrites = 0;
+let savedTimer: ReturnType<typeof setTimeout> | null = null;
+const saveListeners = new Set<() => void>();
+
+function emitSave(next: SaveStatus): void {
+  if (saveStatus === next) return;
+  saveStatus = next;
+  for (const listen of saveListeners) listen();
+}
+
+function beginWrite(): void {
+  pendingWrites += 1;
+  if (savedTimer) {
+    clearTimeout(savedTimer);
+    savedTimer = null;
+  }
+  if (saveStatus !== "failed") emitSave("saving");
+}
+
+function endWrite(ok: boolean): void {
+  pendingWrites = Math.max(pendingWrites - 1, 0);
+  if (!ok) {
+    emitSave("failed");
+    return;
+  }
+  if (pendingWrites > 0 || saveStatus === "failed") return;
+  emitSave("saved");
+  savedTimer = setTimeout(() => {
+    savedTimer = null;
+    emitSave("idle");
+  }, 2000);
+}
+
+function subscribeSave(listen: () => void): () => void {
+  saveListeners.add(listen);
+  return () => {
+    saveListeners.delete(listen);
+  };
+}
+
+const getSaveSnapshot = (): SaveStatus => saveStatus;
+const getSaveServerSnapshot = (): SaveStatus => "idle";
+
+export function useSaveStatus(): SaveStatus {
+  return useSyncExternalStore(subscribeSave, getSaveSnapshot, getSaveServerSnapshot);
+}
+
+// 실패 표시를 지우고 방 안의 모든 핀과 일정을 처음부터 다시 보낸다.
+export async function resendAll(
+  room: string,
+  pins: Pin[],
+  itinerary: Itinerary
+): Promise<boolean> {
+  if (!room || dbConfigured === false) return false;
+  if (saveStatus === "failed") emitSave("idle");
+  beginWrite();
+  let ok = true;
+  for (const pin of pins) {
+    if (!(await sendPin(room, pin))) ok = false;
+  }
+  if (!(await sendItinerary(room, itinerary))) ok = false;
+  endWrite(ok);
+  return ok;
+}
+
 // ---------- 서버로 보내기 (묶음 D가 핀 추가·삭제·이동 시 호출) ----------
 // 실패해도 조용히 false만 반환 — 로컬 저장은 호출부가 그대로 유지한다.
 
 export async function pushPin(room: string, pin: Pin): Promise<boolean> {
   if (!room || dbConfigured === false) return false;
+  beginWrite();
+  const ok = await sendPin(room, pin);
+  endWrite(ok);
+  return ok;
+}
+
+async function sendPin(room: string, pin: Pin): Promise<boolean> {
   try {
     const res = await fetch("/api/pins", {
       method: "POST",
@@ -73,6 +152,13 @@ export async function pushPin(room: string, pin: Pin): Promise<boolean> {
 
 export async function pushPinDelete(room: string, id: string): Promise<boolean> {
   if (!room || dbConfigured === false) return false;
+  beginWrite();
+  const ok = await sendPinDelete(room, id);
+  endWrite(ok);
+  return ok;
+}
+
+async function sendPinDelete(room: string, id: string): Promise<boolean> {
   try {
     const res = await fetch(
       `/api/pins?room=${encodeURIComponent(room)}&id=${encodeURIComponent(id)}`,
@@ -98,7 +184,8 @@ export function pushItinerary(room: string, it: Itinerary): void {
   if (itineraryTimer) clearTimeout(itineraryTimer);
   itineraryTimer = setTimeout(() => {
     itineraryTimer = null;
-    void sendItinerary(room, it);
+    beginWrite();
+    void sendItinerary(room, it).then(endWrite);
   }, ITINERARY_DEBOUNCE_MS);
 }
 
