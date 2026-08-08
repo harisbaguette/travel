@@ -88,8 +88,96 @@ export async function searchCity(query: string): Promise<LatLng | null> {
   }
 }
 
-// 테이블 우선, 없으면 Nominatim 폴백.
-// 한국어로 안 나오면 흔한 표기 변형(붙임/띄어쓰기)도 한 번 더 시도한다.
+// 도시 이름의 영어 표기 — 주소 사전(Nominatim)은 한국어 이름을 거의 모르기 때문에,
+// 한국어 검색이 실패하면 영어로 바꿔 한 번 더 물어본다.
+const CITY_EN: Record<string, string> = {
+  푸꾸옥: "Phu Quoc",
+  푸쿠옥: "Phu Quoc",
+  다낭: "Da Nang",
+  나트랑: "Nha Trang",
+  하노이: "Hanoi",
+  호치민: "Ho Chi Minh City",
+  달랏: "Da Lat",
+  호이안: "Hoi An",
+  후에: "Hue",
+  방콕: "Bangkok",
+  치앙마이: "Chiang Mai",
+  푸켓: "Phuket",
+  파타야: "Pattaya",
+  도쿄: "Tokyo",
+  오사카: "Osaka",
+  후쿠오카: "Fukuoka",
+  요코하마: "Yokohama",
+  다카마쓰: "Takamatsu",
+  삿포로: "Sapporo",
+  오키나와: "Okinawa",
+  타이베이: "Taipei",
+  가오슝: "Kaohsiung",
+  홍콩: "Hong Kong",
+  마카오: "Macau",
+  상해: "Shanghai",
+  샤먼: "Xiamen",
+  칭다오: "Qingdao",
+  세부: "Cebu",
+  보홀: "Bohol",
+  보라카이: "Boracay",
+  마닐라: "Manila",
+  쿠알라룸푸르: "Kuala Lumpur",
+  코타키나발루: "Kota Kinabalu",
+  페낭: "Penang",
+  싱가포르: "Singapore",
+  발리: "Bali",
+  괌: "Guam",
+  사이판: "Saipan",
+  // 푸꾸옥 여행에서 자주 찾는 곳들
+  즈엉동: "Duong Dong",
+  빈원더스: "VinWonders",
+  빈펄: "Vinpearl",
+  그랜드월드: "Grand World Phu Quoc",
+  사오비치: "Sao Beach",
+  옹랑비치: "Ong Lang Beach",
+  혼톰: "Hon Thom",
+};
+
+// 여행에서 자주 찾는 장소 낱말의 영어 표기
+const WORD_EN: Record<string, string> = {
+  야시장: "night market",
+  시장: "market",
+  공항: "airport",
+  해변: "beach",
+  비치: "beach",
+  사원: "temple",
+  절: "temple",
+  폭포: "waterfall",
+  역: "station",
+  항구: "port",
+  선착장: "pier",
+  동물원: "zoo",
+  수족관: "aquarium",
+  박물관: "museum",
+  케이블카: "cable car",
+  국립공원: "national park",
+  전망대: "viewpoint",
+  섬: "island",
+};
+
+// "푸꾸옥 야시장" → "Phu Quoc night market" 처럼 아는 낱말만 영어로 바꾼다.
+function toEnglishQuery(query: string): string | null {
+  let q = query;
+  for (const [ko, en] of Object.entries(CITY_EN)) q = q.split(ko).join(` ${en} `);
+  for (const [ko, en] of Object.entries(WORD_EN)) q = q.split(ko).join(` ${en} `);
+  q = q.replace(/\s+/g, " ").trim();
+  if (q === query.trim()) return null; // 바뀐 게 없으면 다시 물을 이유가 없다
+  return q;
+}
+
+// 테이블 우선 → 주소 사전(한국어 그대로) → 주소 사전(영어로 바꿔서) 순서로 찾는다.
 export async function resolveCity(query: string): Promise<LatLng | null> {
-  return findCity(query) ?? (await searchCity(query));
+  const fromTable = findCity(query);
+  if (fromTable) return fromTable;
+  const direct = await searchCity(query);
+  if (direct) return direct;
+  const en = toEnglishQuery(query);
+  if (en) return searchCity(en);
+  return null;
 }
