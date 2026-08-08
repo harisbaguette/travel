@@ -722,14 +722,15 @@ function PinMarker({
   // 지우기는 한 번 더 물어본다 — 손이 스쳐 사라지면 되돌릴 길이 없다.
   const [asking, setAsking] = useState(false);
 
-  // 채움 색은 아이콘 안에 직접 써 넣는다. 바깥에서 나중에 칠하면 화면이 다시 그려질 때
+  // 타입 색은 아이콘 안에 직접 써 넣는다. 바깥에서 나중에 칠하면 화면이 다시 그려질 때
   // 마커 조각이 통째로 교체되면서 색이 지워진다. 아이콘도 값이 바뀔 때만 새로 만든다.
-  // 모양은 압정(둥근 머리+바늘대) — 구글이 그리는 물방울 핀과 문법이 달라 우리 핀만 바로 보인다.
+  // 모양은 흰 종이 압정(흰 머리+잉크색 그림+잉크색 테두리+바늘대) — 구글 POI는 전부
+  // "색 바탕+흰 그림"이라, 정반대 문법이어야 내 핀이 한눈에 갈라져 보인다.
   const icon = useMemo(
     () =>
       L.divIcon({
         className: isMine ? "pin-icon" : "pin-icon pin-icon--other",
-        html: `<span style="background:${cfg.color}"><i>${pinMarkerSvg(pin.type, 15)}</i></span>`,
+        html: `<span style="color:${cfg.color}"><i>${pinMarkerSvg(pin.type, 15)}</i></span>`,
         iconSize: [34, 42],
         iconAnchor: [17, 42],
         popupAnchor: [0, -42],
