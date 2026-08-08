@@ -16,6 +16,16 @@ export function daysBetween(start: string, end: string): number {
   return Math.floor((b - a) / 86400000);
 }
 
+/** 여행 시작일부터 종료일까지의 날짜를 하루씩 늘어놓는다.
+ *  시작일이 없거나 순서가 거꾸로면 빈 배열. 날짜 범위가 실수로 커져도 max일에서 끊는다. */
+export function dateRange(start: string, end: string, max = 60): string[] {
+  if (!start) return [];
+  const span = end ? daysBetween(start, end) : 0;
+  if (span < 0) return [];
+  const count = Math.min(span + 1, max);
+  return Array.from({ length: count }, (_, i) => addDays(start, i));
+}
+
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
 /** 요일 한 글자 — "2026-08-08" → "토" */

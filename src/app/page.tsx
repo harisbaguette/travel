@@ -31,7 +31,7 @@ import {
 import type { Itinerary, Pin, PinType } from "@/lib/types";
 import { PIN_TYPES, PIN_TYPE_LIST } from "@/lib/pinTypes";
 import { isShortMapLink, parseGoogleMapsUrl } from "@/lib/mapLinks";
-import { daysBetween } from "@/lib/dates";
+import { dateRange, daysBetween } from "@/lib/dates";
 import type { DayRoute } from "@/components/MapView";
 import { loadPins, savePins } from "@/lib/pinStorage";
 import {
@@ -59,6 +59,7 @@ import {
   useSaveStatus,
 } from "@/lib/sync";
 import AssistantPanel, { type AssistantMsg } from "@/components/AssistantPanel";
+import DayPickSheet, { type DayPickOption } from "@/components/DayPickSheet";
 import PinList from "@/components/PinList";
 import PinModal from "@/components/PinModal";
 import PreparePanel from "@/components/PreparePanel";
@@ -179,9 +180,8 @@ function useHydrated(): boolean {
 }
 
 // 아래 메뉴 다섯 — 손으로 꽂는 지도, 꽂아 둔 곳을 줄줄이 보는 리스트, AI에게 시키는 비서,
-// 떠나기 전에 채우는 준비, 현지에서 보는 일정. 다섯 칸을 다 쓰지만 + 단추는 가운데 칸 위로
-// 솟아 있고 아래쪽만 막대 뒤에 물린다 — 막대가 단추보다 앞이라 비서 칸은 가려지지 않는다
-// (globals.css의 .dock-fab 설명 참고).
+// 떠나기 전에 채우는 준비, 현지에서 보는 일정. 원본 Doweek 메뉴도 한 줄에 다섯 칸이고
+// + 단추는 그 가운데 칸 위에 얹힌다 — 원본 그대로 쓴다(globals.css의 .dock-fab 설명 참고).
 const DOCK_ITEMS = [
   { key: "map", icon: MapIcon, label: "지도" },
   { key: "list", icon: List, label: "리스트" },
@@ -232,6 +232,13 @@ export default function Home() {
   } | null>(null);
   // + 를 눌러 "자리 고르기"를 켠 상태 — 지도 가운데 십자를 보여 준다.
   const [picking, setPicking] = useState(false);
+  // 지도 말풍선에서 "일정에 넣기"를 누른 곳 — 며칠째에 넣을지 고르는 창이 뜬다.
+  const [schedulePick, setSchedulePick] = useState<{
+    lat: number;
+    lng: number;
+    name: string;
+    pinId?: string;
+  } | null>(null);
   const [tab, setTab] = useState<Tab>("map");
   // 리스트 화면에서 어떤 종류만 볼지 — 접힌 목록(드롭다운)으로 고른다.
   const [listType, setListType] = useState<PinType | "all">("all");
@@ -667,6 +674,68 @@ export default function Home() {
     [room]
   );
 
+  // 곳 하나를 고른 날짜에 넣는 공통 길 — 지도 말풍선, 구글 지도 링크가 모두 이 길을 쓴다.
+  // 핀 번호를 이미 아는 곳이면 그대로 쓰고, 좌표만 아는 곳이면 그 자리(50m 안)의 핀을
+  // 찾아 쓰거나 없으면 새 핀을 꽂는다.
+  const attachToDay = useCallback(
+    (
+      date: string,
+      place: { lat: number; lng: number; name: string; pinId?: string }
+    ) => {
+      let pinId = place.pinId;
+      let name = place.name;
+      if (!pinId) {
+        const near = pins.find(
+          (p) => distanceMeters(p.lat, p.lng, place.lat, place.lng) < 50
+        );
+        if (near) {
+          pinId = near.id;
+          if (!name) name = near.name;
+        } else {
+          const newPin: Pin = {
+            id: `pin-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            lat: place.lat,
+            lng: place.lng,
+            type: "etc",
+            name: name || "구글맵 장소",
+            memo: "",
+            emoji: PIN_TYPES.etc.emoji,
+            isAI: false,
+            createdAt: Date.now(),
+            createdBy: userId || undefined,
+          };
+          setPins((prev) => [...prev, newPin]);
+          void pushPin(room, newPin);
+          pinId = newPin.id;
+          name = newPin.name;
+        }
+      }
+
+      // 그 날짜 카드에 핀을 넣는다(이미 있으면 그대로)
+      const days = [...itinerary.days];
+      const idx = days.findIndex((d) => d.date === date);
+      if (idx === -1) days.push({ date, pinIds: [pinId] });
+      else if (!days[idx].pinIds.includes(pinId))
+        days[idx] = { ...days[idx], pinIds: [...days[idx].pinIds, pinId] };
+      const nextIt = { ...itinerary, days };
+      setItinerary(nextIt);
+      pushItinerary(room, nextIt);
+      const nth = itinerary.startDate ? daysBetween(itinerary.startDate, date) + 1 : 0;
+      setNotice(
+        nth > 0 ? `${name} → ${nth}일차에 넣었어요` : `${name}을(를) 일정에 넣었어요`
+      );
+    },
+    [pins, itinerary, room, userId]
+  );
+
+  // 지도 말풍선의 "일정에 넣기" — 며칠째에 넣을지 고르는 창을 띄운다.
+  const handleAddToSchedule = useCallback(
+    (place: { lat: number; lng: number; name: string; pinId?: string }) => {
+      setSchedulePick(place);
+    },
+    []
+  );
+
   // 일정 화면에 붙여넣은 구글 지도 링크 — 자리를 읽어 핀으로 꽂고 그 날짜에 넣는다.
   // 이미 그 자리(50m 안)에 핀이 있으면 새로 만들지 않고 그 핀을 넣는다.
   const handleScheduleLinkAdd = useCallback(
@@ -706,45 +775,10 @@ export default function Home() {
         return false;
       }
 
-      const la = lat;
-      const ln = lng;
-      const near = pins.find((p) => distanceMeters(p.lat, p.lng, la, ln) < 50);
-      let pinId: string;
-      if (near) {
-        pinId = near.id;
-        if (!name) name = near.name;
-      } else {
-        const newPin: Pin = {
-          id: `pin-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          lat: la,
-          lng: ln,
-          type: "etc",
-          name: name || "구글맵 장소",
-          memo: "",
-          emoji: PIN_TYPES.etc.emoji,
-          isAI: false,
-          createdAt: Date.now(),
-          createdBy: userId || undefined,
-        };
-        setPins((prev) => [...prev, newPin]);
-        void pushPin(room, newPin);
-        pinId = newPin.id;
-        if (!name) name = newPin.name;
-      }
-
-      // 그 날짜 카드에 핀을 넣는다(이미 있으면 그대로)
-      const days = [...itinerary.days];
-      const idx = days.findIndex((d) => d.date === date);
-      if (idx === -1) days.push({ date, pinIds: [pinId] });
-      else if (!days[idx].pinIds.includes(pinId))
-        days[idx] = { ...days[idx], pinIds: [...days[idx].pinIds, pinId] };
-      const nextIt = { ...itinerary, days };
-      setItinerary(nextIt);
-      pushItinerary(room, nextIt);
-      setNotice(`${name}을(를) 일정에 넣었어요`);
+      attachToDay(date, { lat, lng, name });
       return true;
     },
-    [pins, itinerary, room, userId]
+    [attachToDay]
   );
 
   // 이어받기 전(서버가 그린 첫 화면)에는 저장값 대신 빈 상태를 그린다.
@@ -780,6 +814,21 @@ export default function Home() {
         };
       });
   }, [viewItinerary, viewPins]);
+  // 며칠째에 넣을지 고르는 창에 보여 줄 날짜 칸들 — 그날 이미 넣어 둔 곳 수와,
+  // 이 곳이 그날에 이미 들어가 있는지를 함께 담는다.
+  const pickDays = useMemo<DayPickOption[]>(() => {
+    if (!schedulePick) return [];
+    return dateRange(viewItinerary.startDate, viewItinerary.endDate).map((date, i) => {
+      const day = viewItinerary.days.find((d) => d.date === date);
+      return {
+        date,
+        label: `${i + 1}일차`,
+        count: day?.pinIds.length ?? 0,
+        already: Boolean(schedulePick.pinId && day?.pinIds.includes(schedulePick.pinId)),
+      };
+    });
+  }, [schedulePick, viewItinerary]);
+
   // 리스트 화면에서 고른 종류만 남긴 핀 — 거르기는 여기(부모)에서 끝낸다.
   const listPins =
     listType === "all" ? viewPins : viewPins.filter((p) => p.type === listType);
@@ -1005,6 +1054,7 @@ export default function Home() {
           initialZoom={initialView.zoom}
           onPinDelete={handlePinDelete}
           onPinDragEnd={handlePinDragEnd}
+          onAddToSchedule={handleAddToSchedule}
           searchTarget={searchTarget}
           onSearchTargetAdd={handleSearchTargetAdd}
           onSearchTargetClose={() => setSearchTarget(null)}
@@ -1119,9 +1169,9 @@ export default function Home() {
         )}
       </div>
 
-      {/* 하단 독 — Doweek 문법: 유리판 다섯 칸 + 가운데로 튀어나온 파란 + 단추(FAB).
-          단추 아래쪽은 유리판 뒤에 물려 있어 막대에서 솟아난 것처럼 보인다.
-          지도를 볼 때는 바탕을 비워 유리판 옆·뒤로 지도가 그대로 보이게 한다. */}
+      {/* 하단 독 — Doweek BottomNav.jsx를 그대로 옮긴 것: 유리판 다섯 칸 + 가운데로
+          튀어나온 파란 + 단추(FAB). 지도를 볼 때는 바탕을 비워 유리판 옆·뒤로 지도가
+          그대로 보이게 한다. */}
       <nav
         className={`dock-nav${mapFull ? " dock-nav--float" : ""}`}
         aria-label="화면 이동"
@@ -1162,6 +1212,19 @@ export default function Home() {
           </button>
         </div>
       </nav>
+
+      {/* 며칠째에 넣을지 고르는 창 — 지도에서 "일정에 넣기"를 눌렀을 때만 */}
+      {schedulePick && (
+        <DayPickSheet
+          placeName={schedulePick.name}
+          days={pickDays}
+          onPick={(date) => {
+            attachToDay(date, schedulePick);
+            setSchedulePick(null);
+          }}
+          onClose={() => setSchedulePick(null)}
+        />
+      )}
 
       {modalCoord && (
         <PinModal

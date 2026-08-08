@@ -132,9 +132,15 @@ interface PoiInfo {
   hours?: string;
   phone?: string;
   website?: string;
+  /** 아직 무슨 곳인지 알아보는 중 — 이때는 일정에 넣지 못하게 막는다. */
+  pending?: boolean;
 }
 
-function PoiTapLayer() {
+function PoiTapLayer({
+  onAddToSchedule,
+}: {
+  onAddToSchedule?: MapViewProps["onAddToSchedule"];
+}) {
   const [poi, setPoi] = useState<PoiInfo | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
@@ -146,7 +152,7 @@ function PoiTapLayer() {
       const ac = new AbortController();
       abortRef.current = ac;
       // 답을 기다리는 동안에도 점을 먼저 찍어 "눌렸다"는 느낌을 준다
-      setPoi({ kind: "address", name: "무슨 곳인지 알아보는 중…", lat, lng });
+      setPoi({ kind: "address", name: "무슨 곳인지 알아보는 중…", lat, lng, pending: true });
       void fetch(`/api/poi-at?lat=${lat}&lng=${lng}`, { signal: ac.signal })
         .then((r) => (r.ok ? r.json() : null))
         .then((d) => {
@@ -207,14 +213,26 @@ function PoiTapLayer() {
           {poi.phone && (
             <div className="mb-0.5 text-xs text-[var(--text-muted)]">☎ {poi.phone}</div>
           )}
+          {onAddToSchedule && !poi.pending && (
+            <button
+              type="button"
+              onClick={() =>
+                onAddToSchedule({ lat: poi.lat, lng: poi.lng, name: poi.name })
+              }
+              className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-lg bg-[var(--accent)] px-2 py-1.5 text-xs font-bold !text-white"
+            >
+              <CalendarPlus size={13} strokeWidth={2.4} aria-hidden />
+              일정에 넣기
+            </button>
+          )}
           <div className="mt-1.5 flex items-center gap-1.5">
             <a
               href={`https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lng}`}
               target="_blank"
               rel="noreferrer"
-              className="rounded-md bg-[var(--accent)] px-2 py-1 text-xs font-bold !text-white"
+              className="rounded-md border border-[var(--border)] px-2 py-1 text-xs font-semibold !text-[var(--text-muted)]"
             >
-              구글맵 상세 보기
+              구글맵에서 보기
             </a>
             <button
               type="button"
@@ -244,6 +262,7 @@ const MapView = forwardRef<LeafletMap, MapViewProps>(function MapView(
     onSearchTargetClose,
     onPinDelete,
     onPinDragEnd,
+    onAddToSchedule,
     className,
   },
   ref
@@ -258,7 +277,7 @@ const MapView = forwardRef<LeafletMap, MapViewProps>(function MapView(
       style={{ height: "100%", width: "100%" }}
     >
       <GoogleBaseLayer />
-      <PoiTapLayer />
+      <PoiTapLayer onAddToSchedule={onAddToSchedule} />
       {onReady && <MapReadyBridge onReady={onReady} />}
       <LocateButton />
       {searchTarget && (
@@ -301,6 +320,7 @@ const MapView = forwardRef<LeafletMap, MapViewProps>(function MapView(
           isMine={!pin.createdBy || !currentUserId || pin.createdBy === currentUserId}
           onDelete={onPinDelete}
           onDragEnd={onPinDragEnd}
+          onAddToSchedule={onAddToSchedule}
         />
       ))}
     </MapContainer>
@@ -432,11 +452,13 @@ function PinMarker({
   isMine,
   onDelete,
   onDragEnd,
+  onAddToSchedule,
 }: {
   pin: Pin;
   isMine: boolean;
   onDelete?: (id: string) => void;
   onDragEnd?: (id: string, lat: number, lng: number) => void;
+  onAddToSchedule?: MapViewProps["onAddToSchedule"];
 }) {
   const cfg = PIN_TYPES[pin.type];
   // 지우기는 한 번 더 물어본다 — 손이 스쳐 사라지면 되돌릴 길이 없다.
@@ -509,6 +531,23 @@ function PinMarker({
                 {pin.sources[0].title}
               </span>
             </a>
+          )}
+          {onAddToSchedule && (
+            <button
+              type="button"
+              onClick={() =>
+                onAddToSchedule({
+                  lat: pin.lat,
+                  lng: pin.lng,
+                  name: pin.name,
+                  pinId: pin.id,
+                })
+              }
+              className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-[var(--accent)] px-2 py-1.5 text-xs font-bold !text-white"
+            >
+              <CalendarPlus size={13} strokeWidth={2.4} aria-hidden />
+              일정에 넣기
+            </button>
           )}
           <a
             href={googleMapsUrl(pin)}

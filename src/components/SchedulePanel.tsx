@@ -6,13 +6,15 @@ import {
   ArrowUp,
   BedDouble,
   ChevronDown,
+  Link2,
   Map as MapIcon,
   Plane,
+  Plus,
   X,
 } from "lucide-react";
 import type { FlightInfo, Itinerary, Pin } from "@/lib/types";
 import { PIN_TYPES } from "@/lib/pinTypes";
-import { addDays, daysBetween, shortDate, todayISO, weekdayOf } from "@/lib/dates";
+import { dateRange, daysBetween, shortDate, todayISO, weekdayOf } from "@/lib/dates";
 
 interface SchedulePanelProps {
   pins: Pin[];
@@ -44,14 +46,8 @@ export default function SchedulePanel({
   const pinById = useMemo(() => new Map(pins.map((p) => [p.id, p])), [pins]);
 
   const dayList = useMemo(() => {
-    const { startDate, endDate, days } = itinerary;
-    if (!startDate) return [];
-    const span = endDate ? daysBetween(startDate, endDate) : 0;
-    if (span < 0) return [];
-    const count = Math.min(span + 1, MAX_DAYS);
-    const byDate = new Map(days.map((d) => [d.date, d]));
-    return Array.from({ length: count }, (_, i) => {
-      const date = addDays(startDate, i);
+    const byDate = new Map(itinerary.days.map((d) => [d.date, d]));
+    return dateRange(itinerary.startDate, itinerary.endDate, MAX_DAYS).map((date) => {
       const saved = byDate.get(date);
       const pinIds = (saved?.pinIds ?? []).filter((id) => pinById.has(id));
       return { date, pinIds, times: saved?.times ?? {} };
@@ -323,33 +319,14 @@ export default function SchedulePanel({
                       </ol>
                     )}
 
-                    {/* 구글 지도에서 "공유"로 복사한 링크를 붙여넣으면 핀으로 꽂히고 이 날짜에 들어간다 */}
-                    <LinkAddRow date={day.date} onAdd={onAddFromLink} />
-
-                    {unassigned.length > 0 ? (
-                      <select
-                        value=""
-                        onChange={(e) => {
-                          assign(day.date, e.target.value);
-                          e.target.value = "";
-                        }}
-                        className="h-10 w-full rounded-[12px] border border-dashed border-[var(--border-strong)] bg-[var(--surface-raised)] px-2 text-xs text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none"
-                        aria-label={`${day.date}에 핀 추가`}
-                      >
-                        <option value="">+ 이 날짜에 추가</option>
-                        {unassigned.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.emoji} {p.name}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      day.pinIds.length === 0 && (
-                        <p className="px-1 text-xs text-[var(--text-muted)]">
-                          지도에 핀을 꽂으면 여기에 넣을 수 있어요
-                        </p>
-                      )
-                    )}
+                    {/* 갈 곳 넣기 — 꽂아 둔 곳에서 고르거나, 구글 지도 링크를 붙여넣는다.
+                        지도에서 곳을 눌러 "일정에 넣기"로 넣는 길도 함께 있다. */}
+                    <AddPlaceBox
+                      date={day.date}
+                      candidates={unassigned}
+                      onPick={(pinId) => assign(day.date, pinId)}
+                      onAddLink={onAddFromLink}
+                    />
 
                     {showInbound && <FlightRow flight={showInbound} />}
                   </div>
@@ -359,6 +336,97 @@ export default function SchedulePanel({
           })}
         </ul>
       )}
+    </div>
+  );
+}
+
+// 갈 곳 넣기 — 평소엔 점선 단추 한 칸이고, 누르면 아래로 펼쳐진다.
+// 펼치면 ① 지도에 꽂아 둔 곳을 이름 그대로 눌러 고르고 ② 구글 지도 링크를 붙여넣을 수 있다.
+function AddPlaceBox({
+  date,
+  candidates,
+  onPick,
+  onAddLink,
+}: {
+  date: string;
+  candidates: Pin[];
+  onPick: (pinId: string) => void;
+  onAddLink: (date: string, url: string) => Promise<boolean>;
+}) {
+  const [open, setOpen] = useState(false);
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex h-11 w-full items-center justify-center gap-1.5 rounded-[13px] border-[1.5px] border-dashed border-[var(--border-strong)] text-xs font-bold text-[var(--text-muted)] transition-colors active:bg-[var(--surface-hover)]"
+      >
+        <Plus size={15} strokeWidth={2.6} aria-hidden />
+        갈 곳 넣기
+      </button>
+    );
+  }
+
+  return (
+    <div className="rounded-[13px] bg-[var(--surface-raised)] p-2.5">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="text-[11px] font-bold text-[var(--text-muted)]">
+          꽂아 둔 곳에서 고르기
+        </span>
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          className="-my-1 flex h-7 w-7 items-center justify-center rounded-lg text-[var(--text-muted)]"
+          aria-label="갈 곳 넣기 닫기"
+        >
+          <X size={14} strokeWidth={2.4} aria-hidden />
+        </button>
+      </div>
+
+      {candidates.length > 0 ? (
+        <ul className="mb-3 flex max-h-56 flex-col gap-1 overflow-y-auto">
+          {candidates.map((p) => {
+            const cfg = PIN_TYPES[p.type];
+            return (
+              <li key={p.id}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onPick(p.id);
+                    setOpen(false);
+                  }}
+                  className="flex w-full items-center gap-2 rounded-[10px] bg-[var(--surface)] px-2.5 py-2 text-left shadow-[var(--shadow-1)] transition-transform active:scale-[0.99]"
+                >
+                  <cfg.Icon size={15} color={cfg.color} className="shrink-0" aria-hidden />
+                  <span className="min-w-0 flex-1 truncate text-sm text-[var(--text)]">
+                    {p.name}
+                  </span>
+                  <Plus
+                    size={14}
+                    strokeWidth={2.6}
+                    className="shrink-0 text-[var(--text-faint)]"
+                    aria-hidden
+                  />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="mb-3 text-xs text-[var(--text-muted)]">
+          꽂아 둔 곳이 모두 일정에 들어갔어요
+        </p>
+      )}
+
+      <span className="mb-1.5 flex items-center gap-1 text-[11px] font-bold text-[var(--text-muted)]">
+        <Link2 size={12} strokeWidth={2.4} aria-hidden />
+        구글 지도 링크로 넣기
+      </span>
+      <LinkAddRow date={date} onAdd={onAddLink} />
+      <p className="mt-2 text-[11px] text-[var(--text-faint)]">
+        지도에서 곳을 눌러 “일정에 넣기”로도 넣을 수 있어요
+      </p>
     </div>
   );
 }
