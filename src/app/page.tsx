@@ -969,24 +969,23 @@ export default function Home() {
           </div>
         )}
 
-        {/* 준비 — 떠나기 전에 채우는 칸(항공·날짜·숙소·집합·짐·장보기·안건) */}
+        {/* 준비 — 떠나기 전에 채우는 칸(항공·숙소·장보기·짐 챙기기·회의) */}
         {tab === "prepare" && (
           <div className="pointer-events-auto absolute inset-0 z-[1010] bg-[var(--bg)]">
             <PreparePanel
-              pins={viewPins}
               itinerary={viewItinerary}
-              onShowOnMap={handleShowOnMap}
               onItineraryChange={handleItineraryChange}
             />
           </div>
         )}
 
-        {/* 일정 — 현지에서 꺼내 보는 화면(고치는 칸 없음) */}
+        {/* 일정 — 여행 날짜를 정하고 하루하루 갈 곳을 짜는 화면 */}
         {tab === "schedule" && (
           <div className="pointer-events-auto absolute inset-0 z-[1010] bg-[var(--bg)]">
             <SchedulePanel
               pins={viewPins}
               itinerary={viewItinerary}
+              onChange={handleItineraryChange}
               onShowOnMap={handleShowOnMap}
             />
           </div>

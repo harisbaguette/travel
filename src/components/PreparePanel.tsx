@@ -1,24 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarDays, ListChecks, Luggage, Plane, ShoppingCart } from "lucide-react";
-import type { ChecklistItem, Itinerary, Pin } from "@/lib/types";
+import { BedDouble, ListChecks, Luggage, Plane, ShoppingCart } from "lucide-react";
+import type { ChecklistItem, Itinerary } from "@/lib/types";
 import ChecklistCard from "./ChecklistCard";
-import ItineraryPanel from "./ItineraryPanel";
 import TravelInfoPanel from "./TravelInfoPanel";
 
 interface PreparePanelProps {
-  pins: Pin[];
   itinerary: Itinerary;
-  onShowOnMap: (pin: Pin) => void;
   onItineraryChange: (it: Itinerary) => void;
 }
 
-type SectionKey = "plan" | "packing" | "agenda";
+type SectionKey = "flights" | "stays" | "shopping" | "packing" | "agenda";
 
 interface Section {
   key: SectionKey;
-  Icon: typeof CalendarDays;
+  Icon: typeof Plane;
   label: string;
   /** 칩에 붙는 숫자 — 0이면 감춘다. */
   count: number;
@@ -30,24 +27,13 @@ function todoOf(items: ChecklistItem[]): number {
   return items.filter((i) => !i.done).length;
 }
 
-// 목록 위에 붙는 작은 제목 — 한 화면에 목록이 둘 이상 쌓일 때 구분용.
-function GroupTitle({ Icon, text }: { Icon: typeof CalendarDays; text: string }) {
-  return (
-    <h3 className="flex items-center gap-1.5 px-1 text-sm font-bold text-[var(--text)]">
-      <Icon size={16} strokeWidth={2.2} aria-hidden className="text-[var(--accent-ink)]" />
-      {text}
-    </h3>
-  );
-}
-
-// 떠나기 전에 채우는 화면 — 위 필터 줄에서 고른 한 묶음만 아래에 펼친다.
+// 떠나기 전에 채우는 화면 — 항공·숙소·장보기·짐 챙기기·회의 다섯 묶음.
+// 위 필터 줄에서 고른 한 묶음만 아래에 펼친다. 하루하루 어디 갈지는 일정 화면에서 짠다.
 export default function PreparePanel({
-  pins,
   itinerary,
-  onShowOnMap,
   onItineraryChange,
 }: PreparePanelProps) {
-  const [active, setActive] = useState<SectionKey>("plan");
+  const [active, setActive] = useState<SectionKey>("flights");
 
   const packing = itinerary.packing ?? [];
   const agenda = itinerary.agenda ?? [];
@@ -56,60 +42,53 @@ export default function PreparePanel({
   const flightCount =
     (itinerary.outbound?.flightNo ? 1 : 0) + (itinerary.inbound?.flightNo ? 1 : 0);
   const stayCount = itinerary.stays?.length ?? 0;
-  const planned = new Set(itinerary.days.flatMap((d) => d.pinIds)).size;
 
+  // 장보기가 짐 챙기기보다 먼저 — 사 온 것을 그다음에 짐에 넣는 순서 그대로.
   const sections: Section[] = [
     {
-      key: "plan",
-      Icon: CalendarDays,
-      label: "일정",
-      // 비행기·숙소·날짜에 넣은 곳을 모두 합친 "적어 둔 것" 개수.
-      count: flightCount + stayCount + planned,
+      key: "flights",
+      Icon: Plane,
+      label: "항공",
+      count: flightCount,
       body: () => (
-        <div className="flex flex-col gap-4">
-          {/* 여행 날짜가 모든 것의 뿌리 — 숙소 날짜도 여기서 고른 날 중에서만 고른다. */}
-          <div className="flex flex-col gap-2">
-            <GroupTitle Icon={CalendarDays} text="여행 일정" />
-            <ItineraryPanel
-              pins={pins}
-              itinerary={itinerary}
-              onChange={onItineraryChange}
-              onShowOnMap={onShowOnMap}
-            />
-          </div>
-          <div className="flex flex-col gap-2">
-            <GroupTitle Icon={Plane} text="항공" />
-            <TravelInfoPanel itinerary={itinerary} onChange={onItineraryChange} part="flights" />
-          </div>
-          <TravelInfoPanel itinerary={itinerary} onChange={onItineraryChange} part="stays" />
-        </div>
+        <TravelInfoPanel itinerary={itinerary} onChange={onItineraryChange} part="flights" />
+      ),
+    },
+    {
+      key: "stays",
+      Icon: BedDouble,
+      label: "숙소",
+      count: stayCount,
+      body: () => (
+        <TravelInfoPanel itinerary={itinerary} onChange={onItineraryChange} part="stays" />
+      ),
+    },
+    {
+      key: "shopping",
+      Icon: ShoppingCart,
+      label: "장보기",
+      count: todoOf(shopping),
+      body: () => (
+        <ChecklistCard
+          items={shopping}
+          withAssignee
+          placeholder="살 것 — 예: 물, 라면"
+          onChange={(next) => onItineraryChange({ ...itinerary, shopping: next })}
+        />
       ),
     },
     {
       key: "packing",
       Icon: Luggage,
       label: "챙기기",
-      count: todoOf(packing) + todoOf(shopping),
+      count: todoOf(packing),
       body: () => (
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <GroupTitle Icon={Luggage} text="짐 챙기기" />
-            <ChecklistCard
-              items={packing}
-              placeholder="챙길 것 — 예: 여권, 선크림"
-              onChange={(next) => onItineraryChange({ ...itinerary, packing: next })}
-            />
-          </div>
-          <div className="flex flex-col gap-2">
-            <GroupTitle Icon={ShoppingCart} text="장보기" />
-            <ChecklistCard
-              items={shopping}
-              withAssignee
-              placeholder="살 것 — 예: 물, 라면"
-              onChange={(next) => onItineraryChange({ ...itinerary, shopping: next })}
-            />
-          </div>
-        </div>
+        <ChecklistCard
+          items={packing}
+          withAssignee
+          placeholder="챙길 것 — 예: 여권, 선크림"
+          onChange={(next) => onItineraryChange({ ...itinerary, packing: next })}
+        />
       ),
     },
     {
@@ -120,7 +99,8 @@ export default function PreparePanel({
       body: () => (
         <ChecklistCard
           items={agenda}
-          placeholder="이야기할 것 — 예: 예산 정하기"
+          withResult
+          placeholder="안건 — 예: 예산 정하기"
           onChange={(next) => onItineraryChange({ ...itinerary, agenda: next })}
         />
       ),
@@ -130,8 +110,10 @@ export default function PreparePanel({
   const current = sections.find((s) => s.key === active) ?? sections[0];
 
   return (
-    <div className="flex h-full flex-col overflow-y-auto bg-[var(--bg)] px-4 pb-6 pt-3">
-      <div className="prep-filter-wrap">
+    // 필터 줄은 스크롤 밖(고정 머리), 내용만 아래에서 스크롤 — 예전처럼 sticky로 띄우면
+    // 스크롤된 내용이 필터 위 틈으로 비쳐 겹쳐 보였다.
+    <div className="flex h-full flex-col bg-[var(--bg)]">
+      <div className="shrink-0 px-4 pb-3 pt-3">
         <div className="prep-filter">
           {sections.map((s) => {
             const on = s.key === current.key;
@@ -151,7 +133,9 @@ export default function PreparePanel({
           })}
         </div>
       </div>
-      <div className="prep-body">{current.body()}</div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6">
+        <div className="prep-body">{current.body()}</div>
+      </div>
     </div>
   );
 }

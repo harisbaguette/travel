@@ -79,7 +79,10 @@ function isFlight(f: unknown): f is FlightInfo {
     typeof o.date === "string" &&
     typeof o.depTime === "string" &&
     typeof o.arrTime === "string" &&
-    typeof o.memo === "string"
+    typeof o.memo === "string" &&
+    (o.airline === undefined || typeof o.airline === "string") &&
+    (o.depTerminal === undefined || typeof o.depTerminal === "string") &&
+    (o.arrTerminal === undefined || typeof o.arrTerminal === "string")
   );
 }
 
@@ -90,7 +93,8 @@ function isChecklistItem(i: unknown): i is ChecklistItem {
     typeof o.id === "string" &&
     typeof o.text === "string" &&
     typeof o.done === "boolean" &&
-    (o.assignee === undefined || typeof o.assignee === "string")
+    (o.assignee === undefined || typeof o.assignee === "string") &&
+    (o.result === undefined || typeof o.result === "string")
   );
 }
 
@@ -115,6 +119,8 @@ function isStay(s: unknown): s is StayInfo {
     typeof o.checkIn === "string" &&
     typeof o.checkOut === "string" &&
     typeof o.memo === "string" &&
-    (o.address === undefined || typeof o.address === "string")
+    (o.address === undefined || typeof o.address === "string") &&
+    (o.checkInTime === undefined || typeof o.checkInTime === "string") &&
+    (o.checkOutTime === undefined || typeof o.checkOutTime === "string")
   );
 }

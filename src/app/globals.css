@@ -517,16 +517,9 @@ body {
 
 /* ── 준비 화면 항목 고르기 — Doweek 필터 줄 이식(접이식 머리 대체) ──
    흰 알약 판 안에서 하나만 채워지고, 남은 개수는 오른쪽 작은 원에 붙는다.
-   칩이 화면보다 길면 줄 안에서 옆으로 밀려 스크롤된다. */
-.prep-filter-wrap {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  /* 부모 좌우 여백(16px)을 넘어 화면 끝까지 밀리게 — 스크롤이 잘려 보이지 않는다. */
-  margin: 0 -16px;
-  padding: 0 16px 12px;
-  background: var(--bg);
-}
+   칩이 화면보다 길면 줄 안에서 옆으로 밀려 스크롤된다.
+   줄 자체는 스크롤 밖 고정 머리에 있다 — sticky로 띄우던 시절, 스크롤된 내용이
+   위 틈으로 비쳐 겹쳐 보이는 문제가 있어 구조를 바꿨다(PreparePanel 참고). */
 .prep-filter {
   display: flex;
   gap: 2px;

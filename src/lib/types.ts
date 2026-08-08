@@ -42,6 +42,10 @@ export interface FlightInfo {
   depTime: string; // HH:MM
   arrTime: string; // HH:MM
   memo: string;
+  // 아래는 나중에 추가된 칸 — 옛 저장본에는 없으므로 전부 선택 사항.
+  airline?: string; // 항공사 이름
+  depTerminal?: string; // 출발 터미널(T1, T2 …)
+  arrTerminal?: string; // 도착 터미널
 }
 
 // 숙소 기록 — 이름 + 체크인/아웃 + 주소 + 메모.
@@ -53,6 +57,9 @@ export interface StayInfo {
   memo: string;
   // 구글 지도에서 찾을 주소 — 옛 저장본에는 없으므로 선택 사항.
   address?: string;
+  // 체크인/아웃 시각(HH:MM) — 옛 저장본에는 없으므로 선택 사항.
+  checkInTime?: string;
+  checkOutTime?: string;
 }
 
 // 체크리스트 한 줄 — 짐 챙기기·회의 안건·장보기가 같은 모양을 쓴다.
@@ -60,8 +67,10 @@ export interface ChecklistItem {
   id: string;
   text: string;
   done: boolean;
-  // 담당자 이름 — 장보기에서만 사용.
+  // 담당자 이름 — 장보기(누가 사 올지)·짐 챙기기(누가 챙길지)에서 사용.
   assignee?: string;
+  // 결정된 내용 — 회의에서 안건마다 결과를 적는 칸.
+  result?: string;
 }
 
 // 집합 약속 — 언제 어디서 모일지.
