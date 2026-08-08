@@ -25,14 +25,14 @@ export default function PinModal({ lat, lng, onAdd, onClose }: PinModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-[1100] flex items-center justify-center bg-[#0c4a6e]/30 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[1100] flex items-center justify-center bg-[#2f2b23]/35 p-4"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-label="새 핀 추가"
     >
       <div
-        className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-2xl"
+        className="w-full max-w-md rounded-lg border border-[var(--border)] bg-[var(--surface)] p-5 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-5 flex items-center justify-between">
@@ -54,7 +54,7 @@ export default function PinModal({ lat, lng, onAdd, onClose }: PinModalProps) {
                     key={cfg.type}
                     type="button"
                     onClick={() => setType(cfg.type)}
-                    className="flex flex-col items-center gap-1 rounded-xl border-2 px-1 py-3 transition-colors"
+                    className="flex flex-col items-center gap-1 rounded-lg border-2 px-1 py-3 transition-colors"
                     style={{
                       borderColor: selected ? cfg.color : "var(--border)",
                       background: selected ? `${cfg.color}14` : "var(--surface)",

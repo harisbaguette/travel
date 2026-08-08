@@ -48,17 +48,22 @@ export default function ItineraryPanel({
     const span = endDate ? daysBetween(startDate, endDate) : 0;
     if (span < 0) return [];
     const count = Math.min(span + 1, MAX_DAYS);
-    const byDate = new Map(days.map((d) => [d.date, d.pinIds]));
+    const byDate = new Map(days.map((d) => [d.date, d]));
     return Array.from({ length: count }, (_, i) => {
       const date = addDays(startDate, i);
-      return { date, pinIds: byDate.get(date) ?? [] };
+      const saved = byDate.get(date);
+      return { date, pinIds: saved?.pinIds ?? [], times: saved?.times ?? {} };
     });
   }, [itinerary]);
+
+  const nights = useMemo(() => {
+    if (!itinerary.startDate || !itinerary.endDate) return 0;
+    return Math.max(daysBetween(itinerary.startDate, itinerary.endDate), 0);
+  }, [itinerary.startDate, itinerary.endDate]);
 
   const pinById = useMemo(() => new Map(pins.map((p) => [p.id, p])), [pins]);
 
   // 화면에 보이는 날짜 어디에도 안 들어간 핀 — "이 날짜에 추가" 목록에 띄운다.
-  // 날짜 범위를 줄여 사라진 날에 묶여 있던 핀도 다시 고를 수 있어야 하므로 dayList 기준으로 센다.
   const unassigned = useMemo(() => {
     const used = new Set(dayList.flatMap((d) => d.pinIds));
     return pins.filter((p) => !used.has(p.id));
@@ -68,35 +73,70 @@ export default function ItineraryPanel({
     onChange({ ...itinerary, ...patch });
   };
 
-  const assign = (date: string, pinId: string) => {
-    if (!pinId) return;
+  // 날짜 하나의 저장분을 바꿔치기하는 공통 도우미
+  const patchDay = (
+    date: string,
+    fn: (day: { pinIds: string[]; times: Record<string, string> }) => {
+      pinIds: string[];
+      times: Record<string, string>;
+    }
+  ) => {
     const days = [...itinerary.days];
     const idx = days.findIndex((d) => d.date === date);
-    if (idx === -1) {
-      days.push({ date, pinIds: [pinId] });
-    } else {
-      if (days[idx].pinIds.includes(pinId)) return;
-      days[idx] = { ...days[idx], pinIds: [...days[idx].pinIds, pinId] };
-    }
-    onChange({ ...itinerary, days });
+    const cur =
+      idx === -1
+        ? { pinIds: [] as string[], times: {} as Record<string, string> }
+        : { pinIds: [...days[idx].pinIds], times: { ...(days[idx].times ?? {}) } };
+    const next = fn(cur);
+    const entry = { date, pinIds: next.pinIds, times: next.times };
+    if (idx === -1) days.push(entry);
+    else days[idx] = entry;
+    onChange({
+      ...itinerary,
+      days: days.filter((d) => d.pinIds.length > 0 || Object.keys(d.times ?? {}).length > 0),
+    });
+  };
+
+  const assign = (date: string, pinId: string) => {
+    if (!pinId) return;
+    patchDay(date, (day) =>
+      day.pinIds.includes(pinId) ? day : { ...day, pinIds: [...day.pinIds, pinId] }
+    );
   };
 
   const unassign = (date: string, pinId: string) => {
-    const days = itinerary.days
-      .map((d) =>
-        d.date === date
-          ? { ...d, pinIds: d.pinIds.filter((id) => id !== pinId) }
-          : d
-      )
-      .filter((d) => d.pinIds.length > 0);
-    onChange({ ...itinerary, days });
+    patchDay(date, (day) => {
+      const times = { ...day.times };
+      delete times[pinId];
+      return { pinIds: day.pinIds.filter((id) => id !== pinId), times };
+    });
+  };
+
+  const setTime = (date: string, pinId: string, time: string) => {
+    patchDay(date, (day) => {
+      const times = { ...day.times };
+      if (time) times[pinId] = time;
+      else delete times[pinId];
+      return { ...day, times };
+    });
+  };
+
+  const move = (date: string, pinId: string, dir: -1 | 1) => {
+    patchDay(date, (day) => {
+      const i = day.pinIds.indexOf(pinId);
+      const j = i + dir;
+      if (i === -1 || j < 0 || j >= day.pinIds.length) return day;
+      const pinIds = [...day.pinIds];
+      [pinIds[i], pinIds[j]] = [pinIds[j], pinIds[i]];
+      return { ...day, pinIds };
+    });
   };
 
   return (
     <div className="flex h-full flex-col bg-[var(--surface)]">
       {/* 날짜 고르기 */}
       <div className="shrink-0 border-b border-[var(--border)] p-4">
-        <div className="flex items-center gap-2">
+        <div className="flex items-end gap-2">
           <label className="flex flex-1 flex-col gap-1">
             <span className="text-xs font-medium text-[var(--text-muted)]">시작일</span>
             <input
@@ -104,7 +144,7 @@ export default function ItineraryPanel({
               value={itinerary.startDate}
               max={itinerary.endDate || undefined}
               onChange={(e) => setRange({ startDate: e.target.value })}
-              className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 text-sm text-[var(--text)] focus:border-[var(--accent)] focus:outline-none"
+              className="h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 text-sm text-[var(--text)] focus:border-[var(--accent)] focus:outline-none"
             />
           </label>
           <label className="flex flex-1 flex-col gap-1">
@@ -114,13 +154,18 @@ export default function ItineraryPanel({
               value={itinerary.endDate}
               min={itinerary.startDate || undefined}
               onChange={(e) => setRange({ endDate: e.target.value })}
-              className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 text-sm text-[var(--text)] focus:border-[var(--accent)] focus:outline-none"
+              className="h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 text-sm text-[var(--text)] focus:border-[var(--accent)] focus:outline-none"
             />
           </label>
+          {nights > 0 && (
+            <span className="mb-2.5 shrink-0 whitespace-nowrap rounded-full bg-[var(--accent-soft)] px-2.5 py-1 text-xs font-bold text-[var(--accent)]">
+              {nights}박 {nights + 1}일
+            </span>
+          )}
         </div>
       </div>
 
-      {/* Day 카드 */}
+      {/* Day 카드 — 세로 타임라인 */}
       <div className="flex-1 overflow-y-auto p-3">
         {dayList.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
@@ -136,7 +181,7 @@ export default function ItineraryPanel({
             {dayList.map((day, i) => (
               <li
                 key={day.date}
-                className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3"
+                className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3"
               >
                 <div className="mb-2 flex items-baseline gap-2">
                   <span className="text-sm font-bold text-[var(--accent)]">
@@ -148,36 +193,65 @@ export default function ItineraryPanel({
                 </div>
 
                 {day.pinIds.length > 0 && (
-                  <ol className="mb-2 flex flex-col gap-1">
+                  <ol className="relative mb-2 flex flex-col">
+                    {/* 세로 선 — 순번 점들을 잇는 타임라인 줄기 */}
+                    <span
+                      aria-hidden
+                      className="absolute bottom-3 left-[11px] top-3 w-px bg-[var(--border)]"
+                    />
                     {day.pinIds.map((pid, order) => {
                       const pin = pinById.get(pid);
                       if (!pin) return null;
                       return (
-                        <li
-                          key={pid}
-                          className="group flex items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-[var(--surface-hover)]"
-                        >
-                          <span className="w-4 shrink-0 text-center text-[11px] tabular-nums text-[var(--text-muted)]">
+                        <li key={pid} className="group relative flex items-center gap-2 py-1">
+                          <span className="z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[11px] font-bold tabular-nums text-[var(--text)]">
                             {order + 1}
                           </span>
+                          <input
+                            type="time"
+                            value={day.times[pid] ?? ""}
+                            onChange={(e) => setTime(day.date, pid, e.target.value)}
+                            className="h-8 w-[4.9rem] shrink-0 rounded-md border border-[var(--border)] bg-[var(--surface)] px-1 text-xs tabular-nums text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none"
+                            aria-label={`${pin.name} 방문 시각`}
+                          />
                           <button
                             type="button"
                             onClick={() => onPinClick(pin)}
-                            className="flex flex-1 items-center gap-1.5 overflow-hidden text-left"
+                            className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
                           >
                             <span className="shrink-0 text-sm">{pin.emoji}</span>
                             <span className="truncate text-sm text-[var(--text)]">
                               {pin.name}
                             </span>
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => unassign(day.date, pid)}
-                            className="shrink-0 rounded p-0.5 text-xs text-[var(--text-muted)] opacity-0 transition-opacity hover:text-[var(--danger)] group-hover:opacity-100"
-                            aria-label={`${pin.name} 이 날짜에서 빼기`}
-                          >
-                            ✕
-                          </button>
+                          <span className="flex shrink-0 items-center">
+                            <button
+                              type="button"
+                              onClick={() => move(day.date, pid, -1)}
+                              disabled={order === 0}
+                              className="rounded p-1 text-xs text-[var(--text-muted)] hover:text-[var(--text)] disabled:opacity-30"
+                              aria-label={`${pin.name} 위로`}
+                            >
+                              ↑
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => move(day.date, pid, 1)}
+                              disabled={order === day.pinIds.length - 1}
+                              className="rounded p-1 text-xs text-[var(--text-muted)] hover:text-[var(--text)] disabled:opacity-30"
+                              aria-label={`${pin.name} 아래로`}
+                            >
+                              ↓
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => unassign(day.date, pid)}
+                              className="rounded p-1 text-xs text-[var(--text-muted)] hover:text-[var(--danger)]"
+                              aria-label={`${pin.name} 이 날짜에서 빼기`}
+                            >
+                              ✕
+                            </button>
+                          </span>
                         </li>
                       );
                     })}

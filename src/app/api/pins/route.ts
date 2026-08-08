@@ -1,24 +1,15 @@
 import type { Pin } from "@/lib/types";
-import { getServerSupabase } from "@/lib/supabaseServer";
+import { getDb } from "@/lib/db";
 
-// 핀 CRUD — Supabase 테이블 pins.
-// 스키마(SQL, Supabase 대시보드에서 실행):
-//   create table pins (
-//     id text primary key,
-//     room_id text not null,
-//     lat double precision not null,
-//     lng double precision not null,
-//     type text not null,
-//     name text not null,
-//     memo text default '',
-//     emoji text default '',
-//     is_ai boolean default false,
-//     created_at bigint not null,
-//     created_by text default ''
-//   );
-//   create index pins_room_idx on pins(room_id);
-//   alter table pins enable row level security;
-//   create policy "anyone can read/write" on pins for all using (true) with check (true);
+// 핀 CRUD — Neon(Postgres) pins 테이블. 스키마: src/lib/schema.sql
+//
+// 응답 규격은 src/lib/sync.ts 상단 주석과 한 몸이다:
+//   GET    ?room=&since=   → { ok, configured, serverNow, pins: [{...pin, updatedAt, deleted}] }
+//   POST   {room, pin}     → { ok, updatedAt }
+//   DELETE ?room=&id=      → { ok, updatedAt }
+// DB 미설정이면 오류 대신 configured:false — 앱은 혼자 쓰기 모드로 조용히 동작한다.
+
+const PIN_TYPES = new Set(["food", "spot", "cafe", "stay", "etc"]);
 
 interface PinRow {
   id: string;
@@ -30,11 +21,13 @@ interface PinRow {
   memo: string;
   emoji: string;
   is_ai: boolean;
-  created_at: number;
+  created_at: number | string;
   created_by: string;
+  deleted: boolean;
+  updated_ms: number | string; // extract(epoch from updated_at) * 1000
 }
 
-function rowToPin(r: PinRow): Pin {
+function rowToPin(r: PinRow): Pin & { updatedAt: number; deleted: boolean } {
   return {
     id: r.id,
     lat: r.lat,
@@ -44,88 +37,136 @@ function rowToPin(r: PinRow): Pin {
     memo: r.memo ?? "",
     emoji: r.emoji ?? "",
     isAI: Boolean(r.is_ai),
-    createdAt: r.created_at,
+    createdAt: Number(r.created_at),
     createdBy: r.created_by || undefined,
+    updatedAt: Math.round(Number(r.updated_ms)),
+    deleted: Boolean(r.deleted),
   };
 }
 
-function pinToRow(roomId: string, p: Pin): PinRow {
-  return {
-    id: p.id,
-    room_id: roomId,
-    lat: p.lat,
-    lng: p.lng,
-    type: p.type,
-    name: p.name,
-    memo: p.memo,
-    emoji: p.emoji,
-    is_ai: p.isAI,
-    created_at: p.createdAt,
-    created_by: p.createdBy ?? "",
-  };
+// 입력값 검증 — 아무 값이나 DB에 들어오지 못하게 막는다.
+function validRoom(room: unknown): room is string {
+  return typeof room === "string" && room.length > 0 && room.length <= 100;
 }
 
-// GET /api/pins?room=roomId
+function validPin(pin: unknown): pin is Pin {
+  if (!pin || typeof pin !== "object") return false;
+  const p = pin as Record<string, unknown>;
+  return (
+    typeof p.id === "string" &&
+    p.id.length > 0 &&
+    p.id.length <= 100 &&
+    typeof p.lat === "number" &&
+    p.lat >= -90 &&
+    p.lat <= 90 &&
+    typeof p.lng === "number" &&
+    p.lng >= -180 &&
+    p.lng <= 180 &&
+    typeof p.type === "string" &&
+    PIN_TYPES.has(p.type) &&
+    typeof p.name === "string" &&
+    p.name.length > 0 &&
+    p.name.length <= 200 &&
+    (p.memo === undefined || (typeof p.memo === "string" && p.memo.length <= 2000)) &&
+    (p.emoji === undefined || (typeof p.emoji === "string" && p.emoji.length <= 8)) &&
+    (p.createdBy === undefined || (typeof p.createdBy === "string" && p.createdBy.length <= 100))
+  );
+}
+
+// GET /api/pins?room=&since= — since(밀리초) 이후 바뀐 것만 + 서버 시각 동봉
 export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const room = url.searchParams.get("room") ?? "";
-  const supabase = getServerSupabase();
-  if (!supabase) return Response.json({ ok: true, pins: [] });
+  const since = Number(url.searchParams.get("since") ?? "0");
+  const sql = getDb();
+  if (!sql) return Response.json({ ok: true, configured: false, pins: [] });
+  if (!validRoom(room)) {
+    return Response.json({ ok: false, error: "방 이름이 올바르지 않아요" }, { status: 400 });
+  }
+  const sinceMs = Number.isFinite(since) && since > 0 ? since : 0;
   try {
-    const { data, error } = await supabase
-      .from("pins")
-      .select("*")
-      .eq("room_id", room)
-      .order("created_at", { ascending: true });
-    if (error) return Response.json({ ok: false, error: error.message }, { status: 500 });
-    const pins = (data ?? []).map(rowToPin);
-    return Response.json({ ok: true, pins });
+    const rows = (await sql`
+      select id, room_id, lat, lng, type, name, memo, emoji, is_ai,
+             created_at, created_by, deleted,
+             extract(epoch from updated_at) * 1000 as updated_ms,
+             extract(epoch from now()) * 1000 as server_now
+      from pins
+      where room_id = ${room}
+        and updated_at > to_timestamp(${sinceMs} / 1000.0)
+      order by updated_at asc
+    `) as (PinRow & { server_now: number | string })[];
+    // 바뀐 게 없어도 서버 시각은 알려줘야 다음 폴링 기준이 잡힌다.
+    let serverNow = rows.length > 0 ? Math.round(Number(rows[0].server_now)) : 0;
+    if (!serverNow) {
+      const t = (await sql`select extract(epoch from now()) * 1000 as server_now`) as {
+        server_now: number | string;
+      }[];
+      serverNow = Math.round(Number(t[0].server_now));
+    }
+    return Response.json({
+      ok: true,
+      configured: true,
+      serverNow,
+      pins: rows.map(rowToPin),
+    });
   } catch (e) {
     return Response.json({ ok: false, error: String(e) }, { status: 500 });
   }
 }
 
-// POST /api/pins — body: { room, pin }
+// POST /api/pins — body: { room, pin } (핀 1개 upsert)
 export async function POST(request: Request): Promise<Response> {
-  const supabase = getServerSupabase();
-  if (!supabase) return Response.json({ ok: false, error: "Supabase 미설정" }, { status: 503 });
-  let body: { room?: string; pin?: Pin };
+  const sql = getDb();
+  if (!sql) return Response.json({ ok: false, configured: false });
+  let body: { room?: unknown; pin?: unknown };
   try {
-    body = (await request.json()) as { room?: string; pin?: Pin };
+    body = (await request.json()) as { room?: unknown; pin?: unknown };
   } catch {
     return Response.json({ ok: false, error: "잘못된 요청" }, { status: 400 });
   }
-  const { room, pin } = body;
-  if (!room || !pin || !pin.id) {
-    return Response.json({ ok: false, error: "필수 값 누락" }, { status: 400 });
+  if (!validRoom(body.room) || !validPin(body.pin)) {
+    return Response.json({ ok: false, error: "입력값이 올바르지 않아요" }, { status: 400 });
   }
+  const room = body.room;
+  const p = body.pin;
   try {
-    const { error } = await supabase
-      .from("pins")
-      .upsert(pinToRow(room, pin));
-    if (error) return Response.json({ ok: false, error: error.message }, { status: 500 });
-    return Response.json({ ok: true });
+    const rows = (await sql`
+      insert into pins (id, room_id, lat, lng, type, name, memo, emoji, is_ai, created_at, created_by, deleted)
+      values (${p.id}, ${room}, ${p.lat}, ${p.lng}, ${p.type}, ${p.name},
+              ${p.memo ?? ""}, ${p.emoji ?? ""}, ${Boolean(p.isAI)},
+              ${Number(p.createdAt) || Date.now()}, ${p.createdBy ?? ""}, false)
+      on conflict (id) do update set
+        lat = excluded.lat, lng = excluded.lng, type = excluded.type,
+        name = excluded.name, memo = excluded.memo, emoji = excluded.emoji,
+        deleted = false, updated_at = now()
+      returning extract(epoch from updated_at) * 1000 as updated_ms
+    `) as { updated_ms: number | string }[];
+    return Response.json({ ok: true, updatedAt: Math.round(Number(rows[0].updated_ms)) });
   } catch (e) {
     return Response.json({ ok: false, error: String(e) }, { status: 500 });
   }
 }
 
-// DELETE /api/pins?room=roomId&id=pinId
+// DELETE /api/pins?room=&id= — 행은 남기고 deleted 표시만 한다.
+// 그래야 다른 창이 "이 핀은 지워졌다"를 폴링으로 알 수 있다.
 export async function DELETE(request: Request): Promise<Response> {
-  const supabase = getServerSupabase();
-  if (!supabase) return Response.json({ ok: false, error: "Supabase 미설정" }, { status: 503 });
+  const sql = getDb();
+  if (!sql) return Response.json({ ok: false, configured: false });
   const url = new URL(request.url);
   const room = url.searchParams.get("room") ?? "";
   const id = url.searchParams.get("id") ?? "";
-  if (!room || !id) return Response.json({ ok: false, error: "필수 값 누락" }, { status: 400 });
+  if (!validRoom(room) || !id || id.length > 100) {
+    return Response.json({ ok: false, error: "입력값이 올바르지 않아요" }, { status: 400 });
+  }
   try {
-    const { error } = await supabase
-      .from("pins")
-      .delete()
-      .eq("room_id", room)
-      .eq("id", id);
-    if (error) return Response.json({ ok: false, error: error.message }, { status: 500 });
-    return Response.json({ ok: true });
+    const rows = (await sql`
+      update pins set deleted = true, updated_at = now()
+      where room_id = ${room} and id = ${id}
+      returning extract(epoch from updated_at) * 1000 as updated_ms
+    `) as { updated_ms: number | string }[];
+    const updatedAt =
+      rows.length > 0 ? Math.round(Number(rows[0].updated_ms)) : Date.now();
+    return Response.json({ ok: true, updatedAt });
   } catch (e) {
     return Response.json({ ok: false, error: String(e) }, { status: 500 });
   }

@@ -1,23 +1,22 @@
 @import "tailwindcss";
 @import "leaflet/dist/leaflet.css";
+@import "maplibre-gl/dist/maplibre-gl.css";
 
-/* Travel/Tourism 라이트 토큰 — 하늘색 테마 */
+/* 종이 지도 + 포스트잇 토큰 — 근거는 DESIGN.md */
 :root {
-  --bg: #f0f9ff;
-  --surface: #ffffff;
-  --surface-hover: #e0f2fe;
-  --border: #bae6fd;
-  --text: #0c4a6e;
-  --text-muted: #64748b;
-  --accent: #0ea5e9;
-  --accent-hover: #0284c7;
-  --accent-soft: rgba(14, 165, 233, 0.12);
-  --success: #22c55e;
-  --warning: #f59e0b;
-  --error: #ef4444;
-  --info: #3b82f6;
-  --danger: #ef4444;
-  --font-sans: "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+  --bg: #f4f1e8;
+  --surface: #fdfbf5;
+  --surface-hover: #efeadd;
+  --border: #e0d9c8;
+  --text: #2f2b23;
+  --text-muted: #6d6759;
+  --accent: #bf4318;
+  --accent-hover: #a03712;
+  --accent-soft: rgba(191, 67, 24, 0.1);
+  --success: #3f6d3a;
+  --warning: #9a6b00;
+  --danger: #b3261e;
+  --font-sans: var(--font-plex), "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
 }
 
 @theme inline {
@@ -32,8 +31,6 @@
   --color-accent-soft: var(--accent-soft);
   --color-success: var(--success);
   --color-warning: var(--warning);
-  --color-error: var(--error);
-  --color-info: var(--info);
   --color-danger: var(--danger);
   --font-sans: var(--font-sans);
 }
@@ -45,6 +42,7 @@ body {
   height: 100%;
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  overflow-x: clip;
 }
 
 #__next,
@@ -52,9 +50,15 @@ body {
   min-height: 100vh;
 }
 
-/* Leaflet 컨트롤 — 라이트 테마 */
+/* 접근성 — 키보드 포커스는 즉시, 또렷하게 */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Leaflet 컨트롤 — 종이 테마 */
 .leaflet-container {
-  background: #dceefb;
+  background: #e8e4d8;
   font-family: var(--font-sans);
 }
 .leaflet-bar a {
@@ -67,11 +71,36 @@ body {
   color: var(--accent-hover);
 }
 .leaflet-control-attribution {
-  background: rgba(255, 255, 255, 0.85) !important;
+  background: rgba(253, 251, 245, 0.85) !important;
   color: var(--text-muted) !important;
+  font-size: 10px;
 }
 .leaflet-control-attribution a {
-  color: var(--accent) !important;
+  color: var(--text-muted) !important;
+}
+
+/* 내 위치 버튼 — 지도 오른쪽 아래 플로팅 */
+.map-locate-btn {
+  position: absolute;
+  right: 12px;
+  bottom: 32px;
+  z-index: 1000;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: 0 2px 10px rgba(47, 43, 35, 0.18);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.map-locate-btn:hover {
+  background: var(--surface-hover);
+}
+.map-locate-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* 핀 마커 — 흰 원 + 이모지, 타입별 테두리 */
@@ -85,7 +114,7 @@ body {
   transform: rotate(-45deg);
   background: var(--surface);
   border: 3px solid var(--accent);
-  box-shadow: 0 2px 8px rgba(12, 74, 110, 0.25);
+  box-shadow: 0 2px 8px rgba(47, 43, 35, 0.25);
 }
 /* 다른 사람이 찍은 핀 — 점선 테두리 + 살짝 연하게 */
 .pin-icon--other {
@@ -98,13 +127,13 @@ body {
   line-height: 1;
 }
 
-/* Leaflet 팝업 — 흰 배경, 진한 글자 */
+/* Leaflet 팝업 */
 .leaflet-popup-content-wrapper {
   background: var(--surface);
   color: var(--text);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: 0 6px 20px rgba(12, 74, 110, 0.18);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(47, 43, 35, 0.18);
 }
 .leaflet-popup-tip {
   background: var(--surface);
@@ -119,4 +148,12 @@ body {
 }
 .leaflet-container a.leaflet-popup-close-button:hover {
   color: var(--text);
+}
+
+/* 움직임 최소화 설정 존중 */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

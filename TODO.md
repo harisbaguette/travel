@@ -1,128 +1,30 @@
-# 여행 핀 지도 — 할 일 (병렬 작업용으로 쪼갠 판)
+# 여행 핀 지도 — 할 일
 
-> 마지막 갱신: 2026-08-07
-> 저장소: git@github.com:harisbaguette/travel.git (main 푸시 완료)
-> 배포: https://travel-chi-lilac.vercel.app (동작 중)
-> 함께 편집 저장소를 **Supabase → Neon(Postgres)** 으로 갈아탄다.
-
----
-
-## ✅ 이미 끝난 것
-
-- Next.js 16 + React 19 + TypeScript, Leaflet 무료 지도, 도시 검색 이동
-- 핀 추가/삭제/드래그/메모, 타입 5종(맛집🍜 관광지📸 카페☕ 숙소🛏 기타📍)
-- AI 맛집 찾기(Overpass API) — 로컬은 정상, **배포 환경에서 막힘(아래 F)**
-- 여행 방(`?room=xxx` 초대 링크 + 복사), 방마다 핀·일정 따로 저장
-- 날짜별 일정(시작·종료일 → Day 카드, 핀 배정/빼기), 사이드바 📌핀/📅일정 탭
-- 내 핀 / 친구 핀 구분 표시(색 테두리 vs 회색 점선 + "친구" 배지)
-- 모바일 반응형(헤더 2줄 접힘, 풀스크린 시트), 하이드레이션 오류 0
-- tsc·lint·build 통과 + 헤드리스 브라우저 실물 검증(1440px/375px)
-- GitHub 푸시 + Vercel 프로덕션 배포
+> 마지막 갱신: 2026-08-08
+> 저장소: git@github.com:harisbaguette/travel.git (main 푸시)
+> 배포: https://travel-chi-lilac.vercel.app
 
 ---
 
-## 🔀 병렬 작업 묶음 (파일이 겹치지 않게 나눔)
+## ✅ 끝난 것 (2026-08-08 대개편 포함)
 
-같은 파일을 두 사람(창)이 동시에 고치면 나중 저장이 앞 것을 덮는다.
-아래 묶음은 **담당 파일이 서로 겹치지 않는다** — A·C·F는 지금 바로 동시에 시작 가능.
+- Next.js 16 + React 19 + TypeScript, 핀 추가/삭제/드래그/메모, 타입 5종
+- **Neon(Postgres) 함께 편집** — A(기반)·B(API 라우트)·C(폴링 훅)·D(배선) 전부 완료.
+  Supabase 코드·패키지 완전 제거. 입력값 검증 포함(좌표 범위·이름 길이·크기 상한).
+- **한국어 지도** — OpenFreeMap 벡터 지도 + 라벨 name:ko 우선(없으면 현지어).
+  WebGL 안 되는 기기는 자동으로 예전 지도(래스터)로.
+- **푸꾸옥 방** — 예전 방(오사카·가오슝) 프리셋/브라우저 저장/DB 데이터 전부 정리.
+  방을 고르면 그 방에 맞는 지도 위치로 이동(보던 위치 > 방 이름 도시 > 핀 범위).
+- **여행 기록** — ✈️ 가는/오는 편(날짜·편명·구간·시각·메모), 🛏 숙소(체크인/아웃·메모),
+  📅 일정 타임라인(순번·시각 입력·순서 이동). 전부 방 단위로 서버 동기화.
+- **모바일 기준 재설계** — 하단 탭 4개(지도/핀/일정/기록), 지도 위 AI 맛집·내 위치 플로팅.
+  디자인 토큰 교체(종이+잉크+주홍 1색, DESIGN.md), design_lint ERROR 0.
+- 검색 — 동남아 도시 대폭 추가(푸꾸옥·다낭·방콕 등) + Nominatim 한국어 폴백.
+- AI 맛집 찾기 — 미러 4곳 차례 시도 + 시간 제한(F). 배포 실측 완료.
+- tsc·lint·build 통과, 헤드리스 실물 검증(375px/1440px 스크린샷, 콘솔 오류 0).
 
-### 의존 관계
+## 📌 나중에 하면 좋은 것
 
-```
-F (맛집 API 고치기)  ── 독립, 언제든 시작
-A (DB 기반)  ──▶  B (API 라우트)  ──┐
-             └──▶  C (동기화 훅)  ──┴──▶  D (화면 배선) ──▶ E (배포·실측)
-```
-
----
-
-### 📦 A. Neon 데이터베이스 기반 만들기 — [Done — Supabase 파일 정리만 D로 넘김]
-
-**담당 파일**: `src/lib/db.ts`(새로), `src/lib/schema.sql`(새로), `.env.example`, `README.md`
-
-- [x] Neon 프로젝트 생성 완료 — `travel` (ap-southeast-1, Postgres 18)
-      접속 주소는 `.env.local`(git 무시)과 Vercel Production 환경변수에 등록됨
-- [x] `@neondatabase/serverless` 1.1.0 설치 (HTTP 드라이버 — Vercel 서버리스에서 동작)
-- [x] `src/lib/db.ts` — `getDb()`는 `DATABASE_URL` 없으면 `null`, `isDbReady()` 제공
-- [x] `src/lib/schema.sql` — `pins`(+`deleted` 칸) / `itineraries` 테이블,
-      `pins(room_id)`·`pins(room_id, updated_at)` 색인, `updated_at` 자동 갱신 트리거
-- [x] **실 DB에 스키마 적용 완료** — 넣기/고치기/"그 시각 이후 바뀐 것" 조회/일정 저장 전부 실행 확인
-- [x] `.env.example`·README를 Neon 기준으로 교체 (Supabase 문구 제거, 폴링 이유 설명 추가)
-- [ ] `supabase.ts`는 D에서 삭제 완료. 남은 것: `supabaseServer.ts` 삭제 +
-      `npm uninstall @supabase/supabase-js` → **B로 이관**: API 라우트가 아직 import 중,
-      B의 라우트 교체가 끝나면 함께 정리.
-- ℹ️ B가 알아야 할 것: 서버 라우트에서 `import { getDb } from "@/lib/db"` 후
-      `` const sql = getDb(); if (!sql) return Response.json({ ok: true, configured: false, pins: [] }) ``
-      스키마 칸 이름은 `snake_case`(`room_id`, `is_ai`, `created_by`, `updated_at`, `deleted`)
-
-### 📦 B. API 라우트 Neon으로 교체 — [Not started] (A 이후)
-
-**담당 파일**: `src/app/api/pins/route.ts`, `src/app/api/itinerary/route.ts`
-
-- [ ] `GET /api/pins?room=&since=` — `since`(밀리초) 이후 바뀐 것만 반환 + 서버 시각 동봉
-- [ ] `POST /api/pins` — 핀 1개 upsert
-- [ ] `DELETE /api/pins?room=&id=` — 지운 기록도 남겨야 다른 창이 지움을 안다
-      (`deleted boolean` 칸으로 표시, 실제 행은 남김)
-- [ ] `GET/POST /api/itinerary` — 방 단위 통째 저장·조회
-- [ ] DB 미설정이면 `{ok:true, pins:[]}` 같은 빈 응답 — 오류 대신 조용히 혼자 쓰기 모드
-- [ ] 입력값 검증(방 이름 길이, 좌표 범위, 이름 길이) — 아무 값이나 들어오면 거절
-
-### 📦 C. 클라이언트 동기화(폴링) — [Done — realtime.ts 삭제만 D로 넘김] (A 이후, B와 동시 가능)
-
-**담당 파일**: `src/lib/sync.ts`(새로), `src/lib/realtime.ts`(삭제)
-
-> Neon에는 Supabase 같은 "바뀌면 알려주는" 기능이 없다. 그래서 3초마다
-> "새로 바뀐 거 있어?"라고 물어보는 방식으로 만든다. 사람 2~5명 쓰는 앱엔 충분하다.
-
-- [x] `useRoomSync(room, handlers)` — 3초 주기로 `?since=마지막시각` 조회, 바뀐 것만 합치기.
-      `{enabled}` 반환(DB 미설정 판명 시 false — 안내 배너용, 초기값 true라 하이드레이션 안전)
-      (+ `pushPin`/`pushPinDelete`/`pushItinerary`(0.8초 디바운스) 전송 함수,
-      `applyPinChanges` 합치기 도우미 — D가 쓸 것)
-- [x] 화면이 안 보이면(다른 탭) 폴링 멈추기 — `document.visibilityState`
-- [x] 내가 방금 바꾼 건 되돌아와도 무시(내 것이 최신) — `updated_at` 큰 쪽이 이김
-- [x] DB 미설정이면 폴링 자체를 하지 않음 (`configured:false`거나 `serverNow` 없으면 정지)
-- [x] `src/lib/realtime.ts` 삭제 — D 배선 교체와 함께 삭제 완료
-- ⚠️ B 구현 시 응답 규격은 `src/lib/sync.ts` 상단 주석 참조
-      (`GET /api/pins`가 `configured`·`serverNow`·`updatedAt`·`deleted`를 반드시 포함해야 폴링이 동작)
-
-### 📦 D. 화면 배선 — [Done] (B·C 이후)
-
-**담당 파일**: `src/app/page.tsx`
-
-- [x] `subscribeToRoom`/`broadcastPins`/`broadcastItinerary` 호출 제거 → `useRoomSync`로 교체
-      (받은 변경분은 `applyPinChanges`로 합치고, 지워진 핀은 일정에서도 제거)
-- [x] 핀 추가·삭제·이동·AI 맛집 추가 시 서버에도 보내기(실패해도 로컬은 유지) —
-      `pushPin`/`pushPinDelete`, 일정은 `pushItinerary`(0.8초 디바운스)
-- [x] 안내 배너 문구를 Neon 기준으로 수정 — `{enabled}`가 false로 판명될 때만 표시
-- [x] `isSupabaseReady` 사용처 정리 + `src/lib/realtime.ts`·`src/lib/supabase.ts` 삭제
-      (`supabaseServer.ts`와 `npm uninstall`은 B 완료 후 — 라우트가 아직 import 중)
-
-### 📦 E. 배포·실측 — [Not started] (D 이후)
-
-- [ ] Vercel 프로젝트에 `DATABASE_URL` 등록 후 재배포
-- [ ] 창 2개를 같은 초대 링크로 열어 핀 추가·삭제가 3초 안에 반영되는지 확인
-- [ ] 모바일 375px 실물 확인
-- [ ] tsc·lint·build + 콘솔 오류 0 재확인
-
-### 📦 F. AI 맛집 찾기 배포 환경 고치기 — [Not started] (독립, 지금 시작 가능)
-
-**담당 파일**: `src/app/api/search-food/route.ts`
-
-> 지금 상태: 내 컴퓨터에서는 15개 잘 나오는데, 배포된 주소에서 누르면 실패한다.
-> Overpass 서버가 클라우드에서 온 요청을 `406`으로 거절하고 가끔 `504`(시간 초과)를 낸다.
-
-- [ ] 서버 여러 곳을 차례로 시도(하나 막히면 다음 것): overpass-api.de →
-      overpass.private.coffee → maps.mail.ru/osm/tools/overpass
-      (공식 목록: https://wiki.openstreetmap.org/wiki/Overpass_API)
-- [ ] `User-Agent`·`Accept` 헤더 제대로 보내기 (없으면 거절당함)
-- [ ] 서버마다 짧게 끊기(8~10초)고 다음으로 넘어가기 — 전체가 늦어지지 않게
-- [ ] 전부 실패하면 사용자에게 쉬운 말로 안내
-- [ ] 배포 주소에서 실제로 눌러 15개가 나오는지 확인(로컬 통과는 증거가 안 됨)
-
----
-
-## 📌 권장 진행 순서
-
-1. **지금 동시에**: A · F
-2. A 끝나면 동시에: B · C
-3. 그다음: D → E
+- [ ] 일정 핀 드래그로 순서 바꾸기(지금은 ↑↓ 버튼)
+- [ ] 숙소 기록을 숙소 핀과 연결(지도에서 바로 보기)
+- [ ] 핀 사진 첨부

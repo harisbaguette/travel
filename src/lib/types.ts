@@ -34,10 +34,46 @@ export interface SearchFoodResponse {
 export interface DayPlan {
   date: string; // YYYY-MM-DD
   pinIds: string[]; // 그 날 방문할 핀 ID, 순서대로
+  // 핀별 방문 시각(HH:MM). 없으면 시간 미정 — 타임라인에 순서만 표시.
+  times?: Record<string, string>;
+}
+
+// 비행 일정 — 가는 편/오는 편 각각 1개.
+export interface FlightInfo {
+  flightNo: string; // 예: VJ975
+  from: string; // 출발 공항/도시
+  to: string; // 도착 공항/도시
+  date: string; // YYYY-MM-DD
+  depTime: string; // HH:MM
+  arrTime: string; // HH:MM
+  memo: string;
+}
+
+// 숙소 기록 — 이름 + 체크인/아웃 + 메모.
+export interface StayInfo {
+  id: string;
+  name: string;
+  checkIn: string; // YYYY-MM-DD
+  checkOut: string; // YYYY-MM-DD
+  memo: string;
 }
 
 export interface Itinerary {
   startDate: string; // YYYY-MM-DD, 빈 값 가능
   endDate: string; // YYYY-MM-DD, 빈 값 가능
   days: DayPlan[];
+  // 아래는 나중에 추가된 기록 칸 — 예전 저장본에는 없을 수 있어 전부 선택 사항.
+  outbound?: FlightInfo;
+  inbound?: FlightInfo;
+  stays?: StayInfo[];
 }
+
+export const EMPTY_FLIGHT: FlightInfo = {
+  flightNo: "",
+  from: "",
+  to: "",
+  date: "",
+  depTime: "",
+  arrTime: "",
+  memo: "",
+};
