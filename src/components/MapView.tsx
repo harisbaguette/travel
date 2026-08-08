@@ -1,7 +1,14 @@
 "use client";
 
 import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
+import {
+  MapContainer,
+  TileLayer,
+  Marker,
+  Popup,
+  useMap,
+  useMapEvents,
+} from "react-leaflet";
 import { LocateFixed } from "lucide-react";
 import L, { type Map as LeafletMap } from "leaflet";
 import "leaflet.gridlayer.googlemutant";
@@ -98,6 +105,114 @@ function GoogleBaseLayer() {
   return null;
 }
 
+// ── 지도 톡 누르면 상세 보기 — 구글맵처럼 그 자리에 뭐가 있는지 카드로 보여 준다 ──
+interface PoiInfo {
+  kind: "poi" | "address";
+  name: string;
+  category?: string;
+  lat: number;
+  lng: number;
+  hours?: string;
+  phone?: string;
+  website?: string;
+}
+
+function PoiTapLayer() {
+  const [poi, setPoi] = useState<PoiInfo | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const markerRef = useRef<L.Marker | null>(null);
+
+  useMapEvents({
+    click(e) {
+      const { lat, lng } = e.latlng;
+      abortRef.current?.abort();
+      const ac = new AbortController();
+      abortRef.current = ac;
+      // 답을 기다리는 동안에도 점을 먼저 찍어 "눌렸다"는 느낌을 준다
+      setPoi({ kind: "address", name: "무슨 곳인지 알아보는 중…", lat, lng });
+      void fetch(`/api/poi-at?lat=${lat}&lng=${lng}`, { signal: ac.signal })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (ac.signal.aborted) return;
+          const found = (d as { poi?: PoiInfo | null } | null)?.poi;
+          // 아무것도 못 찾았으면 좌표라도 보여 준다
+          setPoi(
+            found ?? {
+              kind: "address",
+              name: `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+              lat,
+              lng,
+            }
+          );
+        })
+        .catch(() => {});
+    },
+  });
+
+  // 카드 내용이 갱신될 때마다 말풍선을 열어 둔다
+  useEffect(() => {
+    if (!poi) return;
+    const timer = setTimeout(() => markerRef.current?.openPopup(), 100);
+    return () => clearTimeout(timer);
+  }, [poi]);
+
+  const icon = useMemo(
+    () =>
+      L.divIcon({
+        className: "search-target-icon",
+        html: `<div class="search-dot"></div>`,
+        iconSize: [20, 20],
+        iconAnchor: [10, 10],
+        popupAnchor: [0, -12],
+      }),
+    []
+  );
+
+  if (!poi) return null;
+  return (
+    <Marker
+      position={[poi.lat, poi.lng]}
+      icon={icon}
+      zIndexOffset={400}
+      ref={(m) => {
+        markerRef.current = m as L.Marker | null;
+      }}
+    >
+      <Popup className="pin-popup">
+        <div className="min-w-[180px] max-w-[230px]">
+          <div className="mb-0.5 font-semibold text-[var(--text)]">{poi.name}</div>
+          {poi.category && (
+            <div className="mb-1 text-xs text-[var(--text-muted)]">{poi.category}</div>
+          )}
+          {poi.hours && (
+            <div className="mb-0.5 text-xs text-[var(--text-muted)]">⏰ {poi.hours}</div>
+          )}
+          {poi.phone && (
+            <div className="mb-0.5 text-xs text-[var(--text-muted)]">☎ {poi.phone}</div>
+          )}
+          <div className="mt-1.5 flex items-center gap-1.5">
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lng}`}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-md bg-[var(--accent)] px-2 py-1 text-xs font-bold !text-white"
+            >
+              구글맵 상세 보기
+            </a>
+            <button
+              type="button"
+              onClick={() => setPoi(null)}
+              className="rounded-md border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-muted)]"
+            >
+              지우기
+            </button>
+          </div>
+        </div>
+      </Popup>
+    </Marker>
+  );
+}
+
 // Leaflet은 SSR 미지원 -> "use client" + 부모에서 dynamic(ssr:false) 로 로드
 const MapView = forwardRef<LeafletMap, MapViewProps>(function MapView(
   {
@@ -125,6 +240,7 @@ const MapView = forwardRef<LeafletMap, MapViewProps>(function MapView(
       style={{ height: "100%", width: "100%" }}
     >
       <GoogleBaseLayer />
+      <PoiTapLayer />
       {onReady && <MapReadyBridge onReady={onReady} />}
       <LocateButton />
       {searchTarget && (

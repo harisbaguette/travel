@@ -1,16 +1,13 @@
 import type { MapBounds, Pin } from "@/lib/types";
+import {
+  PER_MIRROR_TIMEOUT_SEC,
+  runOverpass,
+  type OverpassElement,
+} from "@/lib/overpass";
 
 // Overpass API — OpenStreetMap 쿼리 엔드포인트
 // 화면 범위 내 음식점/카페/바/패스트푸드 검색
 // simplify: 첫 버전은 Overpass만. 평점 연동은 나중.
-
-interface OverpassElement {
-  type: string;
-  id: number;
-  lat: number;
-  lon: number;
-  tags?: Record<string, string>;
-}
 
 const AMENITY_LABEL: Record<string, string> = {
   restaurant: "음식점",
@@ -18,18 +15,6 @@ const AMENITY_LABEL: Record<string, string> = {
   fast_food: "패스트푸드",
   bar: "바",
 };
-
-// 클라우드(Vercel)발 요청을 406/504로 거절하는 서버가 있어 여러 곳을 차례로 시도한다.
-// 공식 공개 인스턴스 목록: https://wiki.openstreetmap.org/wiki/Overpass_API (2026-08 확인)
-const OVERPASS_MIRRORS = [
-  "https://overpass-api.de/api/interpreter",
-  "https://overpass.kumi.systems/api/interpreter",
-  "https://overpass.private.coffee/api/interpreter",
-  "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
-];
-
-// 서버 하나당 8초 안에 답이 없으면 다음 서버로 넘어간다 (전체가 늦어지지 않게)
-const PER_MIRROR_TIMEOUT_SEC = 8;
 
 // Vercel 함수 실행 시간 상한 — 미러 4곳 × 8초 + 파싱 여유
 export const maxDuration = 60;
@@ -44,39 +29,6 @@ function buildQuery(bounds: MapBounds): string {
     node["amenity"="bar"](${bbox});
   );
   out body;`;
-}
-
-async function fetchFromMirror(
-  url: string,
-  query: string
-): Promise<OverpassElement[]> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(
-    () => controller.abort(),
-    PER_MIRROR_TIMEOUT_SEC * 1000
-  );
-
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        Accept: "application/json",
-        "User-Agent": "TravelPinMap/1.0 (contact: travel-pin-map@example.com)",
-      },
-      body: `data=${encodeURIComponent(query)}`,
-      signal: controller.signal,
-    });
-
-    if (!res.ok) {
-      throw new Error(`status ${res.status}`);
-    }
-
-    const data = (await res.json()) as { elements?: OverpassElement[] };
-    return data.elements ?? [];
-  } finally {
-    clearTimeout(timeoutId);
-  }
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -105,24 +57,7 @@ export async function POST(request: Request): Promise<Response> {
 
   const query = buildQuery({ north, south, east, west });
 
-  let elements: OverpassElement[] | null = null;
-  const failures: string[] = [];
-  for (const mirror of OVERPASS_MIRRORS) {
-    try {
-      elements = await fetchFromMirror(mirror, query);
-      break;
-    } catch (err) {
-      // 이 서버는 실패 — 다음 미러로 (실패 사유는 진단용으로 수집)
-      const host = new URL(mirror).host;
-      const reason =
-        err instanceof Error
-          ? err.name === "AbortError" || err.name === "TimeoutError"
-            ? "timeout"
-            : err.message
-          : String(err);
-      failures.push(`${host}: ${reason}`);
-    }
-  }
+  const { elements, failures } = await runOverpass(query);
 
   if (elements === null) {
     return Response.json(
@@ -137,7 +72,8 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const nodes = elements.filter(
-    (e) => e.type === "node" && Number.isFinite(e.lat) && Number.isFinite(e.lon)
+    (e): e is OverpassElement & { lat: number; lon: number } =>
+      e.type === "node" && Number.isFinite(e.lat) && Number.isFinite(e.lon)
   );
 
   const limited = nodes.slice(0, 15);
