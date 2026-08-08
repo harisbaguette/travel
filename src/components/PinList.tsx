@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ExternalLink, Map as MapIcon, MapPin, Pencil, Trash2 } from "lucide-react";
+import { ExternalLink, Map as MapIcon, MapPin, Pencil, Sparkles, Trash2 } from "lucide-react";
 import type { Pin } from "@/lib/types";
 import { PIN_TYPES } from "@/lib/pinTypes";
 import { googleMapsUrl } from "@/lib/mapLinks";
@@ -77,7 +77,14 @@ export default function PinList({
                 </span>
                 <span className="dw-row-name">
                   {pin.name}
-                  {pin.isAI && <em className="dw-tag dw-tag--muted">AI</em>}
+                  {pin.isAI && (
+                    <Sparkles
+                      size={12}
+                      role="img"
+                      aria-label="AI 추천"
+                      className="ml-[5px] inline-block align-[-1px] text-[var(--text-faint)]"
+                    />
+                  )}
                   {!mine && <em className="dw-tag">친구</em>}
                 </span>
               </button>
