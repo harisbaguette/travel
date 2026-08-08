@@ -41,6 +41,12 @@ export default function TravelInfoPanel({
 
   const stays = itinerary.stays ?? [];
 
+  // 숙소 카드 접었다 폈다 — 기본은 펼침. 한 번 만지면 그 뒤로 그 상태를 기억한다.
+  const [openStays, setOpenStays] = useState<Record<string, boolean>>({});
+  const isStayOpen = (id: string) => openStays[id] !== false;
+  const toggleStay = (id: string) =>
+    setOpenStays((cur) => ({ ...cur, [id]: !isStayOpen(id) }));
+
   const addStay = () => {
     const stay: StayInfo = {
       id: `stay-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -127,9 +133,29 @@ export default function TravelInfoPanel({
       </div>
       {stays.length === 0 ? null : (
         <ul className="flex flex-col gap-3">
-          {stays.map((s) => (
+          {stays.map((s) => {
+            const open = isStayOpen(s.id);
+            const summary =
+              s.checkIn || s.checkOut
+                ? `${s.checkIn ? shortDate(s.checkIn) : "?"} ~ ${s.checkOut ? shortDate(s.checkOut) : "?"}`
+                : "";
+            return (
             <li key={s.id} className="rounded-[12px] bg-[var(--bg)] p-3">
               <div className="mb-2 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => toggleStay(s.id)}
+                  aria-expanded={open}
+                  aria-label={open ? `${s.name || "숙소"} 접기` : `${s.name || "숙소"} 펼치기`}
+                  className="press flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors duration-200 hover:bg-[var(--surface-hover)]"
+                >
+                  <ChevronDown
+                    size={16}
+                    strokeWidth={2.4}
+                    className={`transition-transform duration-150${open ? " rotate-180" : ""}`}
+                    aria-hidden
+                  />
+                </button>
                 <input
                   type="text"
                   value={s.name}
@@ -137,6 +163,11 @@ export default function TravelInfoPanel({
                   placeholder="숙소 이름"
                   className="dw-input dw-input--sm min-w-0 flex-1"
                 />
+                {!open && summary && (
+                  <span className="shrink-0 text-xs font-semibold text-[var(--text-muted)]">
+                    {summary}
+                  </span>
+                )}
                 <button
                   type="button"
                   onClick={() => removeStay(s.id)}
@@ -146,6 +177,8 @@ export default function TravelInfoPanel({
                   <X size={16} strokeWidth={2.2} />
                 </button>
               </div>
+              {open && (
+              <>
               {/* 들어가는 날 — 여행 날짜를 정했으면 몇 일차로, 아니면 달력으로 고른다. 시각까지 함께. */}
               <div className="mb-2 flex items-end gap-2">
                 <label className="flex min-w-0 flex-1 flex-col gap-1">
@@ -286,8 +319,11 @@ export default function TravelInfoPanel({
                   />
                 </label>
               </div>
+              </>
+              )}
             </li>
-          ))}
+            );
+          })}
         </ul>
       )}
     </section>
