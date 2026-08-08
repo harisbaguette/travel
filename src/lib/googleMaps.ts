@@ -1,6 +1,6 @@
-// 구글 지도 연결 — 열쇠(API 키)가 있을 때만 켜진다.
+// 공식 구글 지도 연결 — 열쇠(API 키)가 있을 때만 켜진다.
 // 열쇠는 Vercel/로컬 환경변수 NEXT_PUBLIC_GOOGLE_MAPS_API_KEY에 넣는다.
-// 구글 지도는 열쇠 없이 쓰는 것이 약관 위반이라, 열쇠가 없으면 기존 무료 지도를 그대로 쓴다.
+// 열쇠가 없으면 MapView가 열쇠 없이 받는 구글 지도 조각(비공식)을 대신 깐다.
 
 export const GOOGLE_MAPS_KEY =
   process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";

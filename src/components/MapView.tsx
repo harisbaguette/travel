@@ -1,12 +1,14 @@
 "use client";
 
 import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import { LocateFixed } from "lucide-react";
 import L, { type Map as LeafletMap } from "leaflet";
 import "@maplibre/maplibre-gl-leaflet";
+import "leaflet.gridlayer.googlemutant";
 import type { Pin } from "@/lib/types";
 import { PIN_TYPES, pinMarkerSvg } from "@/lib/pinTypes";
+import { hasGoogleKey, loadGoogleMaps, onGoogleAuthFailure } from "@/lib/googleMaps";
 
 export type MapViewHandle = LeafletMap | null;
 
@@ -24,9 +26,14 @@ interface MapViewProps {
   onSearchTargetClose?: () => void;
   onPinDelete?: (id: string) => void;
   onPinDragEnd?: (id: string, lat: number, lng: number) => void;
-  onMapClick?: (lat: number, lng: number) => void;
   className?: string;
 }
+
+// 구글 지도 그림 조각(타일) 주소 — 열쇠(API 키)나 계정 없이 바로 받아올 수 있다.
+// hl=ko: 지명을 구글맵 앱처럼 한국어로 보여 준다.
+// 주의: 구글이 공식으로 열어 둔 문은 아니라서, 언젠가 막히면 아래 무료 지도로 자동 복귀한다.
+const GOOGLE_TILE_URL =
+  "https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&hl=ko";
 
 // 한국어 라벨이 나오는 무료 벡터 지도(OpenFreeMap). 열쇠(API 키) 없이 쓸 수 있다.
 // 확인일 2026-08-08: https://openfreemap.org/quick_start/
@@ -69,13 +76,18 @@ function applyKoreanLabels(glMap: import("maplibre-gl").Map): void {
   }
 }
 
-// 벡터 지도 층 — Leaflet 지도 위에 MapLibre GL 화면을 얹는다.
+// 바탕 지도 층 — 구글 열쇠가 있으면 공식 구글 지도를, 없어도 구글 지도 조각을 깐다.
+// 순서: 구글 공식(열쇠 있을 때) → 구글 조각(열쇠 없이) → 벡터(무료) → 래스터(예비)
 function VectorBaseLayer() {
   const map = useMap();
-  // WebGL이 안 되면 처음부터 예비 지도(래스터)로 간다.
-  const [fallback, setFallback] = useState(
-    () => typeof window !== "undefined" && !webglAvailable()
+  const [mode, setMode] = useState<"google" | "gtile" | "vector" | "raster">(
+    () => {
+      if (typeof window === "undefined") return "gtile";
+      return hasGoogleKey() ? "google" : "gtile";
+    }
   );
+  // 구글 조각을 하나라도 받았는지/몇 번 실패했는지 — 전부 실패면 무료 지도로 되돌린다
+  const gtileStateRef = useRef({ loaded: false, errors: 0 });
 
   // 출처 표기는 평소 작은 ⓘ 동그라미로 접어 둔다(지도를 가리지 않게).
   // "Leaflet" 링크는 지우고, 손가락으로 눌러도 펼쳐지도록 초점을 받게 한다.
@@ -86,8 +98,37 @@ function VectorBaseLayer() {
     control.getContainer()?.setAttribute("tabindex", "0");
   }, [map]);
 
+  // 구글 지도 층 — 공식 구글 지도 프로그램을 내려받아 Leaflet 밑에 깐다(googlemutant).
+  // 열쇠가 틀리거나 내려받기가 실패하면 조용히 열쇠 없는 구글 조각으로 되돌아간다.
   useEffect(() => {
-    if (fallback) return;
+    if (mode !== "google") return;
+    let cancelled = false;
+    let layer: L.Layer | null = null;
+    // 열쇠가 틀렸다고 구글이 알려오면 열쇠 없는 구글 조각으로 되돌린다
+    onGoogleAuthFailure(() => {
+      if (!cancelled) setMode("gtile");
+    });
+    void loadGoogleMaps().then((ok) => {
+      if (cancelled) return;
+      if (!ok) {
+        setMode("gtile");
+        return;
+      }
+      try {
+        layer = L.gridLayer.googleMutant({ type: "roadmap" });
+        layer.addTo(map);
+      } catch {
+        setMode("gtile");
+      }
+    });
+    return () => {
+      cancelled = true;
+      if (layer) map.removeLayer(layer);
+    };
+  }, [map, mode]);
+
+  useEffect(() => {
+    if (mode !== "vector") return;
     let cancelled = false;
     let layer: L.MaplibreGL | null = null;
     try {
@@ -101,7 +142,7 @@ function VectorBaseLayer() {
     } catch {
       // 벡터 지도 생성 실패 — 다음 틱에 래스터로 전환(렌더 중 setState 금지 규칙 준수)
       queueMicrotask(() => {
-        if (!cancelled) setFallback(true);
+        if (!cancelled) setMode("raster");
       });
     }
     return () => {
@@ -109,9 +150,32 @@ function VectorBaseLayer() {
       if (layer) map.removeLayer(layer);
       map.attributionControl?.removeAttribution(OSM_ATTRIBUTION);
     };
-  }, [map, fallback]);
+  }, [map, mode]);
 
-  if (fallback) {
+  // 열쇠 없는 구글 조각 — 받다가 전부 실패하면(구글이 문을 닫으면) 무료 지도로 되돌린다
+  if (mode === "gtile") {
+    return (
+      <TileLayer
+        attribution="&copy; Google"
+        url={GOOGLE_TILE_URL}
+        subdomains={["0", "1", "2", "3"]}
+        maxZoom={20}
+        eventHandlers={{
+          tileload: () => {
+            gtileStateRef.current.loaded = true;
+          },
+          tileerror: () => {
+            const s = gtileStateRef.current;
+            s.errors += 1;
+            if (!s.loaded && s.errors >= 4) {
+              setMode(webglAvailable() ? "vector" : "raster");
+            }
+          },
+        }}
+      />
+    );
+  }
+  if (mode === "raster") {
     return <TileLayer attribution="&copy; OpenStreetMap contributors" url={OSM_TILE_URL} />;
   }
   return null;
@@ -130,7 +194,6 @@ const MapView = forwardRef<LeafletMap, MapViewProps>(function MapView(
     onSearchTargetClose,
     onPinDelete,
     onPinDragEnd,
-    onMapClick,
     className,
   },
   ref
@@ -146,7 +209,6 @@ const MapView = forwardRef<LeafletMap, MapViewProps>(function MapView(
     >
       <VectorBaseLayer />
       {onReady && <MapReadyBridge onReady={onReady} />}
-      <MapEventHandler onMapClick={onMapClick} />
       <LocateButton />
       {searchTarget && (
         <SearchTargetMarker
@@ -173,19 +235,6 @@ function MapReadyBridge({ onReady }: { onReady: (map: LeafletMap) => void }) {
   useEffect(() => {
     onReady(map);
   }, [map, onReady]);
-  return null;
-}
-
-function MapEventHandler({
-  onMapClick,
-}: {
-  onMapClick?: (lat: number, lng: number) => void;
-}) {
-  useMapEvents({
-    click(e) {
-      onMapClick?.(e.latlng.lat, e.latlng.lng);
-    },
-  });
   return null;
 }
 
