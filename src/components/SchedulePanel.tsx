@@ -6,7 +6,6 @@ import {
   ArrowUp,
   BedDouble,
   ChevronDown,
-  Link2,
   Map as MapIcon,
   NotebookPen,
   Plane,
@@ -414,8 +413,8 @@ export default function SchedulePanel({
 }
 
 // 갈 곳 넣기 — 평소엔 점선 단추 한 칸이고, 누르면 아래로 펼쳐진다.
-// 펼치면 ① 지도에 꽂아 둔 곳을 이름 그대로 눌러 고르고 ② 구글 지도 링크를 붙여넣고
-// ③ "렌트카 받기"처럼 지도 자리 없는 할 일을 글로 적어 넣을 수 있다.
+// 펼치면 ① 지도에 꽂아 둔 곳을 이름 그대로 눌러 고르거나 ② 한 칸에 글이든 구글 지도
+// 링크든 아무거나 적어 넣을 수 있다 — 링크 모양이면 알아서 지도로, 아니면 글로 들어간다.
 function AddPlaceBox({
   date,
   candidates,
@@ -468,10 +467,7 @@ function AddPlaceBox({
               <li key={p.id}>
                 <button
                   type="button"
-                  onClick={() => {
-                    onPick(p.id);
-                    setOpen(false);
-                  }}
+                  onClick={() => onPick(p.id)}
                   className="flex w-full items-center gap-2 rounded-[10px] bg-[var(--surface)] px-2.5 py-2 text-left shadow-[var(--shadow-1)] transition-transform active:scale-[0.99]"
                 >
                   <cfg.Icon size={15} color={cfg.color} className="shrink-0" aria-hidden />
@@ -497,15 +493,9 @@ function AddPlaceBox({
 
       <span className="mb-1.5 flex items-center gap-1 text-[11px] font-bold text-[var(--text-muted)]">
         <NotebookPen size={12} strokeWidth={2.4} aria-hidden />
-        글로 적어 넣기
+        적어서 넣기
       </span>
-      <TextAddRow date={date} onAdd={onAddText} />
-
-      <span className="mb-1.5 mt-3 flex items-center gap-1 text-[11px] font-bold text-[var(--text-muted)]">
-        <Link2 size={12} strokeWidth={2.4} aria-hidden />
-        구글 지도 링크로 넣기
-      </span>
-      <LinkAddRow date={date} onAdd={onAddLink} />
+      <SmartAddRow date={date} onAddText={onAddText} onAddLink={onAddLink} />
       <p className="mt-2 text-[11px] text-[var(--text-faint)]">
         지도에서 곳을 눌러 “일정에 넣기”로도 넣을 수 있어요
       </p>
@@ -513,20 +503,37 @@ function AddPlaceBox({
   );
 }
 
-// 할 일 글로 적기 한 줄 — "렌트카 받기"처럼 지도 자리 없는 항목을 이 날짜에 넣는다.
-function TextAddRow({
+// 한 칸에 글이든 구글 지도 링크든 아무거나 적어 넣는 줄.
+// http(s)로 시작하는 링크 모양이면 지도 링크로, 아니면 그냥 글(할 일)로 넣는다 —
+// 사람이 "이건 링크칸, 이건 글칸" 골라 넣을 필요가 없게 한 칸으로 합쳤다.
+function SmartAddRow({
   date,
-  onAdd,
+  onAddText,
+  onAddLink,
 }: {
   date: string;
-  onAdd: (text: string) => void;
+  onAddText: (text: string) => void;
+  onAddLink: (date: string, url: string) => Promise<boolean>;
 }) {
   const [value, setValue] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  const submit = () => {
+  const looksLikeLink = (v: string) => /^https?:\/\/\S+$/i.test(v);
+
+  const submit = async () => {
     const v = value.trim();
-    if (!v) return;
-    onAdd(v);
+    if (!v || busy) return;
+    if (looksLikeLink(v)) {
+      setBusy(true);
+      try {
+        const ok = await onAddLink(date, v);
+        if (ok) setValue("");
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+    onAddText(v);
     setValue("");
   };
 
@@ -539,64 +546,12 @@ function TextAddRow({
         onKeyDown={(e) => {
           if (e.key === "Enter") {
             e.preventDefault();
-            submit();
-          }
-        }}
-        placeholder="렌트카 받기, 짐 맡기기…"
-        className="dw-input dw-input--sm min-w-0 flex-1"
-        aria-label={`${date}에 할 일 글로 넣기`}
-      />
-      <button
-        type="button"
-        onClick={submit}
-        disabled={!value.trim()}
-        className="dw-btn-primary h-10 min-h-0 shrink-0 px-3 text-xs disabled:opacity-40"
-      >
-        넣기
-      </button>
-    </div>
-  );
-}
-
-// 구글 지도 링크 붙여넣기 한 줄 — 링크의 자리를 핀으로 꽂고 이 날짜에 넣는다.
-function LinkAddRow({
-  date,
-  onAdd,
-}: {
-  date: string;
-  onAdd: (date: string, url: string) => Promise<boolean>;
-}) {
-  const [value, setValue] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  const submit = async () => {
-    const v = value.trim();
-    if (!v || busy) return;
-    setBusy(true);
-    try {
-      const ok = await onAdd(date, v);
-      if (ok) setValue("");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="flex items-center gap-2">
-      <input
-        type="url"
-        inputMode="url"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
             void submit();
           }
         }}
-        placeholder="구글 지도 공유 링크 붙여넣기"
+        placeholder="렌트카 받기, 짐 맡기기, 또는 구글 지도 링크 붙여넣기"
         className="dw-input dw-input--sm min-w-0 flex-1"
-        aria-label={`${date}에 구글 지도 링크로 추가`}
+        aria-label={`${date}에 할 일이나 구글 지도 링크 넣기`}
       />
       <button
         type="button"
