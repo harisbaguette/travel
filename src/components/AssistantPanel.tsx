@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, Check, ExternalLink, Pin as PinIcon, RotateCcw } from "lucide-react";
+import { ArrowUp, Check, ExternalLink, Pin as PinIcon, RotateCcw, Sparkles } from "lucide-react";
 import type { Pin } from "@/lib/types";
 import { PIN_TYPES } from "@/lib/pinTypes";
 import { googleMapsUrl } from "@/lib/mapLinks";
@@ -40,6 +40,15 @@ interface AssistantPanelProps {
 
 const MAX_SHOWN_SOURCES = 6;
 
+// 처음 들어왔을 때 눌러 볼 수 있는 부탁 네 가지 — 빈 화면에 뭘 물어야 할지 몰라
+// 그냥 나가는 일을 막는다. 누르면 그대로 비서에게 보낸다.
+const STARTER_ASKS = [
+  "맛집 추천해 줘",
+  "분위기 좋은 카페",
+  "꼭 가볼 곳",
+  "마사지 잘하는 곳",
+];
+
 // 기다리는 동안 지금 무슨 일을 하는지 순서대로 보여 준다 — 실제 일 순서와 같다
 // (검색 → 글 읽기 → 자리 확인). 몇 초에 넘어갈지는 대략의 경험값.
 const LOADING_STAGES: [number, string][] = [
@@ -61,7 +70,7 @@ function LoadingBubble() {
     return () => clearInterval(timer);
   }, []);
   return (
-    <div className="flex items-center gap-2 rounded-[var(--radius-card)] border border-[var(--border-strong)] px-3.5 py-2.5 text-sm text-[var(--text-muted)]">
+    <div className="dw-card msg-in-ai flex items-center gap-2 px-3.5 py-2.5 text-sm text-[var(--text-muted)]">
       <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-[var(--border-strong)] border-t-[var(--accent)]" />
       {label}
     </div>
@@ -81,10 +90,14 @@ function CandidateCard({
   const cfg = PIN_TYPES[pin.type];
   const src = pin.sources?.[0];
   return (
-    <li className="overflow-hidden rounded-[var(--radius-control)] border border-[var(--border-strong)]">
-      <div className="flex items-center gap-2.5 px-3 py-2.5">
-        <span className="shrink-0" aria-hidden>
-          <cfg.Icon size={16} color={cfg.color} />
+    <li className="anim-rise-sm overflow-hidden rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--surface-raised)] transition-[transform,box-shadow,border-color] duration-200 ease-[var(--ease-out)] hover:-translate-y-px hover:border-[var(--accent-soft)] hover:shadow-[var(--shadow-lift)]">
+      <div className="flex items-center gap-2.5 px-2.5 py-2.5">
+        <span
+          className="dw-swatch"
+          style={{ "--sw": cfg.color } as React.CSSProperties}
+          aria-hidden
+        >
+          <cfg.Icon size={16} strokeWidth={2.2} />
         </span>
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="truncate text-sm font-semibold text-[var(--text)]">{pin.name}</span>
@@ -97,20 +110,26 @@ function CandidateCard({
           onClick={onPin}
           disabled={pinned}
           aria-label={pinned ? `${pin.name} 꽂음` : `${pin.name} 지도에 꽂기`}
-          className={`flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-bold transition-colors ${
+          className={`flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-bold transition-[background,color,box-shadow,transform] duration-200 ease-[var(--ease-out)] ${
             pinned
               ? "bg-[var(--surface-hover)] text-[var(--text-faint)]"
-              : "bg-[var(--accent)] text-white active:scale-[0.97]"
+              : "bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] hover:shadow-[var(--shadow-lift)] active:scale-[0.97]"
           }`}
         >
-          {pinned ? <Check size={13} strokeWidth={3} /> : <PinIcon size={13} strokeWidth={2.5} />}
+          {pinned ? (
+            <Check size={13} strokeWidth={3} className="anim-pop" />
+          ) : (
+            <PinIcon size={13} strokeWidth={2.5} />
+          )}
           {pinned ? "꽂음" : "꽂기"}
         </button>
       </div>
       {pin.memo && (
-        <p className="px-3 pb-2 text-xs leading-relaxed text-[var(--text-muted)]">{pin.memo}</p>
+        <p className="pb-2 pl-[3.25rem] pr-3 text-xs leading-relaxed text-[var(--text-muted)]">
+          {pin.memo}
+        </p>
       )}
-      <div className="flex items-center gap-3 border-t border-[var(--border)] px-3 py-1.5">
+      <div className="flex items-center gap-3 border-t border-[var(--border)] px-2.5 py-1.5">
         {src && (
           <a
             href={src.url}
@@ -165,6 +184,26 @@ export default function AssistantPanel({
   return (
     <div className="flex h-full flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-3">
+        {messages.length === 0 && !loading && (
+          <div className="dw-empty mt-[14vh]">
+            <span className="dw-empty-art" aria-hidden>
+              <Sparkles size={28} strokeWidth={1.8} />
+            </span>
+            <span className="dw-empty-title">어디가 좋을지 물어보세요</span>
+            <div className="dw-empty-chips">
+              {STARTER_ASKS.map((ask) => (
+                <button
+                  key={ask}
+                  type="button"
+                  onClick={() => onSend(ask)}
+                  className="dw-empty-chip"
+                >
+                  {ask}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <ul className="flex flex-col gap-2.5 pb-3">
           {messages.map((m, i) => {
             const hasPins = Boolean(m.pins && m.pins.length > 0);
@@ -176,13 +215,13 @@ export default function AssistantPanel({
               <li key={i} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
                 <div
                   className={`rounded-[var(--radius-card)] px-3.5 py-2.5 text-sm leading-relaxed ${
-                    hasPins ? "w-full" : "max-w-[85%]"
-                  } ${
+                    m.role === "user" ? "msg-in-me" : "msg-in-ai"
+                  } ${hasPins ? "w-full" : "max-w-[85%]"} ${
                     m.role === "user"
-                      ? "bg-[var(--accent)] text-white"
+                      ? "rounded-br-[6px] bg-[var(--accent)] text-white"
                       : m.isError
-                        ? "border border-[var(--border-strong)] text-[var(--danger)]"
-                        : "border border-[var(--border-strong)] text-[var(--text)]"
+                        ? "rounded-bl-[6px] bg-[var(--surface)] text-[var(--danger)] shadow-[var(--shadow-1)]"
+                        : "rounded-bl-[6px] bg-[var(--surface)] text-[var(--text)] shadow-[var(--shadow-1)]"
                   }`}
                 >
                   <p className="whitespace-pre-wrap">{m.text}</p>
@@ -214,7 +253,7 @@ export default function AssistantPanel({
                         <button
                           type="button"
                           onClick={() => onPin(unpinned)}
-                          className="mt-2 w-full rounded-[var(--radius-control)] border border-[var(--border-strong)] px-3 py-2 text-sm text-[var(--accent)] transition-colors hover:border-[var(--accent)]"
+                          className="press mt-2 w-full rounded-[var(--radius-control)] border border-[var(--border-strong)] px-3 py-2 text-sm text-[var(--accent)] transition-[background,border-color,transform] duration-200 hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]"
                         >
                           {unpinned.length}곳 모두 꽂기
                         </button>
@@ -264,7 +303,7 @@ export default function AssistantPanel({
         <div ref={bottomRef} />
       </div>
 
-      <div className="shrink-0 px-4 pb-3 pt-1.5">
+      <div className="shrink-0 border-t border-[var(--border)] bg-[var(--surface)] px-4 pb-3 pt-2.5">
         <div className="flex items-center gap-2">
           <input
             ref={inputRef}

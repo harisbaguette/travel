@@ -134,7 +134,11 @@ export default function PreparePanel({
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6">
-        <div className="prep-body">{current.body()}</div>
+        {/* key를 묶음 이름으로 두는 게 중요하다 — 칩을 바꿀 때마다 이 칸을 새로 만들어야
+            "새로 떠오르는" 움직임이 다시 살아난다. key가 없으면 속만 갈리고 움직임은 안 난다. */}
+        <div key={current.key} className="prep-body">
+          {current.body()}
+        </div>
       </div>
     </div>
   );

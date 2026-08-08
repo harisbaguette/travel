@@ -124,7 +124,7 @@ export default function TravelInfoPanel({ itinerary, onChange, part }: TravelInf
                 <button
                   type="button"
                   onClick={() => removeStay(s.id)}
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--text-muted)] hover:text-[var(--danger)]"
+                  className="press flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors duration-200 hover:bg-[var(--surface-hover)] hover:text-[var(--danger)]"
                   aria-label={`${s.name || "숙소"} 삭제`}
                 >
                   <X size={16} strokeWidth={2.2} />

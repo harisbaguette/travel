@@ -112,7 +112,7 @@ export default function ChecklistCard({
                 <button
                   type="button"
                   onClick={() => remove(item.id)}
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[var(--text-muted)] hover:text-[var(--danger)]"
+                  className="press flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors duration-200 hover:bg-[var(--surface-hover)] hover:text-[var(--danger)]"
                   aria-label={`${item.text} 삭제`}
                 >
                   <X size={15} strokeWidth={2.2} aria-hidden />
