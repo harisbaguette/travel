@@ -166,17 +166,18 @@ function useHydrated(): boolean {
   );
 }
 
-// 아래 메뉴 넷 — 손으로 꽂는 지도, 꽂아 둔 곳을 줄줄이 보는 리스트, 떠나기 전에 채우는 준비,
-// 현지에서 보는 일정. 가운데 튀어나온 + 단추가 두 번째·세 번째 칸 사이 빈 자리에 앉으므로
-// 칸은 짝수여야 한다(홀수면 + 가 가운데 칸 위에 겹친다). 그래서 비서는 위 줄 단추로 뺐다.
+// 아래 메뉴 다섯 — 손으로 꽂는 지도, 꽂아 둔 곳을 줄줄이 보는 리스트, AI에게 시키는 비서,
+// 떠나기 전에 채우는 준비, 현지에서 보는 일정. 다섯 칸을 다 쓰므로 + 단추는 칸 사이에
+// 끼워 넣지 못하고, 막대 바로 위에 떠 있다(globals.css의 .dock-fab 설명 참고).
 const DOCK_ITEMS = [
   { key: "map", icon: MapIcon, label: "지도" },
   { key: "list", icon: List, label: "리스트" },
+  { key: "assistant", icon: Bot, label: "비서" },
   { key: "prepare", icon: Luggage, label: "준비" },
   { key: "schedule", icon: CalendarDays, label: "일정" },
 ] as const;
 
-type Tab = (typeof DOCK_ITEMS)[number]["key"] | "assistant";
+type Tab = (typeof DOCK_ITEMS)[number]["key"];
 
 export default function Home() {
   const hydrated = useHydrated();
@@ -665,7 +666,7 @@ export default function Home() {
 
   return (
     <div className="app-shell">
-      {/* 머리 — 여행 고르는 알약 한 줄 + 비서 부르기 + 장소 검색. 지도 위에 떠 있다. */}
+      {/* 머리 — 여행 고르는 알약 한 줄 + 장소 검색. 지도 위에 떠 있다. */}
       <header
         className={`relative z-[1050] shrink-0 px-4 pb-2 pt-2${
           mapFull ? "" : " bg-[var(--bg)]"
@@ -677,24 +678,6 @@ export default function Home() {
             currentId={viewRoom || DEFAULT_ROOM.id}
             onSelect={switchRoom}
           />
-          {/* 비서 부르기 — 아래 메뉴 칸이 짝수여야 해서 이 줄로 올렸다.
-              열려 있을 때 한 번 더 누르면 지도로 돌아간다. */}
-          <button
-            type="button"
-            onClick={() => {
-              setPicking(false);
-              setTab((cur) => (cur === "assistant" ? "map" : "assistant"));
-            }}
-            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-[12px] shadow-[var(--shadow-1)] transition-colors ${
-              tab === "assistant"
-                ? "bg-[var(--accent)] text-white"
-                : "bg-[var(--surface)] text-[var(--text-muted)]"
-            }`}
-            aria-label={tab === "assistant" ? "비서 닫기" : "비서에게 물어보기"}
-            aria-pressed={tab === "assistant"}
-          >
-            <Bot size={19} strokeWidth={2.2} />
-          </button>
           <button
             type="button"
             onClick={() => setSearchOpen((o) => !o)}
@@ -1017,7 +1000,7 @@ export default function Home() {
         aria-label="화면 이동"
       >
         <div className="dock-wrap">
-          <div className="dock-glass dock-glass--4">
+          <div className="dock-glass dock-glass--5">
             {DOCK_ITEMS.map((item) => {
               const Icon = item.icon;
               const active = tab === item.key;
@@ -1039,13 +1022,14 @@ export default function Home() {
               );
             })}
           </div>
-          {/* 자리를 고르는 중엔 지도 위 확인/취소 막대가 같은 자리를 쓰므로 숨긴다.
-              목록으로 보는 중에도 꽂을 자리가 안 보이므로 숨긴다. */}
+          {/* 지도를 볼 때만 보여 준다 — 이 단추는 메뉴 막대 위에 떠 있어서, 다른 화면에서는
+              적는 칸(준비 화면의 날짜 칸 같은 것)을 가려 버린다. 자리를 고르는 중에도 숨긴다
+              (지도 위 확인/취소 막대가 같은 자리를 쓴다). */}
           <button
             type="button"
             onClick={handleFab}
             aria-label="핀 추가"
-            className={`dock-fab${picking || listing ? " dock-fab--hidden" : ""}`}
+            className={`dock-fab${tab !== "map" || picking ? " dock-fab--hidden" : ""}`}
           >
             <Plus size={22} strokeWidth={2.5} aria-hidden />
           </button>

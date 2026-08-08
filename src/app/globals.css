@@ -196,22 +196,6 @@ body {
     0 4px 14px -4px rgba(0, 0, 0, 0.08), 0 20px 44px -12px rgba(0, 0, 0, 0.15);
   overflow: hidden;
 }
-/* 고정값: + 단추가 뒤로 걸치는 자리만 딱 덮는 흰 뚜껑. 유리판의 overflow:hidden에
-   가려 이 판 안쪽(둥근 위 모서리 높이)으로 튀어나온 부분만 보인다. 이게 있어야
-   뜬 모드(지도 비치는 유리)에서도 + 단추 색이 뒤로 안 비치면서, 단추는 계속
-   z-index 그대로 뒤에 둘 수 있다 — 단추를 앞으로 빼는 방식으로 되돌리지 말 것. */
-.dock-glass::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 50%;
-  transform: translate(-50%, -66%);
-  width: 54px;
-  height: 54px;
-  border-radius: 50%;
-  background: #fff;
-  pointer-events: none;
-}
 .dock-item {
   min-width: 0;
   display: flex;
@@ -282,27 +266,23 @@ body {
 .dock-item.active .dock-label {
   font-weight: 700;
 }
-/* 화면이 둘뿐일 때 — 가운데 + 단추 좌우로 갈라 앉힌다 */
-.dock-glass--2 {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+/* 화면이 다섯일 때 — 다섯 칸을 고르게 나눈다(+ 단추는 막대 위로 떠 있다) */
+.dock-glass--5 {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
-/* 화면이 셋일 때 — 아래 가운데 + 단추와 겹치지 않게 세 칸을 고르게 */
-.dock-glass--3 {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-/* 화면이 넷일 때 — 가운데 + 단추가 두 번째·세 번째 칸 사이 빈 자리에 앉는다 */
-.dock-glass--4 {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-/* 독 가운데서 위로 튀어나온 파란 + 단추 — Doweek BottomNav.jsx 원본 수치를 그대로 옮김.
+/* 독 가운데 위로 떠 있는 파란 + 단추 — Doweek BottomNav.jsx 원본에서 옮겨 온 부품.
    출처: Doweek-recovered/src/shared/components/BottomNav.jsx의 .dock-fab 블록.
-   고정값: 이후 어떤 수정에서도 이 파일 수치(크기·위치·그림자)를 임의로 바꾸지 말고,
-   바꿔야 하면 반드시 원본 BottomNav.jsx를 먼저 고치고 그 값을 그대로 다시 옮길 것. */
+   고정값: 크기(54)·색·그림자·z-index는 임의로 바꾸지 말 것. 바꿔야 하면 원본
+   BottomNav.jsx를 먼저 고치고 그 값을 그대로 다시 옮길 것.
+   위아래 자리만 바뀐 이유: 메뉴가 다섯 칸이 되면서 다섯 칸을 모두 쓰기 때문에, 원본처럼
+   칸 사이 빈자리에 반쯤 걸치면(-66%) 가운데 칸(비서)을 덮어 버린다. 그래서 막대 위로
+   완전히 올려 6px 띄웠다(-100% - 6px). 다시 칸 사이에 걸치는 방식으로 되돌리려면
+   메뉴 칸을 짝수로 줄여야 한다. */
 .dock-fab {
   position: absolute;
   top: 0;
   left: 50%;
-  transform: translate(-50%, -66%);
+  transform: translate(-50%, calc(-100% - 6px));
   width: 54px;
   height: 54px;
   border-radius: 50%;
@@ -334,14 +314,14 @@ body {
 }
 @media (hover: hover) and (pointer: fine) {
   .dock-fab:hover {
-    transform: translate(-50%, -68%);
+    transform: translate(-50%, calc(-100% - 9px));
   }
   .dock-fab:hover svg {
     transform: rotate(90deg);
   }
 }
 .dock-fab:active {
-  transform: translate(-50%, -66%) scale(0.94);
+  transform: translate(-50%, calc(-100% - 6px)) scale(0.94);
   transition: transform 0.1s;
 }
 .dock-fab:active svg {
