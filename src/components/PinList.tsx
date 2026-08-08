@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ExternalLink, Map as MapIcon, MapPin, Trash2 } from "lucide-react";
+import { ExternalLink, Map as MapIcon, MapPin, Pencil, Trash2 } from "lucide-react";
 import type { Pin } from "@/lib/types";
 import { PIN_TYPES } from "@/lib/pinTypes";
 import { googleMapsUrl } from "@/lib/mapLinks";
@@ -13,6 +13,8 @@ interface PinListProps {
   /** 지도로 옮겨 가서 그 핀을 보여준다(누른 사람이 직접 고를 때만). */
   onShowOnMap: (pin: Pin) => void;
   onPinDelete: (id: string) => void;
+  /** 이름·종류·메모 고치는 창을 부모가 띄운다. */
+  onPinEdit?: (pin: Pin) => void;
 }
 
 // 핀 목록 — 카드 한 장 안에 줄을 쌓는다. 줄을 누르면 메모가 펼쳐지고,
@@ -23,6 +25,7 @@ export default function PinList({
   currentUserId,
   onShowOnMap,
   onPinDelete,
+  onPinEdit,
 }: PinListProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
@@ -147,6 +150,17 @@ export default function PinList({
                       구글 지도
                       <ExternalLink size={11} className="shrink-0" aria-hidden />
                     </a>
+                    {onPinEdit && (
+                      <button
+                        type="button"
+                        onClick={() => onPinEdit(pin)}
+                        className="inline-flex h-9 items-center gap-1.5 rounded-[12px] bg-[var(--surface-hover)] px-3 text-xs font-semibold text-[var(--text-muted)] transition-colors hover:text-[var(--accent)]"
+                        aria-label={`${pin.name} 수정`}
+                      >
+                        <Pencil size={13} strokeWidth={2.1} className="shrink-0" aria-hidden />
+                        수정
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => setConfirmId(pin.id)}

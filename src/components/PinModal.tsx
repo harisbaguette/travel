@@ -10,16 +10,30 @@ interface PinModalProps {
   lng: number;
   /** 검색 결과에서 왔을 때 미리 채워 줄 이름 */
   initialName?: string;
+  /** 이미 꽂힌 핀을 고칠 때 — 종류·메모를 미리 채우고 문구를 "수정"으로 바꾼다 */
+  mode?: "add" | "edit";
+  initialType?: PinType;
+  initialMemo?: string;
   onAdd: (data: { type: PinType; name: string; memo: string }) => void;
   onClose: () => void;
 }
 
 // 바닥에서 올라오는 입력 시트 — Doweek add-modal 문법.
 // 종류는 미끄러지는 알약 탭, 입력칸은 종이 위 흰 카드 톤.
-export default function PinModal({ lat, lng, initialName, onAdd, onClose }: PinModalProps) {
-  const [type, setType] = useState<PinType>("food");
+export default function PinModal({
+  lat,
+  lng,
+  initialName,
+  mode = "add",
+  initialType,
+  initialMemo,
+  onAdd,
+  onClose,
+}: PinModalProps) {
+  const [type, setType] = useState<PinType>(initialType ?? "food");
   const [name, setName] = useState(initialName ?? "");
-  const [memo, setMemo] = useState("");
+  const [memo, setMemo] = useState(initialMemo ?? "");
+  const editing = mode === "edit";
   useSheet(onClose);
 
   // 종류 칸은 5칸×2줄 격자 — 알약이 미끄러질 칸의 가로·세로 자리를 넘긴다.
@@ -37,10 +51,17 @@ export default function PinModal({ lat, lng, initialName, onAdd, onClose }: PinM
   return (
     <>
       <div className="sheet-backdrop" onClick={onClose} />
-      <div className="sheet" role="dialog" aria-modal="true" aria-label="새 핀 추가">
+      <div
+        className="sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-label={editing ? "핀 수정" : "새 핀 추가"}
+      >
         <div className="sheet-handle" />
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-base font-bold text-[var(--text)]">핀 추가</h2>
+          <h2 className="text-base font-bold text-[var(--text)]">
+            {editing ? "핀 수정" : "핀 추가"}
+          </h2>
           <span className="text-xs tabular-nums text-[var(--text-muted)]">
             {lat.toFixed(4)}, {lng.toFixed(4)}
           </span>
@@ -100,7 +121,7 @@ export default function PinModal({ lat, lng, initialName, onAdd, onClose }: PinM
               취소
             </button>
             <button type="submit" disabled={!name.trim()} className="dw-btn-primary min-w-[72px]">
-              추가
+              {editing ? "저장" : "추가"}
             </button>
           </div>
         </form>

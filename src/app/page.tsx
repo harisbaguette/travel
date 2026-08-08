@@ -153,6 +153,9 @@ function resolveInitialRoom(): string {
   return readStoredRoom();
 }
 
+// "10.0159, 104.0392"처럼 좌표를 그대로 적은 검색어 — 구글맵처럼 바로 그 자리로 간다.
+const COORD_QUERY = /^(-?\d{1,2}(?:\.\d+)?)[,\s]\s*(-?\d{1,3}(?:\.\d+)?)$/;
+
 function distanceMeters(
   lat1: number,
   lng1: number,
@@ -231,6 +234,8 @@ export default function Home() {
     lng: number;
     name?: string;
   } | null>(null);
+  // 이미 꽂힌 핀을 고치는 중 — 같은 입력 시트를 "수정" 모드로 띄운다.
+  const [editPin, setEditPin] = useState<Pin | null>(null);
   // + 를 눌러 "자리 고르기"를 켠 상태 — 지도 가운데 십자를 보여 준다.
   const [picking, setPicking] = useState(false);
   // 지도 말풍선에서 "일정에 넣기"를 누른 곳 — 며칠째에 넣을지 고르는 창이 뜬다.
@@ -287,6 +292,7 @@ export default function Home() {
     const q = query.trim();
     if (q.length < 2) return; // 목록 비우기는 입력칸 onChange에서 처리
     if (looksLikeMapLink(q)) return; // 링크는 후보를 물을 게 없다 — 엔터·이동으로 자리를 읽는다
+    if (COORD_QUERY.test(q)) return; // 좌표도 마찬가지 — 엔터·이동으로 바로 간다
     const timer = setTimeout(async () => {
       sugAbortRef.current?.abort();
       const ac = new AbortController();
@@ -446,6 +452,18 @@ export default function Home() {
     setNotice("");
     closeSuggestions();
     try {
+      // 좌표를 그대로 적었으면(위도, 경도) 묻지 않고 바로 그 자리로 간다
+      const coord = q.match(COORD_QUERY);
+      if (coord) {
+        const lat = Number(coord[1]);
+        const lng = Number(coord[2]);
+        if (Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+          setTab("map");
+          setSearchTarget({ lat, lng, name: `${lat.toFixed(5)}, ${lng.toFixed(5)}` });
+          mapRef.current?.setView([lat, lng], 16, { animate: true });
+          return;
+        }
+      }
       // 구글 지도 링크를 붙여 넣었으면 검색 대신 링크에서 자리를 읽어 그리로 간다
       if (looksLikeMapLink(q)) {
         const place = await resolveMapLink(q);
@@ -571,6 +589,37 @@ export default function Home() {
       if (wasPlanned) pushItinerary(room, nextItinerary);
     },
     [room, itinerary]
+  );
+
+  // 핀 수정 — 이름·종류·메모를 고치고, 바뀐 내용을 친구들에게도 보낸다.
+  const handlePinEdit = useCallback((pin: Pin) => setEditPin(pin), []);
+
+  const handlePinEditSave = (data: { type: PinType; name: string; memo: string }) => {
+    if (!editPin) return;
+    const updated: Pin = {
+      ...editPin,
+      type: data.type,
+      name: data.name,
+      memo: data.memo,
+      emoji: PIN_TYPES[data.type].emoji,
+    };
+    setPins((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+    void pushPin(room, updated);
+    setEditPin(null);
+  };
+
+  // 지도 카드의 "핀 저장" — 그 자리 이름을 미리 채워 새 핀 입력 시트를 띄운다.
+  // 이름이 "10.02900, 103.98400" 같은 좌표 글자면 비워 둔다(이름을 적으라는 뜻).
+  const handleSavePlace = useCallback(
+    (place: { lat: number; lng: number; name: string }) => {
+      const coordName = COORD_QUERY.test(place.name);
+      setModalCoord({
+        lat: place.lat,
+        lng: place.lng,
+        name: coordName ? undefined : place.name,
+      });
+    },
+    []
   );
 
   // 목록에서 지도 단추를 눌렀을 때만 지도로 넘어간다(이름만 눌러선 안 튕김).
@@ -1064,6 +1113,8 @@ export default function Home() {
           initialCenter={initialView.center}
           initialZoom={initialView.zoom}
           onPinDelete={handlePinDelete}
+          onPinEdit={handlePinEdit}
+          onSavePlace={handleSavePlace}
           onAddToSchedule={handleAddToSchedule}
           searchTarget={searchTarget}
           onSearchTargetAdd={handleSearchTargetAdd}
@@ -1136,6 +1187,7 @@ export default function Home() {
                   currentUserId={viewUserId}
                   onShowOnMap={handleShowOnMap}
                   onPinDelete={handlePinDelete}
+                  onPinEdit={handlePinEdit}
                 />
               )}
             </div>
@@ -1243,6 +1295,20 @@ export default function Home() {
           initialName={modalCoord.name}
           onAdd={handleAddPin}
           onClose={() => setModalCoord(null)}
+        />
+      )}
+
+      {/* 핀 수정 시트 — 같은 입력 시트를 "수정" 모드로 연다 */}
+      {editPin && (
+        <PinModal
+          lat={editPin.lat}
+          lng={editPin.lng}
+          mode="edit"
+          initialName={editPin.name}
+          initialType={editPin.type}
+          initialMemo={editPin.memo}
+          onAdd={handlePinEditSave}
+          onClose={() => setEditPin(null)}
         />
       )}
 

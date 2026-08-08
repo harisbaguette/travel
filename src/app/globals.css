@@ -973,6 +973,26 @@ body {
   color: var(--text);
   border-color: var(--border-strong);
 }
+/* 확대·축소 단추 — 내 위치 단추 바로 위에 세로로. 손가락 화면(터치)에서는 숨긴다
+   (구글맵 앱처럼 벌려서 확대하면 되고, 화면만 좁아진다). */
+.leaflet-bottom.leaflet-right .leaflet-control-zoom {
+  margin: 0 18px calc(var(--dock-space) + 128px) 0;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: 12px;
+  box-shadow: var(--shadow-2);
+  overflow: hidden;
+}
+.leaflet-control-zoom a {
+  width: 40px;
+  height: 40px;
+  line-height: 40px;
+  font-size: 17px;
+}
+@media (pointer: coarse) {
+  .leaflet-control-zoom {
+    display: none;
+  }
+}
 /* 지도 출처 표기 — 평소엔 작은 ⓘ 동그라미로 접고, 누르면 펼쳐진다 */
 .leaflet-control-attribution {
   background: rgba(255, 255, 255, 0.82) !important;
