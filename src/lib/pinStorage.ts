@@ -19,15 +19,18 @@ export function loadPins(room: string): Pin[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (p): p is Pin =>
-        p &&
-        typeof p.id === "string" &&
-        typeof p.lat === "number" &&
-        typeof p.lng === "number" &&
-        typeof p.type === "string" &&
-        typeof p.name === "string"
-    );
+    return parsed
+      .filter(
+        (p): p is Pin =>
+          p &&
+          typeof p.id === "string" &&
+          typeof p.lat === "number" &&
+          typeof p.lng === "number" &&
+          typeof p.type === "string" &&
+          typeof p.name === "string"
+      )
+      // 예전 캐시에 createdBy='AI'인 핀이 남아 있을 수 있다 — 사람이 아니므로 주인 없음 처리.
+      .map((p) => (p.createdBy === "AI" ? { ...p, createdBy: undefined } : p));
   } catch {
     return [];
   }

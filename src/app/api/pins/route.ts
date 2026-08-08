@@ -38,7 +38,9 @@ function rowToPin(r: PinRow): Pin & { updatedAt: number; deleted: boolean } {
     emoji: r.emoji ?? "",
     isAI: Boolean(r.is_ai),
     createdAt: Number(r.created_at),
-    createdBy: r.created_by || undefined,
+    // 예전 데이터에 created_by='AI'로 저장된 핀이 남아 있다 — 사람이 아니므로
+    // 주인 없음으로 취급해야 모든 기기에서 "친구 핀"(회색 점선)으로 오인되지 않는다.
+    createdBy: !r.created_by || r.created_by === "AI" ? undefined : r.created_by,
     updatedAt: Math.round(Number(r.updated_ms)),
     deleted: Boolean(r.deleted),
   };
@@ -134,7 +136,7 @@ export async function POST(request: Request): Promise<Response> {
       insert into pins (id, room_id, lat, lng, type, name, memo, emoji, is_ai, created_at, created_by, deleted)
       values (${p.id}, ${room}, ${p.lat}, ${p.lng}, ${p.type}, ${p.name},
               ${p.memo ?? ""}, ${p.emoji ?? ""}, ${Boolean(p.isAI)},
-              ${Number(p.createdAt) || Date.now()}, ${p.createdBy ?? ""}, false)
+              ${Number(p.createdAt) || Date.now()}, ${p.createdBy === "AI" ? "" : p.createdBy ?? ""}, false)
       on conflict (id) do update set
         lat = excluded.lat, lng = excluded.lng, type = excluded.type,
         name = excluded.name, memo = excluded.memo, emoji = excluded.emoji,

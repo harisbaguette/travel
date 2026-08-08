@@ -730,9 +730,9 @@ body {
   border: 3px solid var(--accent-ink);
   box-shadow: 0 2px 8px rgba(36, 30, 25, 0.25);
 }
+/* 친구 핀 — 점선은 3px 두께에서 톱니바퀴처럼 깨져 보여서 실선 회색 + 살짝 투명으로 구분한다 */
 .pin-icon--other > span {
-  border-style: dashed;
-  opacity: 0.85;
+  opacity: 0.82;
 }
 .pin-icon > span > i {
   display: block;
