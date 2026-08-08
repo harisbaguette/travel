@@ -191,7 +191,7 @@ export default function AssistantPanel({
             <span className="dw-empty-art" aria-hidden>
               <MessageCircleQuestionMark size={30} strokeWidth={1.8} />
             </span>
-            <span className="dw-empty-title">어디로 갈지 물어보세요</span>
+            <span className="dw-empty-title">어디가 좋을지 물어보세요</span>
           </div>
         </div>
       ) : (
