@@ -598,25 +598,6 @@ body {
   }
 }
 
-/* ── 리스트 화면에서 종류 고르는 접힌 목록(드롭다운) — 알약을 줄줄이 늘어놓는 대신
-   한 칸만 두고 누르면 펼친다. 폰에서는 운영체제가 고르는 창을 띄워 준다.
-   오른쪽 여백 32는 그 자리에 겹쳐 둔 아래 화살표 그림 자리다. ── */
-.list-filter {
-  appearance: none;
-  -webkit-appearance: none;
-  min-height: 36px;
-  padding: 0 32px 0 12px;
-  border: none;
-  border-radius: 12px;
-  background: var(--surface);
-  box-shadow: var(--shadow-1);
-  color: var(--text);
-  font-family: inherit;
-  font-size: 0.8rem;
-  font-weight: 700;
-  cursor: pointer;
-}
-
 /* ── 바닥에서 올라오는 입력 시트 — Doweek add-modal 이식 ── */
 @keyframes dw-fade-in {
   from {
@@ -1558,20 +1539,6 @@ li.dw-card:nth-child(n + 7) {
 }
 .dw-input:focus::placeholder {
   opacity: 0.5;
-}
-
-/* 종류 고르는 접힌 목록 */
-.list-filter {
-  transition: box-shadow var(--dur-hover) var(--ease-out),
-    transform var(--dur-press) var(--ease-out);
-}
-@media (hover: hover) and (pointer: fine) {
-  .list-filter:hover {
-    box-shadow: var(--shadow-2);
-  }
-}
-.list-filter:active {
-  transform: scale(0.98);
 }
 
 /* 접이식 구역 머리(1일차·2일차 카드) */

@@ -13,7 +13,6 @@ import type { Map as LeafletMap } from "leaflet";
 import {
   Bot,
   CalendarDays,
-  ChevronDown,
   List,
   Luggage,
   Map as MapIcon,
@@ -1148,34 +1147,44 @@ export default function Home() {
           </div>
         )}
 
-        {/* 리스트 — 지도를 덮는 판. 종류는 접힌 목록에서 하나 골라 걸러 보고,
-            지도 단추를 누르면 그 자리로 지도가 넘어간다. */}
+        {/* 리스트 — 지도를 덮는 판. 종류는 준비 탭과 같은 알약 필터 줄에서 하나 눌러
+            걸러 보고, 지도 단추를 누르면 그 자리로 지도가 넘어간다. */}
         {listing && (
           <div className="screen-in pointer-events-auto absolute inset-0 z-[1005] flex flex-col bg-[var(--bg)] pt-2">
             <div className="shrink-0 px-4 pb-2">
-              <div className="relative inline-flex items-center">
-                <select
-                  value={listType}
-                  onChange={(e) =>
-                    setListType(e.target.value as PinType | "all")
-                  }
-                  className="list-filter"
-                  aria-label="볼 종류 고르기"
+              <div className="prep-filter">
+                <button
+                  type="button"
+                  onClick={() => setListType("all")}
+                  aria-pressed={listType === "all"}
+                  className={`prep-chip${listType === "all" ? " active" : ""}`}
                 >
-                  <option value="all">전체 ({viewPins.length})</option>
-                  {PIN_TYPE_LIST.map((cfg) => (
-                    <option key={cfg.type} value={cfg.type}>
-                      {cfg.emoji} {cfg.label} (
-                      {viewPins.filter((p) => p.type === cfg.type).length})
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown
-                  size={16}
-                  strokeWidth={2.2}
-                  className="pointer-events-none absolute right-3 text-[var(--text-muted)]"
-                  aria-hidden
-                />
+                  전체
+                  {viewPins.length > 0 && (
+                    <span className="prep-chip-badge">{viewPins.length}</span>
+                  )}
+                </button>
+                {PIN_TYPE_LIST.map((cfg) => {
+                  const count = viewPins.filter(
+                    (p) => p.type === cfg.type,
+                  ).length;
+                  const on = listType === cfg.type;
+                  return (
+                    <button
+                      key={cfg.type}
+                      type="button"
+                      onClick={() => setListType(cfg.type)}
+                      aria-pressed={on}
+                      className={`prep-chip${on ? " active" : ""}`}
+                    >
+                      <span aria-hidden>{cfg.emoji}</span>
+                      {cfg.label}
+                      {count > 0 && (
+                        <span className="prep-chip-badge">{count}</span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
