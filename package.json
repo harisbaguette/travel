@@ -4,9 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "node scripts/check-dock-fab.js",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint && node scripts/check-dock-fab.js"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
