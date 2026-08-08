@@ -722,21 +722,20 @@ function PinMarker({
   // 지우기는 한 번 더 물어본다 — 손이 스쳐 사라지면 되돌릴 길이 없다.
   const [asking, setAsking] = useState(false);
 
-  // 타입 색은 아이콘 안에 직접 써 넣는다. 바깥에서 나중에 칠하면 화면이 다시 그려질 때
-  // 마커 조각이 통째로 교체되면서 색이 지워진다. 아이콘도 값이 바뀔 때만 새로 만든다.
-  // 모양은 흰 종이 압정(흰 머리+잉크색 그림+잉크색 테두리+바늘대) — 구글 POI는 전부
-  // "색 바탕+흰 그림"이라, 정반대 문법이어야 내 핀이 한눈에 갈라져 보인다.
-  const icon = useMemo(
-    () =>
-      L.divIcon({
-        className: isMine ? "pin-icon" : "pin-icon pin-icon--other",
-        html: `<span style="color:${cfg.color}"><i>${pinMarkerSvg(pin.type, 15)}</i></span>`,
-        iconSize: [34, 42],
-        iconAnchor: [17, 42],
-        popupAnchor: [0, -42],
-      }),
-    [isMine, cfg.color, pin.type]
-  );
+  // 마커는 SVG 통짜 그림(우표 압정) — 색·모양이 그림 안에 다 들어 있어 화면이 다시
+  // 그려져도 안 지워진다. 아이콘도 값이 바뀔 때만 새로 만든다.
+  // 기울기는 핀마다 고정된 값(-2~2도) — 이름표(id) 글자 합으로 정해져 새로고침해도 같다.
+  const icon = useMemo(() => {
+    let sum = 0;
+    for (let i = 0; i < pin.id.length; i++) sum += pin.id.charCodeAt(i);
+    return L.divIcon({
+      className: isMine ? "pin-icon" : "pin-icon pin-icon--other",
+      html: pinMarkerSvg(pin.type, (sum % 5) - 2),
+      iconSize: [36, 46],
+      iconAnchor: [18, 44],
+      popupAnchor: [0, -44],
+    });
+  }, [isMine, pin.id, pin.type]);
 
   return (
     <Marker

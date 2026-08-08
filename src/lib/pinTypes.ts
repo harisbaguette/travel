@@ -136,10 +136,40 @@ export const PIN_TYPE_LIST: PinTypeConfig[] = [
   PIN_TYPES.etc,
 ];
 
-/** 지도 마커 안에 넣을 아이콘 SVG 문자열 — Leaflet divIcon은 React 부품 대신 글자(HTML)만 받아서.
- *  구글 POI가 "색 바탕+흰 그림"이라 우리는 반대로 "흰 종이 바탕+잉크색 그림"으로 그린다 —
- *  색은 마커 겉(span)의 color를 물려받는다(currentColor). */
-export function pinMarkerSvg(type: PinType, size = 16): string {
+/** 우표 몸 테두리 길(path) — 네모의 네 변에 반원 홈을 3개씩 파서 우표의 톱니 가장자리를 만든다.
+ *  s=한 변 길이, r=홈 반지름. 길은 시계 방향(위→오른쪽→아래→왼쪽)으로 돈다. */
+function stampPath(s: number, r: number): string {
+  const centers = [s * 0.25, s * 0.5, s * 0.75];
+  let d = "M0 0";
+  for (const x of centers) d += `L${x - r} 0A${r} ${r} 0 0 0 ${x + r} 0`;
+  d += `L${s} 0`;
+  for (const y of centers) d += `L${s} ${y - r}A${r} ${r} 0 0 0 ${s} ${y + r}`;
+  d += `L${s} ${s}`;
+  for (const x of centers) d += `L${s - x + r} ${s}A${r} ${r} 0 0 0 ${s - x - r} ${s}`;
+  d += `L0 ${s}`;
+  for (const y of centers) d += `L0 ${s - y + r}A${r} ${r} 0 0 0 0 ${s - y - r}`;
+  return d + "Z";
+}
+
+// 우표 한 변 30, 톱니 홈 반지름 2 — 마커마다 같은 몸이라 한 번만 만들어 둔다.
+const STAMP_BODY = stampPath(30, 2);
+
+/** 지도 마커 SVG 통짜 그림 — Leaflet divIcon은 React 부품 대신 글자(HTML)만 받아서.
+ *  모양은 "여행 수첩에 꽂은 우표 압정": 톱니 가장자리 흰 우표 + 종류색 테두리·그림 +
+ *  종류색 바늘대(흰 옷 입힘) + 바늘 끝 그림자. 구글 POI(색 동그라미+흰 그림)와는
+ *  바탕색·윤곽 모양이 모두 반대라 한눈에 갈린다. tiltDeg는 우표 머리만 살짝 기울여
+ *  손으로 붙인 스티커 느낌을 준다(바늘은 수직 그대로, 가리키는 점도 그대로). */
+export function pinMarkerSvg(type: PinType, tiltDeg = 0): string {
   const cfg = PIN_TYPES[type] ?? PIN_TYPES.etc;
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${cfg.iconPaths}</svg>`;
+  const c = cfg.color;
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 46" width="36" height="46" aria-hidden="true">` +
+    `<ellipse cx="18" cy="44" rx="5" ry="1.6" fill="rgba(36,30,25,0.25)"/>` +
+    `<rect x="15.75" y="27" width="4.5" height="17" rx="2.25" fill="#fff"/>` +
+    `<rect x="16.5" y="27.5" width="3" height="15.5" rx="1.5" fill="${c}"/>` +
+    `<g transform="rotate(${tiltDeg} 18 30)"><g transform="translate(3 1)">` +
+    `<path d="${STAMP_BODY}" fill="#fff" stroke="${c}" stroke-width="2" stroke-linejoin="round"/>` +
+    `<g transform="translate(7.5 7.5) scale(0.625)" fill="none" stroke="${c}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">${cfg.iconPaths}</g>` +
+    `</g></g></svg>`
+  );
 }

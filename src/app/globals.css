@@ -997,74 +997,18 @@ body {
   cursor: not-allowed;
 }
 
-/* 핀 마커 — 종이 지도에 꽂은 흰 종이 압정: 흰 머리 + 잉크색 그림·테두리 + 잉크색 바늘대.
-   구글이 지도에 그리는 가게 표시(POI)는 전부 "색 바탕 + 흰 그림"이라, 우리는 정반대인
-   "흰 바탕 + 색 그림"이어야 내 핀이 한눈에 갈라져 보인다(색·크기 차이만으론 안 갈라졌음).
-   종류 색은 마커 글자 안의 color에 직접 써 넣고(바깥에서 나중에 칠하면 화면이 다시
-   그려질 때 색이 지워진다), 테두리·그림·바늘대가 그 색을 물려받는다(currentColor). */
-.pin-icon {
-  position: relative;
-  width: 34px;
-  height: 42px;
-}
-/* 바늘 끝이 닿는 자리의 옅은 그림자 — 지도에 "꽂혀 있다"는 느낌을 준다 */
-.pin-icon::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  bottom: -1px;
-  width: 10px;
-  height: 3px;
-  transform: translateX(-50%);
-  border-radius: 50%;
-  background: rgba(36, 30, 25, 0.25);
-}
-.pin-icon > span {
-  position: absolute;
-  top: 0;
-  left: 2px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  background: #fff;
-  border: 3px solid currentColor;
-  /* 색 테두리 밖에 얇은 흰 띠 한 겹 — 지도 색과 붙어도 윤곽이 안 뭉개진다 */
-  box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.95), 0 2px 8px rgba(36, 30, 25, 0.35);
+/* 핀 마커 — 여행 수첩에 꽂은 우표 압정. 그림 자체(톱니 우표+바늘대+그림자)는 SVG 통짜로
+   pinTypes.ts의 pinMarkerSvg가 그린다 — 여기서는 그림자·움직임만 입힌다.
+   구글 POI(색 동그라미+흰 그림)와 바탕색·윤곽이 모두 반대라 한눈에 갈린다. */
+.pin-icon > svg {
+  display: block;
+  filter: drop-shadow(0 2px 3px rgba(36, 30, 25, 0.3));
   /* 커질 때 바늘 끝(땅에 닿은 점)을 붙잡고 커진다 — 가리키는 자리가 안 흔들린다 */
-  transform-origin: 15px 42px;
-}
-/* 바늘대 — 머리 밑에서 내려오는 잉크색 가는 기둥, 흰 테두리를 둘러 지도 위에서도 또렷하다.
-   머리와는 색 테두리 줄에서만 겹치게 시작한다 — 더 위에서 겹치면 커지는 동안
-   (그리기 순서가 바뀌는 동안) 바늘대의 흰 테두리가 머리 위로 비친다. */
-.pin-icon > span::before {
-  content: "";
-  position: absolute;
-  /* 자리 계산은 테두리 안쪽 기준(테두리 3px만큼 어긋난다): 24px = 머리 색 테두리가
-     시작되는 높이, 15px = 바늘 끝이 정확히 42px(가리키는 점)에 닿는 길이 */
-  top: 24px;
-  left: 50%;
-  z-index: -1;
-  width: 4px;
-  height: 15px;
-  margin-left: -2px;
-  background: currentColor;
-  border-radius: 2px;
-  box-shadow: 0 0 0 1.5px #fff, 0 2px 4px rgba(36, 30, 25, 0.3);
+  transform-origin: 18px 44px;
 }
 /* 친구 핀 — 색은 그대로 두고 살짝 투명하게만(종류 구분이 먼저다). 팝업에 '친구' 표시가 따로 있다 */
-.pin-icon--other > span {
+.pin-icon--other > svg {
   opacity: 0.78;
-}
-.pin-icon > span > i {
-  display: block;
-  line-height: 1;
-  font-style: normal;
-}
-.pin-icon > span > i > svg {
-  display: block;
 }
 
 /* 검색 결과 표식 — 파란 점 둘레로 물결이 퍼진다 */
@@ -1632,15 +1576,15 @@ li.dw-card:nth-child(n + 7) {
 }
 
 /* 지도 핀 — 꽂히는 순간 톡 튀어나오고, 손을 올리면 살짝 커진다 */
-.pin-icon > span {
+.pin-icon > svg {
   /* fill-mode를 두지 않는다 — 끝난 뒤 원래 모습으로 돌아가야 아래 hover가 먹는다 */
   animation: dw-pin-in 0.42s var(--ease-out);
-  transition: transform 0.22s var(--ease-spring), box-shadow 0.22s var(--ease-out);
+  transition: transform 0.22s var(--ease-spring), filter 0.22s var(--ease-out);
 }
 @media (hover: hover) and (pointer: fine) {
-  .pin-icon:hover > span {
+  .pin-icon:hover > svg {
     transform: scale(1.16);
-    box-shadow: 0 6px 16px rgba(36, 30, 25, 0.42);
+    filter: drop-shadow(0 5px 8px rgba(36, 30, 25, 0.4));
   }
 }
 
