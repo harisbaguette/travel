@@ -28,7 +28,7 @@ import L, { type Map as LeafletMap } from "leaflet";
 import "leaflet.gridlayer.googlemutant";
 import type { Pin } from "@/lib/types";
 import { PIN_TYPES, pinMarkerSvg } from "@/lib/pinTypes";
-import { googleMapsUrl } from "@/lib/mapLinks";
+import { googleMapsUrl, placeSearchUrl } from "@/lib/mapLinks";
 import { hoursViewKo } from "@/lib/openingHours";
 import { hasGoogleKey, loadGoogleMaps, onGoogleAuthFailure } from "@/lib/googleMaps";
 
@@ -430,7 +430,7 @@ function PoiTapLayer({
               </button>
             )}
             <a
-              href={`https://www.google.com/maps/search/?api=1&query=${pos[0]},${pos[1]}`}
+              href={placeSearchUrl(placeName, pos[0], pos[1])}
               target="_blank"
               rel="noreferrer"
               className="popup-action"
@@ -678,9 +678,7 @@ function SearchTargetMarker({
               </button>
             )}
             <a
-              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                address ? `${target.name} ${address}` : `${target.lat},${target.lng}`
-              )}`}
+              href={placeSearchUrl(target.name, target.lat, target.lng)}
               target="_blank"
               rel="noreferrer"
               className="popup-action"

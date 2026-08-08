@@ -1,12 +1,26 @@
 import type { Pin } from "./types";
 
-// 핀 하나를 구글 지도에서 열어 주는 주소를 만든다.
-// 주소를 알면 이름+주소로 물어 정확히 그 가게가 뜨고, 모르면 좌표로 그 지점을 연다.
+// 이름 있는 자리를 구글 지도에서 "그 장소"로 열어 주는 주소를 만든다.
+// 좌표만 물으면 구글은 장소가 아니라 좌표 쪽지(10°02'00.5"N…)만 보여 준다.
+// 그래서 반드시 이름으로 찾되, 같은 이름 가게가 다른 도시에도 있을 수 있으니
+// 좌표를 @ 뒤에 붙여 "이 근처에서 찾아라"라고 범위를 좁혀 준다.
+export function placeSearchUrl(
+  name: string | null | undefined,
+  lat: number,
+  lng: number
+): string {
+  const at = `${lat.toFixed(6)},${lng.toFixed(6)}`;
+  const q = (name ?? "").trim();
+  // 이름이 아예 없거나, 이름 자체가 좌표 글자면 좌표로 여는 수밖에 없다
+  if (!q || /^-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?$/.test(q)) {
+    return `https://www.google.com/maps/search/?api=1&query=${at}`;
+  }
+  return `https://www.google.com/maps/search/${encodeURIComponent(q)}/@${at},17z`;
+}
+
+// 핀 하나를 구글 지도에서 열어 주는 주소 — 핀 이름으로 그 장소를 찾는다.
 export function googleMapsUrl(pin: Pin): string {
-  const q = pin.address
-    ? `${pin.name} ${pin.address}`
-    : `${pin.lat.toFixed(6)},${pin.lng.toFixed(6)}`;
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
+  return placeSearchUrl(pin.name, pin.lat, pin.lng);
 }
 
 // 칸에 적힌 글로 열 주소를 만든다.
