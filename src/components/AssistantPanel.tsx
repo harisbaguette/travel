@@ -1,23 +1,26 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowUp,
   Check,
+  ChevronDown,
   ExternalLink,
+  Map as MapIcon,
   MessageCircleQuestionMark,
   Pin as PinIcon,
   RotateCcw,
 } from "lucide-react";
-import type { Pin } from "@/lib/types";
+import type { Pin, PinType } from "@/lib/types";
 import { PIN_TYPES } from "@/lib/pinTypes";
 import { googleMapsUrl } from "@/lib/mapLinks";
 
 // 비서 화면 — AI에게 채팅으로 시키는 곳.
-// 퍼플렉시티처럼 답 한 편 + 근거 글 + 장소 카드가 함께 온다.
-// 카드마다 꽂기 단추가 있어, 마음에 드는 곳만 골라 바로 지도에 꽂는다.
+// 화면은 세 덩이로만 나뉜다: ① 한 줄 요약(+ 점 목록) → ② 종류별로 묶은 장소 카드 →
+// ③ 카드마다 접혀 있는 근거 글. 답이 길게 쏟아져 글 벽이 서지 않도록,
+// 긴 설명·근거는 전부 접어 두고 눌러야 펴진다.
 
-/** 답변의 근거가 된 블로그 글 — 화면 아래 "출처" 줄에 그대로 보여 준다. */
+/** 답변의 근거가 된 블로그 글 — 장소가 하나도 없을 때만 접힌 줄로 보여 준다. */
 export interface AssistantSource {
   title: string;
   url: string;
@@ -75,7 +78,89 @@ function LoadingBubble() {
   );
 }
 
-/** AI가 찾은 곳 하나 — 이름·주소·이유와 함께, 오른쪽 꽂기 단추로 바로 지도에 넣는다. */
+/**
+ * 답변 글을 세 토막으로 나눈다 — 맨 앞 한 마디(요약), 점(-)으로 시작하는 줄(핵심 목록),
+ * 그 뒤에 남는 설명(접어 둔다). AI가 줄글로만 답해도 첫 문장만 세우고 나머지를 접어,
+ * 화면에 글 벽이 서지 않게 한다.
+ */
+function splitAnswer(text: string): { head: string; bullets: string[]; rest: string } {
+  const lines = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const bullets: string[] = [];
+  const plain: string[] = [];
+  for (const line of lines) {
+    // 점(-·•)으로 시작하거나 "1." 같은 번호로 시작하는 줄을 핵심 목록으로 본다
+    const marked = /^(?:[-•*·]|\d+[.)])\s+(.+)$/.exec(line);
+    if (marked) bullets.push(marked[1].trim());
+    else plain.push(line);
+  }
+  // 마침표 뒤에서 문장을 끊는다. 첫 문장이 요약, 나머지는 접히는 설명.
+  const parts = plain.join(" ").split(/(?<=[.!?…])\s+/).filter(Boolean);
+  return { head: parts[0] ?? "", bullets, rest: parts.slice(1).join(" ") };
+}
+
+/** 주소에서 어느 사이트 글인지만 뽑는다 — 출처 칩 아래 작게 붙는 이름. */
+function siteName(url: string): string {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, "");
+    if (host.includes("naver")) return "네이버 블로그";
+    if (host.includes("tistory")) return "티스토리";
+    return host;
+  } catch {
+    return "블로그";
+  }
+}
+
+/** 근거 글 — 옆으로 넘겨 보는 칩 줄. 카드 하나가 여러 글을 근거로 삼아도 자리를 안 잡아먹는다. */
+function SourceRail({ sources }: { sources: { title: string; url: string; blogger?: string }[] }) {
+  return (
+    <div className="dw-rail anim-reveal px-2.5 pb-2.5 pt-0.5">
+      {sources.map((s) => (
+        <a key={s.url} href={s.url} target="_blank" rel="noopener noreferrer" className="dw-src">
+          <span className="dw-src-title">{s.title}</span>
+          <span className="dw-src-from">
+            {s.blogger || siteName(s.url)}
+            <ExternalLink size={9} strokeWidth={2.4} aria-hidden />
+          </span>
+        </a>
+      ))}
+    </div>
+  );
+}
+
+/** 접었다 펴는 "출처 N" 단추 — 평소엔 개수만 보이고, 누르면 아래로 칩 줄이 펴진다. */
+function SourceToggle({
+  count,
+  open,
+  onToggle,
+  label,
+}: {
+  count: number;
+  open: boolean;
+  onToggle: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      className="press flex h-8 items-center gap-1 rounded-full px-2 text-[11px] font-bold text-[var(--text-faint)] transition-colors duration-200 hover:bg-[var(--surface-hover)] hover:text-[var(--accent)]"
+    >
+      <ChevronDown
+        size={13}
+        strokeWidth={2.6}
+        className={`transition-transform duration-150${open ? " rotate-180" : ""}`}
+        aria-hidden
+      />
+      {label} {count}
+    </button>
+  );
+}
+
+/** AI가 찾은 곳 하나 — 이름·한 줄 이유·지도 단추, 그리고 접혀 있는 근거 글. */
 function CandidateCard({
   pin,
   pinned,
@@ -85,8 +170,10 @@ function CandidateCard({
   pinned: boolean;
   onPin: () => void;
 }) {
+  const [openSrc, setOpenSrc] = useState(false);
+  const [openMemo, setOpenMemo] = useState(false);
   const cfg = PIN_TYPES[pin.type];
-  const src = pin.sources?.[0];
+  const sources = pin.sources ?? [];
   return (
     <li className="anim-rise-sm overflow-hidden rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--surface-raised)] transition-[transform,box-shadow,border-color] duration-200 ease-[var(--ease-out)] hover:-translate-y-px hover:border-[var(--accent-soft)] hover:shadow-[var(--shadow-lift)]">
       <div className="flex items-center gap-2.5 px-2.5 py-2.5">
@@ -103,6 +190,16 @@ function CandidateCard({
             {pin.address || cfg.label}
           </span>
         </span>
+        <a
+          href={googleMapsUrl(pin)}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`${pin.name} 구글 지도에서 보기`}
+          title="구글 지도에서 보기"
+          className="press flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--text-faint)] transition-colors duration-200 hover:bg-[var(--surface-hover)] hover:text-[var(--accent)]"
+        >
+          <MapIcon size={16} strokeWidth={2.2} aria-hidden />
+        </a>
         <button
           type="button"
           onClick={onPin}
@@ -122,34 +219,175 @@ function CandidateCard({
           {pinned ? "꽂음" : "꽂기"}
         </button>
       </div>
+
+      {/* 왜 여기냐는 설명 — 평소엔 두 줄까지만, 누르면 다 펴진다 */}
       {pin.memo && (
-        <p className="pb-2 pl-[3.25rem] pr-3 text-xs leading-relaxed text-[var(--text-muted)]">
-          {pin.memo}
+        // 아래 여백은 바깥 상자가 갖는다 — 글 자르는 상자에 여백을 주면 잘린 셋째 줄이
+        // 그 여백 자리에 빼꼼 비쳐 보인다.
+        <div className="pb-2 pl-[3.25rem] pr-3">
+          <button
+            type="button"
+            onClick={() => setOpenMemo((v) => !v)}
+            aria-expanded={openMemo}
+            // 두 줄까지만 보이게 자르는 것과 "칸 전체를 차지하라"는 지시가 서로 밀어내서,
+            // 접힌 동안에는 자르는 쪽만 쓴다(둘을 같이 쓰면 잘리지 않는다).
+            className={`w-full text-left text-xs leading-relaxed text-[var(--text-muted)] ${
+              openMemo ? "block" : "line-clamp-2"
+            }`}
+          >
+            {pin.memo}
+          </button>
+        </div>
+      )}
+
+      {sources.length > 0 && (
+        <>
+          <div className="flex items-center border-t border-[var(--border)] px-1.5 py-0.5">
+            <SourceToggle
+              count={sources.length}
+              open={openSrc}
+              onToggle={() => setOpenSrc((v) => !v)}
+              label="출처"
+            />
+          </div>
+          {openSrc && <SourceRail sources={sources} />}
+        </>
+      )}
+    </li>
+  );
+}
+
+/** 같은 종류끼리 묶는다 — 나온 순서를 지키면서 맛집·카페처럼 덩이를 만든다. */
+function groupByType(pins: Pin[]): { type: PinType; pins: Pin[] }[] {
+  const groups: { type: PinType; pins: Pin[] }[] = [];
+  for (const pin of pins) {
+    const same = groups.find((g) => g.type === pin.type);
+    if (same) same.pins.push(pin);
+    else groups.push({ type: pin.type, pins: [pin] });
+  }
+  return groups;
+}
+
+/** 찾아온 장소들 — 종류별로 묶어 보여 주고, 안 꽂힌 게 여럿이면 한 번에 꽂는 단추를 단다. */
+function PlaceSection({
+  pins,
+  pinnedIds,
+  onPin,
+}: {
+  pins: Pin[];
+  pinnedIds: ReadonlySet<string>;
+  onPin: (pins: Pin[]) => void;
+}) {
+  const groups = useMemo(() => groupByType(pins), [pins]);
+  const unpinned = pins.filter((p) => !pinnedIds.has(p.id));
+  return (
+    <div className="w-full">
+      <div className="mb-1.5 flex items-center gap-2 px-0.5">
+        <span className="text-xs font-bold text-[var(--text-muted)]">찾은 곳 {pins.length}</span>
+        {unpinned.length >= 2 && (
+          <button
+            type="button"
+            onClick={() => onPin(unpinned)}
+            className="press ml-auto flex h-7 items-center gap-1 rounded-full bg-[var(--accent-soft)] px-2.5 text-[11px] font-bold text-[var(--accent)] transition-colors duration-200 hover:bg-[var(--accent-bg)]"
+          >
+            <PinIcon size={11} strokeWidth={2.6} aria-hidden />
+            {unpinned.length}곳 모두 꽂기
+          </button>
+        )}
+      </div>
+      {groups.map((g, gi) => {
+        const cfg = PIN_TYPES[g.type];
+        return (
+          <div key={g.type} className={gi > 0 ? "mt-2.5" : undefined}>
+            {groups.length > 1 && (
+              <p className="mb-1 flex items-center gap-1.5 px-0.5 text-[11px] font-bold text-[var(--text-faint)]">
+                <cfg.Icon size={12} strokeWidth={2.4} style={{ color: cfg.color }} aria-hidden />
+                {cfg.label} {g.pins.length}
+              </p>
+            )}
+            <ul className="flex flex-col gap-1.5">
+              {g.pins.map((pin) => (
+                <CandidateCard
+                  key={pin.id}
+                  pin={pin}
+                  pinned={pinnedIds.has(pin.id)}
+                  onPin={() => onPin([pin])}
+                />
+              ))}
+            </ul>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** 장소 카드가 하나도 없을 때만 쓰는 근거 줄 — 붙일 카드가 없어 답 아래에 접어 둔다. */
+function MessageSources({ sources }: { sources: AssistantSource[] }) {
+  const [open, setOpen] = useState(false);
+  const shown = sources.slice(0, MAX_SHOWN_SOURCES);
+  return (
+    <div className="w-full overflow-hidden rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--surface-raised)]">
+      <div className="flex items-center px-1.5 py-0.5">
+        <SourceToggle
+          count={shown.length}
+          open={open}
+          onToggle={() => setOpen((v) => !v)}
+          label="참고한 글"
+        />
+      </div>
+      {open && <SourceRail sources={shown} />}
+    </div>
+  );
+}
+
+/** 답변 글 — 요약 한 줄과 점 목록만 펴 두고, 남은 설명은 "더 보기"로 접는다. */
+function AnswerText({ text, danger }: { text: string; danger: boolean }) {
+  const [open, setOpen] = useState(false);
+  const { head, bullets, rest } = useMemo(() => splitAnswer(text), [text]);
+  // 실패 안내는 짧고 통째로 읽혀야 한다 — 나누지 않고 그대로 보여 준다.
+  if (danger) return <p className="whitespace-pre-wrap">{text}</p>;
+  return (
+    <>
+      {head && <p className="text-sm font-semibold leading-relaxed text-[var(--text)]">{head}</p>}
+      {bullets.length > 0 && (
+        <ul className="mt-1.5 flex flex-col gap-1">
+          {bullets.map((b, i) => (
+            <li
+              key={i}
+              className="flex gap-1.5 text-[13px] leading-relaxed text-[var(--text-muted)]"
+            >
+              <span
+                className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-[var(--accent-ink)]"
+                aria-hidden
+              />
+              <span className="min-w-0">{b}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {rest && open && (
+        <p className="anim-reveal mt-1.5 text-[13px] leading-relaxed text-[var(--text-muted)]">
+          {rest}
         </p>
       )}
-      <div className="flex items-center gap-3 border-t border-[var(--border)] px-2.5 py-1.5">
-        {src && (
-          <a
-            href={src.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex min-w-0 flex-1 items-center gap-1.5 text-xs text-[var(--text-muted)] transition-colors hover:text-[var(--accent)]"
-          >
-            <span className="min-w-0 truncate underline underline-offset-2">{src.title}</span>
-            <ExternalLink size={11} className="shrink-0" aria-hidden />
-          </a>
-        )}
-        <a
-          href={googleMapsUrl(pin)}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="ml-auto flex shrink-0 items-center gap-1 text-xs text-[var(--text-muted)] underline underline-offset-2 transition-colors hover:text-[var(--accent)]"
+      {rest && (
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className="press mt-1 flex h-7 items-center gap-1 rounded-full text-[11px] font-bold text-[var(--text-faint)] transition-colors duration-200 hover:text-[var(--accent)]"
         >
-          구글 지도
-          <ExternalLink size={11} aria-hidden />
-        </a>
-      </div>
-    </li>
+          <ChevronDown
+            size={13}
+            strokeWidth={2.6}
+            className={`transition-transform duration-150${open ? " rotate-180" : ""}`}
+            aria-hidden
+          />
+          {open ? "접기" : "더 보기"}
+        </button>
+      )}
+    </>
   );
 }
 
@@ -199,90 +437,47 @@ export default function AssistantPanel({
           <ul className="flex flex-col gap-2.5 pb-3">
             {messages.map((m, i) => {
               const hasPins = Boolean(m.pins && m.pins.length > 0);
-              const unpinned = hasPins ? m.pins!.filter((p) => !pinnedIds.has(p.id)) : [];
               const showRetry = Boolean(
                 m.isError && !loading && i === messages.length - 1 && lastUserText
               );
+              if (m.role === "user") {
+                return (
+                  <li key={i} className="flex justify-end">
+                    <div className="msg-in-me max-w-[85%] rounded-[var(--radius-card)] rounded-br-[6px] bg-[var(--accent)] px-3.5 py-2.5 text-sm leading-relaxed text-white">
+                      <p className="whitespace-pre-wrap">{m.text}</p>
+                    </div>
+                  </li>
+                );
+              }
               return (
-                <li key={i} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
-                  <div
-                    className={`rounded-[var(--radius-card)] px-3.5 py-2.5 text-sm leading-relaxed ${
-                      m.role === "user" ? "msg-in-me" : "msg-in-ai"
-                    } ${hasPins ? "w-full" : "max-w-[85%]"} ${
-                      m.role === "user"
-                        ? "rounded-br-[6px] bg-[var(--accent)] text-white"
-                        : m.isError
-                          ? "rounded-bl-[6px] bg-[var(--surface)] text-[var(--danger)] shadow-[var(--shadow-1)]"
-                          : "rounded-bl-[6px] bg-[var(--surface)] text-[var(--text)] shadow-[var(--shadow-1)]"
-                    }`}
-                  >
-                    <p className="whitespace-pre-wrap">{m.text}</p>
+                <li key={i} className="flex flex-col items-start gap-2">
+                  {m.text && (
+                    <div
+                      className={`msg-in-ai max-w-[92%] rounded-[var(--radius-card)] rounded-bl-[6px] bg-[var(--surface)] px-3.5 py-2.5 text-sm leading-relaxed shadow-[var(--shadow-1)] ${
+                        m.isError ? "text-[var(--danger)]" : "text-[var(--text)]"
+                      }`}
+                    >
+                      <AnswerText text={m.text} danger={Boolean(m.isError)} />
+                      {showRetry && (
+                        <button
+                          type="button"
+                          onClick={() => onSend(lastUserText)}
+                          className="mt-2 flex items-center gap-1.5 rounded-[var(--radius-control)] border border-[var(--border-strong)] px-3 py-1.5 text-xs font-semibold text-[var(--text)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                        >
+                          <RotateCcw size={12} strokeWidth={2.5} aria-hidden />
+                          다시 물어보기
+                        </button>
+                      )}
+                    </div>
+                  )}
 
-                    {showRetry && (
-                      <button
-                        type="button"
-                        onClick={() => onSend(lastUserText)}
-                        className="mt-2 flex items-center gap-1.5 rounded-[var(--radius-control)] border border-[var(--border-strong)] px-3 py-1.5 text-xs font-semibold text-[var(--text)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"
-                      >
-                        <RotateCcw size={12} strokeWidth={2.5} aria-hidden />
-                        다시 물어보기
-                      </button>
-                    )}
+                  {hasPins && (
+                    <PlaceSection pins={m.pins!} pinnedIds={pinnedIds} onPin={onPin} />
+                  )}
 
-                    {hasPins && (
-                      <div className="mt-2.5">
-                        <ul className="flex flex-col gap-1.5">
-                          {m.pins!.map((pin) => (
-                            <CandidateCard
-                              key={pin.id}
-                              pin={pin}
-                              pinned={pinnedIds.has(pin.id)}
-                              onPin={() => onPin([pin])}
-                            />
-                          ))}
-                        </ul>
-                        {unpinned.length >= 2 && (
-                          <button
-                            type="button"
-                            onClick={() => onPin(unpinned)}
-                            className="press mt-2 w-full rounded-[var(--radius-control)] border border-[var(--border-strong)] px-3 py-2 text-sm text-[var(--accent)] transition-[background,border-color,transform] duration-200 hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]"
-                          >
-                            {unpinned.length}곳 모두 꽂기
-                          </button>
-                        )}
-                      </div>
-                    )}
-
-                    {m.sources && m.sources.length > 0 && (
-                      <div className="mt-2.5 border-t border-[var(--border)] pt-2">
-                        <p className="text-xs text-[var(--text-faint)]">출처</p>
-                        <ul className="mt-1 flex flex-col gap-2">
-                          {m.sources.slice(0, MAX_SHOWN_SOURCES).map((s) => (
-                            <li key={s.url} className="flex items-center gap-1.5 py-0.5">
-                              <a
-                                href={s.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="min-w-0 truncate text-xs text-[var(--text-muted)] underline underline-offset-2 transition-colors hover:text-[var(--accent)]"
-                              >
-                                {s.title}
-                              </a>
-                              <ExternalLink
-                                size={11}
-                                className="shrink-0 text-[var(--text-faint)]"
-                                aria-hidden
-                              />
-                              {s.blogger && (
-                                <span className="shrink-0 text-xs text-[var(--text-faint)]">
-                                  {s.blogger}
-                                </span>
-                              )}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
+                  {!hasPins && m.sources && m.sources.length > 0 && (
+                    <MessageSources sources={m.sources} />
+                  )}
                 </li>
               );
             })}

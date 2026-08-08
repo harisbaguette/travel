@@ -876,6 +876,64 @@ body {
   }
 }
 
+/* ── 근거 글 줄 — 장소 카드마다 접혀 있다가 펴지면 옆으로 넘겨 보는 칩 줄 ──
+   근거 글을 답 맨 아래에 몰아 두면 어느 장소의 근거인지 알 수 없고 줄만 길어진다.
+   그래서 장소 카드 안에 붙이고, 평소엔 접어 두고 펴면 이 줄만 옆으로 밀리게 했다. */
+.dw-rail {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.dw-rail::-webkit-scrollbar {
+  display: none;
+}
+.dw-src {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 3px;
+  /* 고정값: 폭 152 — 폰에서 두 장 반이 보여 "옆에 더 있다"가 눈에 들어온다. */
+  width: 152px;
+  padding: 7px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--bg);
+  scroll-snap-align: start;
+  transition: background 0.14s var(--ease), border-color 0.14s var(--ease);
+}
+.dw-src:active {
+  border-color: var(--accent-ink);
+  background: var(--accent-soft);
+}
+@media (hover: hover) and (pointer: fine) {
+  .dw-src:hover {
+    border-color: var(--accent-ink);
+    background: var(--accent-soft);
+  }
+}
+.dw-src-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text);
+}
+.dw-src-from {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.625rem;
+  color: var(--text-faint);
+}
+
 /* ── 빈 화면 — 글로 길게 설명하는 대신 그림 하나와 한 줄 ── */
 .dw-empty {
   display: flex;
