@@ -1,4 +1,4 @@
-import type { Pin, PinSource, PinType } from "@/lib/types";
+import { PIN_TYPE_VALUES, type Pin, type PinSource, type PinType } from "@/lib/types";
 import {
   fetchBlogPost,
   searchNaverBlog,
@@ -33,6 +33,7 @@ export const maxDuration = 60;
 const NO_AI_KEY =
   "AI 접속 정보가 아직 없어요 — 서버에 DEEPSEEK_API_KEY나 OPENROUTER_API_KEY 중 하나를 넣어야 비서가 일할 수 있어요(.env.example 참고).";
 // 핀 타입별 이모지 — pinTypes.ts와 같은 값(그 파일은 lucide 아이콘을 끌고 와서 서버에선 따로 둠)
+// 종류 목록 자체는 types.ts에서 가져온다(따로 적으면 어긋난다). 이모지만 여기서 붙인다.
 const PIN_EMOJI: Record<PinType, string> = {
   food: "🍜",
   spot: "📸",
@@ -40,17 +41,11 @@ const PIN_EMOJI: Record<PinType, string> = {
   stay: "🛏",
   massage: "💆",
   airport: "✈️",
+  fruit: "🍎",
+  shopping: "🛍️",
+  market: "🛒",
   etc: "📍",
 };
-const PIN_TYPE_VALUES = [
-  "food",
-  "spot",
-  "cafe",
-  "stay",
-  "massage",
-  "airport",
-  "etc",
-] as const;
 
 interface ChatTurn {
   role: "user" | "assistant";
@@ -151,7 +146,7 @@ async function reverseAddress(lat: number, lng: number): Promise<string> {
 function buildSystem(context: AssistantContext): string {
   const lines = [
     "당신은 여행 핀지도 앱의 조사 비서입니다. 퍼플렉시티 같은 AI 검색처럼 '검색 → 읽을 글 고르기 → 본문 읽기 → 종합' 순서로 일합니다.",
-    "사용자가 맛집·관광지·카페·숙소·마사지 같은 곳을 찾아 달라고 하면:",
+    "사용자가 맛집·관광지·카페·숙소·마사지·쇼핑·시장 같은 곳을 찾아 달라고 하면:",
     "1. naver_blog_search — 관점이 다른 검색어 2~3개를 한 차례에 같이 시킨다(예: '○○ 맛집 추천', '○○ 현지인 맛집', '○○ 3일 코스'). 하나씩 차례로 물으면 시간이 모자랍니다.",
     "2. read_blog — 검색 결과의 제목·요약만 보고 정하지 말고, 정보가 많아 보이는 글 3~5개를 골라 본문을 한 번에 읽는다.",
     "3. propose_pins — 읽은 내용을 근거로 장소를 골라 한 번에 제출한다.",

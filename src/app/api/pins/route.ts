@@ -1,4 +1,4 @@
-import type { Pin, PinSource } from "@/lib/types";
+import { PIN_TYPE_VALUES, type Pin, type PinSource } from "@/lib/types";
 import { getDb } from "@/lib/db";
 
 // 핀 CRUD — Neon(Postgres) pins 테이블. 스키마: src/lib/schema.sql
@@ -9,7 +9,8 @@ import { getDb } from "@/lib/db";
 //   DELETE ?room=&id=      → { ok, updatedAt }
 // DB 미설정이면 오류 대신 configured:false — 앱은 혼자 쓰기 모드로 조용히 동작한다.
 
-const PIN_TYPES = new Set(["food", "spot", "cafe", "stay", "etc"]);
+// 종류 목록은 types.ts 한 곳에서 가져온다 — 여기에 따로 적으면 새 종류가 서버에서 거절된다.
+const PIN_TYPES = new Set<string>(PIN_TYPE_VALUES);
 
 interface PinRow {
   id: string;

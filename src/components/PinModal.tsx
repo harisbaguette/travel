@@ -22,6 +22,8 @@ export default function PinModal({ lat, lng, initialName, onAdd, onClose }: PinM
   const [memo, setMemo] = useState("");
   useSheet(onClose);
 
+  // 종류 칸은 5칸×2줄 격자 — 알약이 미끄러질 칸의 가로·세로 자리를 넘긴다.
+  const COLS = 5;
   const activeIdx = PIN_TYPE_LIST.findIndex((c) => c.type === type);
   const activeColor = PIN_TYPE_LIST[activeIdx]?.color;
 
@@ -49,8 +51,9 @@ export default function PinModal({ lat, lng, initialName, onAdd, onClose }: PinM
             className="cat-tabs"
             style={
               {
-                "--active-idx": activeIdx,
-                "--tab-count": PIN_TYPE_LIST.length,
+                "--active-col": activeIdx % COLS,
+                "--active-row": Math.floor(activeIdx / COLS),
+                "--tab-cols": COLS,
                 "--slider-bg": activeColor,
               } as React.CSSProperties
             }

@@ -1,18 +1,21 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  Apple,
   BedDouble,
   Camera,
   Coffee,
   Flower2,
   MapPin,
   Plane,
+  ShoppingBag,
+  ShoppingCart,
   Utensils,
 } from "lucide-react";
 import type { PinType } from "./types";
 
 // 핀 타입별 표시 설정 — 아이콘(Lucide, ISC) + 색 + 한국어 이름
 // emoji는 DB 저장·<option> 같은 글자만 되는 자리용으로 남긴다.
-// simplify: 7개 고정. 사용자 정의 타입은 나중.
+// simplify: 10개 고정. 사용자 정의 타입은 나중.
 export interface PinTypeConfig {
   type: PinType;
   label: string;
@@ -80,6 +83,33 @@ export const PIN_TYPES: Record<PinType, PinTypeConfig> = {
     iconPaths:
       '<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>',
   },
+  fruit: {
+    type: "fruit",
+    label: "과일가게",
+    emoji: "🍎",
+    color: "#c96a1a",
+    Icon: Apple,
+    iconPaths:
+      '<path d="M12 6.528V3a1 1 0 0 1 1-1h0"/><path d="M18.237 21A15 15 0 0 0 22 11a6 6 0 0 0-10-4.472A6 6 0 0 0 2 11a15.1 15.1 0 0 0 3.763 10 3 3 0 0 0 3.648.648 5.5 5.5 0 0 1 5.178 0A3 3 0 0 0 18.237 21"/>',
+  },
+  shopping: {
+    type: "shopping",
+    label: "쇼핑",
+    emoji: "🛍️",
+    color: "#6f5cb8",
+    Icon: ShoppingBag,
+    iconPaths:
+      '<path d="M16 10a4 4 0 0 1-8 0"/><path d="M3.103 6.034h17.794"/><path d="M3.4 5.467a2 2 0 0 0-.4 1.2V20a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6.667a2 2 0 0 0-.4-1.2l-2-2.667A2 2 0 0 0 17 2H7a2 2 0 0 0-1.6.8z"/>',
+  },
+  market: {
+    type: "market",
+    label: "시장·마트",
+    emoji: "🛒",
+    color: "#5c8033",
+    Icon: ShoppingCart,
+    iconPaths:
+      '<circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/>',
+  },
   etc: {
     type: "etc",
     label: "기타",
@@ -98,6 +128,9 @@ export const PIN_TYPE_LIST: PinTypeConfig[] = [
   PIN_TYPES.stay,
   PIN_TYPES.massage,
   PIN_TYPES.airport,
+  PIN_TYPES.fruit,
+  PIN_TYPES.shopping,
+  PIN_TYPES.market,
   PIN_TYPES.etc,
 ];
 
