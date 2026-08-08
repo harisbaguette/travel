@@ -123,11 +123,7 @@ export default function TravelInfoPanel({
           추가
         </button>
       </div>
-      {stays.length === 0 ? (
-        <p className="text-xs text-[var(--text-muted)]">
-          아직 기록한 숙소가 없어요 — 날마다 숙소가 다르면 추가로 여러 개 적으면 돼요
-        </p>
-      ) : (
+      {stays.length === 0 ? null : (
         <ul className="flex flex-col gap-3">
           {stays.map((s) => (
             <li key={s.id} className="rounded-[12px] bg-[var(--bg)] p-3">
