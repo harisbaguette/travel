@@ -1041,32 +1041,22 @@ export default function Home() {
         </div>
       )}
 
-      {/* 저장 알림 — 잘 갔는지 눈으로 확인. 실패는 누를 때까지 사라지지 않는다. */}
-      {syncEnabled && saveStatus !== "idle" && (
+      {/* 저장 알림 — 평소에는 조용히 있다가, 보내기에 실패했을 때만 나타난다(조용히 삼키지 않는다). */}
+      {syncEnabled && saveStatus === "failed" && (
         <div
-          className={`notice-bar relative z-[1030] flex shrink-0 items-center gap-2 px-4 py-1.5 text-xs font-semibold ${
-            saveStatus === "failed"
-              ? "bg-[var(--danger)] text-white"
-              : "bg-[var(--surface-hover)] text-[var(--text-muted)]"
-          }`}
+          className="notice-bar relative z-[1030] flex shrink-0 items-center gap-2 bg-[var(--danger)] px-4 py-1.5 text-xs font-semibold text-white"
           role="status"
         >
-          {saveStatus === "saving" && <span>저장 중…</span>}
-          {saveStatus === "saved" && <span>저장됐어요</span>}
-          {saveStatus === "failed" && (
-            <>
-              <span className="min-w-0 flex-1">
-                친구에게 보내지 못했어요 — 이 기기에는 남아 있어요
-              </span>
-              <button
-                type="button"
-                onClick={handleResend}
-                className="shrink-0 rounded-full bg-white/20 px-3 py-1 font-bold"
-              >
-                다시 보내기
-              </button>
-            </>
-          )}
+          <span className="min-w-0 flex-1">
+            친구에게 보내지 못했어요 — 이 기기에는 남아 있어요
+          </span>
+          <button
+            type="button"
+            onClick={handleResend}
+            className="shrink-0 rounded-full bg-white/20 px-3 py-1 font-bold"
+          >
+            다시 보내기
+          </button>
         </div>
       )}
 
