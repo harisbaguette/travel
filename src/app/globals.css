@@ -1097,6 +1097,16 @@ body {
   }
 }
 
+/* 길게 눌러 떨어뜨린 핀 — 구글맵의 빨간 물방울 핀과 같은 문법 */
+.drop-pin-icon {
+  background: transparent;
+  border: none;
+}
+.drop-pin-icon svg {
+  display: block;
+  filter: drop-shadow(0 2px 4px rgba(36, 30, 25, 0.35));
+}
+
 /* Leaflet 팝업 — 흰 카드 톤 */
 .leaflet-popup-content-wrapper {
   background: var(--surface);

@@ -3,6 +3,7 @@
 //    "누른 그 가게"가 잡힌다. 확대 단계 z가 함께 와야 한다).
 // 2) 여는 시간·전화 같은 속살은 OpenStreetMap에서 같은 이름의 가게를 찾아 보탠다.
 // 3) 구글에서 못 찾으면 옛 방식대로 그 자리 45m 안의 OSM 장소 → 주소 순서로 어림한다.
+//    단 strict=1이면 어림하지 않고 null(빈 땅), addr=1이면 주소만 바로 알려 준다.
 
 import { runOverpass, type OverpassElement } from "@/lib/overpass";
 import { findTilePoiAt } from "@/lib/tilePoi";
@@ -160,11 +161,20 @@ export async function GET(request: Request): Promise<Response> {
   const lat = Number(params.get("lat"));
   const lng = Number(params.get("lng"));
   const zoom = Number(params.get("z"));
+  // strict=1: 화면에 그려진 구글 가게를 눌렀을 때만 답한다(빈 땅이면 null) — 어림 금지.
+  // addr=1: 장소 찾기는 건너뛰고 그 자리 주소만 알려 준다(떨어뜨린 핀용).
+  const strict = params.get("strict") === "1";
+  const addrOnly = params.get("addr") === "1";
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
     return Response.json(
       { ok: false, error: "좌표가 올바르지 않아요." },
       { status: 400 }
     );
+  }
+
+  if (addrOnly) {
+    const poi = await reverseAddress(lat, lng);
+    return Response.json({ ok: true, poi });
   }
 
   // 화면에 그려져 있던 구글 아이콘을 누른 거라면 그 아이콘의 이름·자리를 그대로 쓴다
@@ -192,6 +202,9 @@ export async function GET(request: Request): Promise<Response> {
       return Response.json({ ok: true, poi });
     }
   }
+
+  // strict면 여기서 끝 — 그려진 가게가 아니면 "아무것도 없음"이 맞는 답이다.
+  if (strict) return Response.json({ ok: true, poi: null });
 
   const poi = (await findNearbyPoi(lat, lng)) ?? (await reverseAddress(lat, lng));
   return Response.json({ ok: true, poi });
