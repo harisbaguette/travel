@@ -30,7 +30,7 @@ import {
 } from "@/lib/cities";
 import type { Itinerary, Pin, PinType } from "@/lib/types";
 import { PIN_TYPES, PIN_TYPE_LIST } from "@/lib/pinTypes";
-import { isShortMapLink, parseGoogleMapsUrl } from "@/lib/mapLinks";
+import { isShortMapLink, looksLikeMapLink, parseGoogleMapsUrl } from "@/lib/mapLinks";
 import { dateRange, daysBetween } from "@/lib/dates";
 import { dayOrder, removePinsFromDay } from "@/lib/dayEntries";
 import type { DayRoute } from "@/components/MapView";
@@ -286,6 +286,7 @@ export default function Home() {
     }
     const q = query.trim();
     if (q.length < 2) return; // 목록 비우기는 입력칸 onChange에서 처리
+    if (looksLikeMapLink(q)) return; // 링크는 후보를 물을 게 없다 — 엔터·이동으로 자리를 읽는다
     const timer = setTimeout(async () => {
       sugAbortRef.current?.abort();
       const ac = new AbortController();
@@ -445,6 +446,18 @@ export default function Home() {
     setNotice("");
     closeSuggestions();
     try {
+      // 구글 지도 링크를 붙여 넣었으면 검색 대신 링크에서 자리를 읽어 그리로 간다
+      if (looksLikeMapLink(q)) {
+        const place = await resolveMapLink(q);
+        if (!place) {
+          setNotice("링크에서 위치를 읽지 못했어요 — 구글 지도 공유 링크인지 확인해 주세요");
+          return;
+        }
+        setTab("map");
+        setSearchTarget({ ...place, name: place.name || "링크로 찾은 자리" });
+        mapRef.current?.setView([place.lat, place.lng], 16, { animate: true });
+        return;
+      }
       const coords = await resolveCity(q);
       if (!coords) {
         setNotice(`"${q}"를 찾을 수 없어요 — 영어 이름으로도 시도해 보세요`);
@@ -724,12 +737,10 @@ export default function Home() {
     []
   );
 
-  // 일정 화면에 붙여넣은 구글 지도 링크 — 자리를 읽어 핀으로 꽂고 그 날짜에 넣는다.
-  // 이미 그 자리(50m 안)에 핀이 있으면 새로 만들지 않고 그 핀을 넣는다.
-  const handleScheduleLinkAdd = useCallback(
-    async (date: string, raw: string): Promise<boolean> => {
+  // 붙여넣은 구글 지도 링크에서 자리(좌표)와 이름을 읽어 낸다 — 검색·일정이 함께 쓴다.
+  const resolveMapLink = useCallback(
+    async (raw: string): Promise<{ lat: number; lng: number; name: string } | null> => {
       let link = raw.trim();
-      if (!link) return false;
       try {
         // 앱 "공유"로 만든 짧은 링크는 서버가 원래 긴 주소로 펴 준다
         if (isShortMapLink(link)) {
@@ -743,7 +754,7 @@ export default function Home() {
       const parsed = parseGoogleMapsUrl(link);
       let lat = parsed?.lat;
       let lng = parsed?.lng;
-      let name = parsed?.name ?? "";
+      const name = parsed?.name ?? "";
       // 링크에 좌표 없이 이름만 있으면 장소 사전에 물어 좌표를 찾는다
       if ((lat === undefined || lng === undefined) && name) {
         try {
@@ -752,21 +763,31 @@ export default function Home() {
           if (found[0]) {
             lat = found[0].lat;
             lng = found[0].lng;
-            if (!name) name = found[0].name;
           }
         } catch {
-          // 찾기 실패 — 아래 공통 안내로 떨어진다
+          // 찾기 실패 — 호출한 쪽 안내로 떨어진다
         }
       }
-      if (lat === undefined || lng === undefined) {
+      if (lat === undefined || lng === undefined) return null;
+      return { lat, lng, name };
+    },
+    []
+  );
+
+  // 일정 화면에 붙여넣은 구글 지도 링크 — 자리를 읽어 핀으로 꽂고 그 날짜에 넣는다.
+  // 이미 그 자리(50m 안)에 핀이 있으면 새로 만들지 않고 그 핀을 넣는다.
+  const handleScheduleLinkAdd = useCallback(
+    async (date: string, raw: string): Promise<boolean> => {
+      if (!raw.trim()) return false;
+      const place = await resolveMapLink(raw);
+      if (!place) {
         setNotice("링크에서 위치를 읽지 못했어요 — 구글 지도 공유 링크를 붙여넣어 주세요");
         return false;
       }
-
-      attachToDay(date, { lat, lng, name });
+      attachToDay(date, place);
       return true;
     },
-    [attachToDay]
+    [attachToDay, resolveMapLink]
   );
 
   // 이어받기 전(서버가 그린 첫 화면)에는 저장값 대신 빈 상태를 그린다.

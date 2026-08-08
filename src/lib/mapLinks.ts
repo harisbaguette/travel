@@ -41,6 +41,22 @@ export function isShortMapLink(raw: string): boolean {
   }
 }
 
+/** 구글 지도 링크로 보이는가 — 짧은 공유 링크거나 google.com/maps 계열이면 참 */
+export function looksLikeMapLink(raw: string): boolean {
+  const t = raw.trim();
+  if (isShortMapLink(t)) return true;
+  try {
+    const url = new URL(t);
+    const host = url.hostname.toLowerCase();
+    return (
+      host.includes("google") &&
+      (host.startsWith("maps.") || url.pathname.startsWith("/maps"))
+    );
+  } catch {
+    return false;
+  }
+}
+
 function validCoord(lat: number, lng: number): boolean {
   return (
     Number.isFinite(lat) &&
