@@ -12,7 +12,7 @@ import {
   Plus,
   X,
 } from "lucide-react";
-import type { DayTextItem, FlightInfo, Itinerary, Pin } from "@/lib/types";
+import type { DayTextItem, FlightInfo, Itinerary, Pin, StayInfo } from "@/lib/types";
 import { PIN_TYPES } from "@/lib/pinTypes";
 import { dayHasContent, dayOrder } from "@/lib/dayEntries";
 import { dateRange, daysBetween, shortDate, todayISO, weekdayOf } from "@/lib/dates";
@@ -237,14 +237,23 @@ export default function SchedulePanel({
         <ul className="flex flex-col gap-3">
           {dayList.map((day, i) => {
             const open = isOpen(day.date);
+            // 준비 화면에서 적은 숙소가 자동으로 이 날짜에 나타난다 —
+            // 들어가는 날엔 체크인 줄, 나오는 날엔 체크아웃 줄, 그 사이 밤은 자는 곳 표시.
+            const checkIns = stays.filter((s) => s.checkIn && s.checkIn === day.date);
+            const checkOuts = stays.filter((s) => s.checkOut && s.checkOut === day.date);
             const sleeping = stays.filter(
-              (s) =>
-                s.name && s.checkIn && s.checkOut && s.checkIn <= day.date && day.date < s.checkOut
+              (s) => s.checkIn && s.checkOut && s.checkIn < day.date && day.date < s.checkOut
             );
             const showOutbound =
               outbound && flightDayIndex(outbound, 0) === i ? outbound : null;
             const showInbound =
               inbound && flightDayIndex(inbound, dayList.length - 1) === i ? inbound : null;
+            // 접혀 있어도 이 날에 비행·숙소가 있다는 걸 알 수 있게 개수와 아이콘에 넣는다.
+            const autoCount =
+              (showOutbound ? 1 : 0) +
+              (showInbound ? 1 : 0) +
+              checkIns.length +
+              checkOuts.length;
             return (
               <li key={day.date} className="trip-section">
                 <button
@@ -257,7 +266,26 @@ export default function SchedulePanel({
                   <span className="text-xs text-[var(--text-muted)]">
                     · {shortDate(day.date)}({weekdayOf(day.date)})
                   </span>
-                  <span className="trip-section-hint">{day.order.length}개</span>
+                  {/* 접혀 있어도 비행·숙소가 있는 날인 걸 알 수 있게 오른쪽 개수 옆에 아이콘 */}
+                  <span className="ml-auto flex shrink-0 items-center gap-1.5 text-xs font-semibold text-[var(--text-muted)]">
+                    {(showOutbound || showInbound) && (
+                      <Plane
+                        size={13}
+                        strokeWidth={2.2}
+                        className="shrink-0 text-[var(--accent-ink)]"
+                        aria-label="비행 있음"
+                      />
+                    )}
+                    {checkIns.length + checkOuts.length + sleeping.length > 0 && (
+                      <BedDouble
+                        size={13}
+                        strokeWidth={2.2}
+                        className="shrink-0 text-[var(--accent-ink)]"
+                        aria-label="숙소 있음"
+                      />
+                    )}
+                    {day.order.length + autoCount}개
+                  </span>
                   <ChevronDown
                     size={17}
                     strokeWidth={2.4}
@@ -269,6 +297,14 @@ export default function SchedulePanel({
                 {open && (
                   <div className="trip-section-body flex flex-col gap-2">
                     {showOutbound && <FlightRow flight={showOutbound} />}
+
+                    {/* 나오는 날 아침 체크아웃 → 들어가는 날 체크인 순서로 보여 준다. */}
+                    {checkOuts.map((s) => (
+                      <StayRow key={`out-${s.id}`} stay={s} kind="out" />
+                    ))}
+                    {checkIns.map((s) => (
+                      <StayRow key={`in-${s.id}`} stay={s} kind="in" />
+                    ))}
 
                     {sleeping.length > 0 && (
                       <div className="flex flex-wrap gap-2 px-1">
@@ -283,7 +319,7 @@ export default function SchedulePanel({
                               className="text-[var(--accent-ink)]"
                               aria-hidden
                             />
-                            {s.name}
+                            {s.name || "숙소"}
                           </span>
                         ))}
                       </div>
@@ -540,6 +576,29 @@ function AddPlaceBox({
           })}
         </ul>
       )}
+    </div>
+  );
+}
+
+// 숙소 한 줄 — 준비 화면에서 적어 두면 들어가는 날·나오는 날 카드에 자동으로 나타난다.
+function StayRow({ stay, kind }: { stay: StayInfo; kind: "in" | "out" }) {
+  const label = kind === "in" ? "체크인" : "체크아웃";
+  const time = kind === "in" ? stay.checkInTime : stay.checkOutTime;
+  const sub = [label, time].filter(Boolean).join(" · ");
+  return (
+    <div className="dw-card flex items-center gap-3 p-3">
+      <span
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--accent-bg)]"
+        aria-hidden
+      >
+        <BedDouble size={16} strokeWidth={2.2} className="text-[var(--accent)]" />
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate text-sm font-semibold text-[var(--text)]">
+          {stay.name || "숙소"}
+        </span>
+        <span className="truncate text-xs tabular-nums text-[var(--text-muted)]">{sub}</span>
+      </span>
     </div>
   );
 }

@@ -160,7 +160,8 @@ export default function TravelInfoPanel({ itinerary, onChange, part }: TravelInf
                     />
                   )}
                 </label>
-                <label className="flex w-24 shrink-0 flex-col gap-1">
+                {/* w-24로는 "오후 12:00"이 잘려 시각이 안 보였다 — 한국어 표기 폭만큼 넓힌다. */}
+                <label className="flex w-28 shrink-0 flex-col gap-1">
                   <span className="text-[11px] font-semibold text-[var(--text-muted)]">시각</span>
                   <input
                     type="time"
@@ -201,7 +202,7 @@ export default function TravelInfoPanel({ itinerary, onChange, part }: TravelInf
                     />
                   )}
                 </label>
-                <label className="flex w-24 shrink-0 flex-col gap-1">
+                <label className="flex w-28 shrink-0 flex-col gap-1">
                   <span className="text-[11px] font-semibold text-[var(--text-muted)]">시각</span>
                   <input
                     type="time"

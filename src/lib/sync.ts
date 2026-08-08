@@ -234,12 +234,16 @@ async function sendPinDelete(room: string, id: string): Promise<boolean> {
 // 일정은 타이핑·드래그마다 바뀌므로 0.8초 잠잠해질 때까지 모았다가 한 번만 보낸다.
 const ITINERARY_DEBOUNCE_MS = 800;
 let itineraryTimer: ReturnType<typeof setTimeout> | null = null;
+// 아직 서버로 안 보낸 최신 일정 — 화면을 떠날 때 마지막으로 한 번 더 보내기 위해 들고 있는다.
+let pendingItinerary: { room: string; it: Itinerary } | null = null;
 
 export function pushItinerary(room: string, it: Itinerary): void {
   if (!room || dbConfigured === false) return;
+  pendingItinerary = { room, it };
   if (itineraryTimer) clearTimeout(itineraryTimer);
   itineraryTimer = setTimeout(() => {
     itineraryTimer = null;
+    pendingItinerary = null;
     beginWrite();
     void sendItinerary(room, it).then((ok) => {
       if (ok) failedItinerary = null;
@@ -250,6 +254,33 @@ export function pushItinerary(room: string, it: Itinerary): void {
       endWrite(ok);
     });
   }, ITINERARY_DEBOUNCE_MS);
+}
+
+// 화면을 닫거나 다른 앱으로 넘어가는 순간, 0.8초를 못 채워 안 보낸 일정을 즉시 보낸다.
+// 이걸 안 하면 적자마자 닫았을 때 서버엔 옛 사본만 남고, 다음에 열 때 그 옛 사본이
+// 이 기기의 새 내용을 도로 덮어써서 "적었는데 사라지는" 일이 생긴다.
+function flushPendingItinerary(): void {
+  if (!itineraryTimer || !pendingItinerary) return;
+  clearTimeout(itineraryTimer);
+  itineraryTimer = null;
+  const { room, it } = pendingItinerary;
+  pendingItinerary = null;
+  try {
+    // sendBeacon은 화면이 닫히는 중에도 끝까지 배달되는 보내기 방법이다.
+    navigator.sendBeacon(
+      "/api/itinerary",
+      new Blob([JSON.stringify({ room, itinerary: it })], { type: "application/json" })
+    );
+  } catch {
+    // 못 보내도 이 기기 저장본은 남는다 — 다음 접속 때 다시 고치면 된다.
+  }
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("pagehide", flushPendingItinerary);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushPendingItinerary();
+  });
 }
 
 async function sendItinerary(room: string, it: Itinerary): Promise<boolean> {
@@ -372,7 +403,9 @@ export function useRoomSync(room: string, handlers: RoomSyncHandlers): RoomSyncS
           itData.updatedAt > lastItineraryAt
         ) {
           lastItineraryAt = itData.updatedAt;
-          if (itData.updatedAt > ownItineraryWriteAt) {
+          // 내가 방금 고친 게 아직 서버로 안 간 상태(0.8초 모으는 중)면 서버의 옛 사본으로
+          // 지금 화면을 덮어쓰지 않는다 — 곧 내 새 내용이 서버로 가서 어차피 이긴다.
+          if (itData.updatedAt > ownItineraryWriteAt && itineraryTimer === null) {
             handlersRef.current.onItinerary?.(itData.itinerary);
           }
         }
