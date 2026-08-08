@@ -8,8 +8,12 @@
 const TILE = 256;
 // 아이콘에서 이만큼(픽셀) 안에 누르면 그 가게를 누른 것으로 본다
 const HIT_RADIUS_PX = 26;
-// 누른 자리가 조각 가장자리에 이만큼 가까우면 옆 조각도 함께 읽는다
-const EDGE_PX = 30;
+// 상호명 글자 상자를 누를 때 손가락이 조금 빗나가도 봐주는 여유(픽셀)
+const BOX_PAD_PX = 6;
+// 누른 자리가 조각 가장자리에 이만큼 가까우면 옆 조각도 함께 읽는다.
+// 가로는 글자가 길게 뻗으므로(최대 ~170px) 넉넉히, 세로는 글자 높이만큼만.
+const EDGE_X_PX = 170;
+const EDGE_Y_PX = 40;
 const FT_TIMEOUT_MS = 4000;
 
 export interface TilePoi {
@@ -67,6 +71,18 @@ interface Candidate {
   transit: boolean;
   x: number;
   y: number;
+  /** 앵커 기준 아이콘·상호명 글자 상자들 [x1,y1,x2,y2] (픽셀) — 글자를 눌러도 잡게 해 준다. */
+  boxes: [number, number, number, number][];
+}
+
+// 이름 속 이중 탈출 풀기 — "\\u0026"(＆) 같은 글자표 번호와 "\\\"" 같은 감싼 따옴표를
+// 진짜 글자로 되돌린다. 안 풀면 이름이 "Grill \u0026 Bar"처럼 보이고 OSM 이름 맞대기도 어긋난다.
+function decodeText(s: string): string {
+  return s
+    .replace(/\\u([0-9a-fA-F]{4})/g, (_, h: string) =>
+      String.fromCharCode(parseInt(h, 16))
+    )
+    .replace(/\\(.)/g, "$1");
 }
 
 // ft 응답은 JSON이 아니라 키에 따옴표 없는 JS 글자라 직접 훑어 읽는다(eval 금지).
@@ -79,12 +95,14 @@ function parseFt(text: string, tx: number, ty: number): Candidate[] {
     if (groups.length) groups[groups.length - 1].end = m.index;
     groups.push({ base: [Number(m[1]), Number(m[2])], start: m.index, end: text.length });
   }
+  // id는 숫자꼴("123…")도, 자리표꼴("0x…:0x…")도 있다 — 어느 쪽이든 잡는다.
+  // (묶음 머리는 id 뒤가 ",a:["가 아니라 ",base:["라서 여기 걸리지 않는다.)
   const featRe =
-    /\{id:"\d+",a:\[([^\]]*)\](?:,bb:\[[^\]]*\])?(?:,c:"((?:[^"\\]|\\.)*)")?/g;
+    /\{id:"[^"]+",a:\[([^\]]*)\](?:,bb:\[([^\]]*)\])?(?:,c:"((?:[^"\\]|\\.)*)")?/g;
   for (const g of groups) {
     const body = text.slice(g.start, g.end);
     for (let m = featRe.exec(body); m; m = featRe.exec(body)) {
-      const c = (m[2] ?? "").replace(/\\"/g, '"');
+      const c = (m[3] ?? "").replace(/\\"/g, '"');
       const title = /title:"([^"]+)"/.exec(c)?.[1];
       if (!title) continue;
       const a = m[1].split(",").map(Number);
@@ -94,7 +112,17 @@ function parseFt(text: string, tx: number, ty: number): Candidate[] {
       if (!Number.isFinite(rawX) || !Number.isFinite(rawY)) continue;
       const px = resolvePx(rawX, rawY, tx, ty);
       if (!px) continue;
-      out.push({ name: title, transit: c.includes("is_transit_station:true"), ...px });
+      // bb: 앵커 기준 상자들이 4개씩 묶여 온다(아이콘 상자 + 상호명 글자 상자)
+      const bb = (m[2] ?? "").split(",").map(Number).filter(Number.isFinite);
+      const boxes: Candidate["boxes"] = [];
+      for (let i = 0; i + 3 < bb.length; i += 4)
+        boxes.push([bb[i], bb[i + 1], bb[i + 2], bb[i + 3]]);
+      out.push({
+        name: decodeText(title),
+        transit: c.includes("is_transit_station:true"),
+        boxes,
+        ...px,
+      });
     }
     featRe.lastIndex = 0;
   }
@@ -134,26 +162,42 @@ export async function findTilePoiAt(
   const tx = Math.floor(click.x / TILE);
   const ty = Math.floor(click.y / TILE);
 
-  // 가장자리 근처면 옆 조각(최대 4개)도 함께 읽는다 — 아이콘이 옆 조각에 그려졌을 수 있다
+  // 가장자리 근처면 옆 조각(최대 4개)도 함께 읽는다 — 아이콘이나 상호명 글자가
+  // 옆 조각에 걸쳐 그려졌을 수 있다(글자는 가로로 길게 뻗는다)
   const fx = click.x - tx * TILE;
   const fy = click.y - ty * TILE;
   const xs = [tx];
   const ys = [ty];
-  if (fx < EDGE_PX) xs.push(tx - 1);
-  else if (fx > TILE - EDGE_PX) xs.push(tx + 1);
-  if (fy < EDGE_PX) ys.push(ty - 1);
-  else if (fy > TILE - EDGE_PX) ys.push(ty + 1);
+  if (fx < EDGE_X_PX) xs.push(tx - 1);
+  if (fx > TILE - EDGE_X_PX) xs.push(tx + 1);
+  if (fy < EDGE_Y_PX) ys.push(ty - 1);
+  else if (fy > TILE - EDGE_Y_PX) ys.push(ty + 1);
 
   const tiles: [number, number][] = [];
   for (const x of xs) for (const y of ys) tiles.push([x, y]);
 
   const lists = await Promise.all(tiles.map(([x, y]) => fetchFt(x, y, z)));
 
-  let best: (Candidate & { d: number }) | null = null;
+  // 아이콘 정중앙을 누른 것을 먼저, 상호명 글자를 누른 것을 그다음으로 친다.
+  // 같은 급끼리는 앵커에 더 가까운 쪽이 이긴다.
+  let best: (Candidate & { d: number; score: number }) | null = null;
   for (const cand of lists.flat()) {
-    const d = Math.hypot(cand.x - click.x, cand.y - click.y);
-    if (d > HIT_RADIUS_PX) continue;
-    if (!best || d < best.d) best = { ...cand, d };
+    const dx = click.x - cand.x;
+    const dy = click.y - cand.y;
+    const d = Math.hypot(dx, dy);
+    const iconHit = d <= HIT_RADIUS_PX;
+    const labelHit =
+      !iconHit &&
+      cand.boxes.some(
+        ([x1, y1, x2, y2]) =>
+          dx >= x1 - BOX_PAD_PX &&
+          dx <= x2 + BOX_PAD_PX &&
+          dy >= y1 - BOX_PAD_PX &&
+          dy <= y2 + BOX_PAD_PX
+      );
+    if (!iconHit && !labelHit) continue;
+    const score = (iconHit ? 0 : 1000) + d;
+    if (!best || score < best.score) best = { ...cand, d, score };
   }
   if (!best) return null;
 
