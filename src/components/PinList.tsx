@@ -24,12 +24,6 @@ export default function PinList({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
-  const counts = useMemo(() => {
-    const c: Record<string, number> = {};
-    for (const p of pins) c[p.type] = (c[p.type] ?? 0) + 1;
-    return c;
-  }, [pins]);
-
   const sortedPins = useMemo(
     () => [...pins].sort((a, b) => b.createdAt - a.createdAt),
     [pins]
@@ -41,34 +35,13 @@ export default function PinList({
   if (sortedPins.length === 0) {
     return (
       <p className="px-1 py-2 text-sm text-[var(--text-muted)]">
-        아직 핀이 없어요 — 아래 메뉴 가운데 + 를 눌러 꽂아 보세요
+        아직 꽂아 둔 곳이 없어요 — 지도에서 + 를 눌러 꽂아 보세요
       </p>
     );
   }
 
   return (
     <div className="flex flex-col gap-2">
-      {/* 종류별 개수 칩 */}
-      <div className="flex flex-wrap gap-2">
-        {(["food", "spot", "cafe", "stay", "etc"] as const).map((t) => {
-          const n = counts[t] ?? 0;
-          if (n === 0) return null;
-          return (
-            <span
-              key={t}
-              className="inline-flex items-center gap-1.5 rounded-full bg-[var(--surface)] px-3 py-1.5 text-xs font-semibold text-[var(--text)] shadow-[var(--shadow-1)]"
-            >
-              {(() => {
-                const C = PIN_TYPES[t].Icon;
-                return <C size={13} color={PIN_TYPES[t].color} aria-hidden />;
-              })()}
-              {PIN_TYPES[t].label}
-              <span className="tabular-nums text-[var(--text-muted)]">{n}</span>
-            </span>
-          );
-        })}
-      </div>
-
       <ul className="flex flex-col gap-2">
         {sortedPins.map((pin) => {
           const cfg = PIN_TYPES[pin.type];
