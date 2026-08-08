@@ -41,7 +41,7 @@ export default function TravelInfoPanel({ itinerary, onChange }: TravelInfoPanel
   };
 
   return (
-    <div className="flex h-full flex-col overflow-y-auto bg-[var(--bg)] px-4 pb-4 pt-3">
+    <div className="flex flex-col">
       <div className="flex flex-col gap-3">
         <FlightCard
           title="가는 편"

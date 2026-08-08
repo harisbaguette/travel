@@ -7,15 +7,17 @@ import { PIN_TYPE_LIST } from "@/lib/pinTypes";
 interface PinModalProps {
   lat: number;
   lng: number;
+  /** 검색 결과에서 왔을 때 미리 채워 줄 이름 */
+  initialName?: string;
   onAdd: (data: { type: PinType; name: string; memo: string }) => void;
   onClose: () => void;
 }
 
 // 바닥에서 올라오는 입력 시트 — Doweek add-modal 문법.
 // 종류는 미끄러지는 알약 탭, 입력칸은 종이 위 흰 카드 톤.
-export default function PinModal({ lat, lng, onAdd, onClose }: PinModalProps) {
+export default function PinModal({ lat, lng, initialName, onAdd, onClose }: PinModalProps) {
   const [type, setType] = useState<PinType>("food");
-  const [name, setName] = useState("");
+  const [name, setName] = useState(initialName ?? "");
   const [memo, setMemo] = useState("");
 
   const activeIdx = PIN_TYPE_LIST.findIndex((c) => c.type === type);

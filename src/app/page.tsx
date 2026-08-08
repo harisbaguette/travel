@@ -8,18 +8,23 @@ import {
   useSyncExternalStore,
 } from "react";
 import dynamic from "next/dynamic";
-import Image from "next/image";
 import type { Map as LeafletMap } from "leaflet";
 import {
-  CalendarDays,
-  Link2,
   Map as MapIcon,
   MapPin,
-  Plane,
+  NotebookPen,
   Plus,
   Search,
+  Sparkles,
+  X,
 } from "lucide-react";
-import { findCity, resolveCity, type LatLng } from "@/lib/cities";
+import {
+  findCity,
+  resolveCity,
+  suggestPlaces,
+  type LatLng,
+  type PlaceSuggestion,
+} from "@/lib/cities";
 import type { Itinerary, Pin, PinType, MapBounds } from "@/lib/types";
 import { PIN_TYPES } from "@/lib/pinTypes";
 import { loadPins, savePins } from "@/lib/pinStorage";
@@ -31,6 +36,14 @@ import {
 } from "@/lib/itineraryStorage";
 import { getUserId } from "@/lib/user";
 import {
+  addRoom,
+  DEFAULT_ROOM,
+  loadRooms,
+  OLD_ROOMS,
+  saveRooms,
+  type Room,
+} from "@/lib/rooms";
+import {
   applyPinChanges,
   pushItinerary,
   pushPin,
@@ -38,7 +51,8 @@ import {
   useRoomSync,
 } from "@/lib/sync";
 import PinModal from "@/components/PinModal";
-import Sidebar, { type SidebarTab } from "@/components/Sidebar";
+import ProjectSwitcher from "@/components/ProjectSwitcher";
+import TripPanel from "@/components/TripPanel";
 
 const MapView = dynamic(() => import("@/components/MapView"), {
   ssr: false,
@@ -49,15 +63,11 @@ const MapView = dynamic(() => import("@/components/MapView"), {
   ),
 });
 
-// 기본으로 보여줄 방 목록. 예전 방(오사카·가오슝)은 정리했다.
-const ROOMS = ["푸꾸옥"];
-const OLD_ROOMS = ["오사카 5월", "가오슝 6월"];
-const DEFAULT_ROOM = "푸꾸옥";
-
 const DEFAULT_CENTER: LatLng = [10.2899, 103.984]; // 푸꾸옥
 const DEFAULT_ZOOM = 11;
 
 const EMPTY_PINS: Pin[] = [];
+const INITIAL_ROOMS: Room[] = [DEFAULT_ROOM];
 
 // 방마다 마지막으로 보던 지도 위치를 기억해 둔다.
 interface SavedView {
@@ -107,12 +117,12 @@ function initialViewFor(room: string): { center: LatLng; zoom: number } {
 function readStoredRoom(): string {
   if (typeof window === "undefined") return "";
   const stored = window.localStorage.getItem("currentRoom") ?? "";
-  // 예전 방에 있었으면 푸꾸옥으로 옮긴다.
-  if (!stored || OLD_ROOMS.includes(stored)) return DEFAULT_ROOM;
+  // 예전 방에 있었으면 기본 여행으로 옮긴다.
+  if (!stored || OLD_ROOMS.includes(stored)) return DEFAULT_ROOM.id;
   return stored;
 }
 
-// URL ?room=xxx 처리 — 초대 링크로 들어온 경우. 빈 값이면 저장된 방(없으면 푸꾸옥).
+// URL ?room=xxx 처리 — 초대 링크로 들어온 경우. 빈 값이면 저장된 방(없으면 기본 여행).
 function resolveInitialRoom(): string {
   if (typeof window === "undefined") return "";
   const fromUrl = new URLSearchParams(window.location.search).get("room") ?? "";
@@ -152,20 +162,40 @@ function useHydrated(): boolean {
   );
 }
 
+// 화면은 둘뿐 — 한눈에 보는 지도, 그리고 계획을 전부 모아 둔 여행 화면.
 const DOCK_ITEMS = [
   { key: "map", icon: MapIcon, label: "지도" },
-  { key: "pins", icon: MapPin, label: "핀" },
-  { key: "itinerary", icon: CalendarDays, label: "일정" },
-  { key: "info", icon: Plane, label: "기록" },
+  { key: "trip", icon: NotebookPen, label: "여행" },
 ] as const;
+
+type Tab = (typeof DOCK_ITEMS)[number]["key"];
 
 export default function Home() {
   const hydrated = useHydrated();
   const mapRef = useRef<LeafletMap | null>(null);
   const roomRef = useRef<string>("");
+  const searchRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [searching, setSearching] = useState(false);
+  // 글자를 치는 동안 아래에 떠 있는 후보 목록(자동완성)
+  const [sugs, setSugs] = useState<PlaceSuggestion[]>([]);
+  const [sugOpen, setSugOpen] = useState(false);
+  const [sugIdx, setSugIdx] = useState(-1);
+  // 검색으로 찾은 자리 — 지도에 파란 점으로 표시해 두는 임시 표식
+  const [searchTarget, setSearchTarget] = useState<{
+    lat: number;
+    lng: number;
+    name: string;
+  } | null>(null);
+  const sugAbortRef = useRef<AbortController | null>(null);
+  // 후보를 골라서 입력칸 글자를 바꿀 땐 다시 검색하지 않게 하는 표시
+  const skipSuggestRef = useRef(false);
   const [room, setRoom] = useState<string>(() => resolveInitialRoom());
+  // 초대 링크로 처음 들어온 여행도 목록에 넣어 둬야 나중에 다시 찾아올 수 있다.
+  const [rooms, setRooms] = useState<Room[]>(() =>
+    addRoom(loadRooms(), resolveInitialRoom())
+  );
   const [notice, setNotice] = useState<string>("");
 
   const [pins, setPins] = useState<Pin[]>(() => loadPins(resolveInitialRoom()));
@@ -173,13 +203,14 @@ export default function Home() {
     loadItinerary(resolveInitialRoom())
   );
   const [initialView] = useState(() => initialViewFor(resolveInitialRoom()));
-  const [modalCoord, setModalCoord] = useState<{ lat: number; lng: number } | null>(
-    null
-  );
+  const [modalCoord, setModalCoord] = useState<{
+    lat: number;
+    lng: number;
+    name?: string;
+  } | null>(null);
   const [aiLoading, setAILoading] = useState(false);
   const [copied, setCopied] = useState(false);
-  // 하단 독 — 지도가 기본. 핀/일정/기록은 화면을 통째로 쓴다(1화면 1기능).
-  const [tab, setTab] = useState<"map" | SidebarTab>("map");
+  const [tab, setTab] = useState<Tab>("map");
 
   // 로그인 없이 브라우저를 구분하는 ID — 렌더에도 쓰이므로 state(첫 렌더에 한 번만 계산).
   const [userId] = useState<string>(() => getUserId());
@@ -188,7 +219,7 @@ export default function Home() {
     roomRef.current = room;
   }, [room]);
 
-  // 예전 방(오사카·가오슝) 저장물 청소 — 한 번만.
+  // 예전 방(오사카·가오슝) 저장물 청소 + 여행 목록 불러오기 — 한 번만.
   useEffect(() => {
     for (const old of OLD_ROOMS) {
       window.localStorage.removeItem(`travel-pins-${old}`);
@@ -196,8 +227,49 @@ export default function Home() {
       window.localStorage.removeItem(viewKey(old));
     }
     if (room) window.localStorage.setItem("currentRoom", room);
+    saveRooms(rooms);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (searchOpen) searchRef.current?.focus();
+  }, [searchOpen]);
+
+  // 글자를 칠 때마다(0.3초 숨 고르고) 장소 사전에 물어봐 후보 목록을 띄운다.
+  // 지금 보고 있는 지도 근처를 먼저 보여주므로, 같은 이름이 여럿이어도 가까운 곳이 위로 온다.
+  useEffect(() => {
+    if (skipSuggestRef.current) {
+      skipSuggestRef.current = false;
+      return;
+    }
+    const q = query.trim();
+    if (q.length < 2) {
+      setSugs([]);
+      setSugOpen(false);
+      setSugIdx(-1);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      sugAbortRef.current?.abort();
+      const ac = new AbortController();
+      sugAbortRef.current = ac;
+      const c = mapRef.current?.getCenter();
+      try {
+        const list = await suggestPlaces(
+          q,
+          c ? [c.lat, c.lng] : undefined,
+          ac.signal
+        );
+        if (ac.signal.aborted) return;
+        setSugs(list);
+        setSugOpen(true);
+        setSugIdx(-1);
+      } catch {
+        // 도중에 취소됐거나 네트워크 문제 — 조용히 넘어간다(엔터 검색이 예비로 있음)
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [query]);
 
   // 핀·일정 로컬 저장 — 서버 전송은 각 조작 핸들러에서 따로 한다.
   useEffect(() => {
@@ -261,39 +333,90 @@ export default function Home() {
     }
   }, []);
 
-  const handleRoomChange = (value: string) => {
-    if (value === "__new__") {
-      // 랜덤 방 생성 + URL 갱신(초대 링크용)
-      const id = newRoomId();
-      setRoom(id);
-      setPins(loadPins(id));
-      setItinerary(loadItinerary(id));
-      window.history.replaceState(null, "", `?room=${id}`);
-      localStorage.setItem("currentRoom", id);
-      return;
-    }
-    if (!value) return;
-    const nextPins = loadPins(value);
-    setRoom(value);
-    setPins(nextPins);
-    setItinerary(loadItinerary(value));
-    localStorage.setItem("currentRoom", value);
-    window.history.replaceState(null, "", `?room=${encodeURIComponent(value)}`);
-    flyToRoom(value, nextPins);
-  };
+  const switchRoom = useCallback(
+    (value: string) => {
+      if (!value) return;
+      const nextPins = loadPins(value);
+      setRoom(value);
+      setPins(nextPins);
+      setItinerary(loadItinerary(value));
+      localStorage.setItem("currentRoom", value);
+      window.history.replaceState(null, "", `?room=${encodeURIComponent(value)}`);
+      // 다른 여행으로 넘어가면 이전 검색 흔적은 지운다
+      setSearchTarget(null);
+      setSugOpen(false);
+      flyToRoom(value, nextPins);
+    },
+    [flyToRoom]
+  );
 
+  // 새 여행 만들기 — 랜덤 ID + 사용자가 붙인 이름으로 목록에 남긴다.
+  const handleCreateRoom = useCallback(
+    (label: string) => {
+      const id = newRoomId();
+      setRooms((cur) => {
+        const next = addRoom(cur, id, label);
+        saveRooms(next);
+        return next;
+      });
+      switchRoom(id);
+      setTab("map");
+    },
+    [switchRoom]
+  );
+
+  // 후보 목록 닫기 — 목록과 고른 자리 표시를 함께 정리
+  const closeSuggestions = useCallback(() => {
+    setSugOpen(false);
+    setSugIdx(-1);
+  }, []);
+
+  // 후보(장소)를 골랐을 때 — 지도에 파란 점을 찍고 그리로 날아간다.
+  const goToPlace = useCallback(
+    (s: PlaceSuggestion) => {
+      skipSuggestRef.current = true;
+      setQuery(s.name);
+      closeSuggestions();
+      setNotice("");
+      setTab("map");
+      setSearchTarget({ lat: s.lat, lng: s.lng, name: s.name });
+      const map = mapRef.current;
+      if (!map) return;
+      // 도시처럼 넓은 곳은 영역 전체가 보이게, 가게는 가까이 확대해서 보여준다.
+      if (s.bounds) map.fitBounds(s.bounds, { maxZoom: 17, animate: true });
+      else map.setView([s.lat, s.lng], s.zoom, { animate: true });
+    },
+    [closeSuggestions]
+  );
+
+  // 후보(내 핀)를 골랐을 때 — 꽂아 둔 핀 자리로 이동.
+  const goToMyPin = useCallback(
+    (p: Pin) => {
+      skipSuggestRef.current = true;
+      setQuery(p.name);
+      closeSuggestions();
+      setTab("map");
+      const map = mapRef.current;
+      if (map) map.setView([p.lat, p.lng], 16, { animate: true });
+    },
+    [closeSuggestions]
+  );
+
+  // 엔터·이동 단추 — 후보가 아직 없을 때의 예비 검색(도시 표 → 주소 사전 순서)
   const handleSearch = async () => {
     const q = query.trim();
     if (!q) return;
     setSearching(true);
     setNotice("");
+    closeSuggestions();
     try {
       const coords = await resolveCity(q);
       if (!coords) {
-        setNotice(`"${q}"를 찾을 수 없어요`);
+        setNotice(`"${q}"를 찾을 수 없어요 — 영어 이름으로도 시도해 보세요`);
         return;
       }
       setTab("map");
+      setSearchTarget({ lat: coords[0], lng: coords[1], name: q });
       const map = mapRef.current;
       if (!map) return;
       map.setView(coords as LatLng, 12, { animate: true });
@@ -304,8 +427,45 @@ export default function Home() {
     }
   };
 
+  // 검색어와 이름이 겹치는 내 핀 — 구글맵의 "내 저장 장소"처럼 후보 맨 위에 보여준다.
+  const pinQuery = query.trim().toLowerCase();
+  const pinMatches =
+    sugOpen && pinQuery
+      ? pins.filter((p) => p.name.toLowerCase().includes(pinQuery)).slice(0, 3)
+      : [];
+  const sugCount = pinMatches.length + sugs.length;
+
+  const selectSuggestion = (idx: number) => {
+    if (idx < 0 || idx >= sugCount) return;
+    if (idx < pinMatches.length) goToMyPin(pinMatches[idx]);
+    else goToPlace(sugs[idx - pinMatches.length]);
+  };
+
+  // 위·아래 화살표로 후보를 고르고, 엔터로 확정하고, ESC로 닫는다 — 구글맵과 같은 손놀림.
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") handleSearch();
+    if (e.key === "ArrowDown" && sugCount > 0) {
+      e.preventDefault();
+      setSugOpen(true);
+      setSugIdx((i) => (i + 1) % sugCount);
+    } else if (e.key === "ArrowUp" && sugCount > 0) {
+      e.preventDefault();
+      setSugIdx((i) => (i - 1 + sugCount) % sugCount);
+    } else if (e.key === "Enter") {
+      if (sugOpen && sugCount > 0) selectSuggestion(sugIdx >= 0 ? sugIdx : 0);
+      else void handleSearch();
+    } else if (e.key === "Escape") {
+      closeSuggestions();
+    }
+  };
+
+  // 검색으로 찾은 자리를 핀으로 저장 — 이름을 미리 채워 준다.
+  const handleSearchTargetAdd = () => {
+    if (!searchTarget) return;
+    setModalCoord({
+      lat: searchTarget.lat,
+      lng: searchTarget.lng,
+      name: searchTarget.name,
+    });
   };
 
   const handleMapClick = useCallback((lat: number, lng: number) => {
@@ -343,6 +503,8 @@ export default function Home() {
     setPins((prev) => [...prev, newPin]);
     void pushPin(room, newPin);
     setModalCoord(null);
+    // 검색으로 찾은 자리에 핀을 꽂았으면 임시 표식은 치운다
+    setSearchTarget(null);
   };
 
   const handlePinDelete = useCallback(
@@ -369,7 +531,8 @@ export default function Home() {
     [pins, room]
   );
 
-  const handlePinClick = useCallback((pin: Pin) => {
+  // 목록에서 지도 단추를 눌렀을 때만 지도로 넘어간다(이름만 눌러선 안 튕김).
+  const handleShowOnMap = useCallback((pin: Pin) => {
     setTab("map");
     const map = mapRef.current;
     if (!map) return;
@@ -413,7 +576,7 @@ export default function Home() {
         setNotice("새로운 맛집을 찾지 못했어요");
         return;
       }
-      setNotice(`맛집 ${fresh.length}개를 찾았어요`);
+      setNotice(`맛집 ${fresh.length}개를 찾았어요 — 마음에 안 들면 여행 화면에서 지우면 돼요`);
       setPins((prev) => [...prev, ...fresh]);
       for (const p of fresh) void pushPin(room, p);
     } catch {
@@ -439,104 +602,161 @@ export default function Home() {
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true);
+      setNotice("초대 링크를 복사했어요 — 친구에게 보내 주세요");
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // 폴백 — input 임시 생성
-      const input = document.createElement("input");
-      input.value = url;
-      document.body.appendChild(input);
-      input.select();
-      try {
-        document.execCommand("copy");
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      } catch {
-        setNotice("링크 복사에 실패했어요");
-      }
-      document.body.removeChild(input);
+      setNotice("링크 복사에 실패했어요");
     }
   }, [room]);
 
   // 이어받기 전(서버가 그린 첫 화면)에는 저장값 대신 빈 상태를 그린다.
   const viewRoom = hydrated ? room : "";
+  const viewRooms = hydrated ? rooms : INITIAL_ROOMS;
   const viewUserId = hydrated ? userId : "";
   const viewPins = hydrated ? pins : EMPTY_PINS;
   const viewItinerary = hydrated ? itinerary : EMPTY_ITINERARY;
 
   return (
     <div className="app-shell">
-      {/* 머리 — 손글씨 앱 이름 + 방 + 검색 */}
-      <header className="shrink-0 px-4 pb-3 pt-3">
-        <div className="mb-2.5 flex items-center gap-2">
-          <Image
-            src="/logo.png"
-            alt="핀지도"
-            width={28}
-            height={28}
-            className="shrink-0 rounded-[8px]"
-            priority
+      {/* 머리 — 여행 고르는 알약 한 줄. 남는 세로는 전부 지도에 준다. */}
+      <header className="relative z-[1050] shrink-0 px-4 pb-2 pt-2">
+        <div className="flex items-center gap-2">
+          <ProjectSwitcher
+            rooms={viewRooms}
+            currentId={viewRoom || DEFAULT_ROOM.id}
+            onSelect={switchRoom}
+            onCreate={handleCreateRoom}
+            onCopyInvite={handleCopyInvite}
+            canInvite={syncEnabled}
+            copied={copied}
           />
-          <h1 className="dw-display min-w-0 flex-1 truncate text-[1.5625rem] leading-tight text-[var(--text)]">
-            핀지도
-          </h1>
-          <select
-            value={viewRoom}
-            onChange={(e) => handleRoomChange(e.target.value)}
-            className="h-11 max-w-[8.5rem] shrink-0 rounded-[12px] bg-[var(--surface)] px-3 text-sm font-semibold text-[var(--text)] shadow-[var(--shadow-1)] focus:outline-none"
-            aria-label="여행 방 선택"
-          >
-            {!viewRoom && <option value="">방 선택</option>}
-            {ROOMS.map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-            {viewRoom && !ROOMS.includes(viewRoom) && (
-              <option value={viewRoom}>{viewRoom}</option>
-            )}
-            <option value="__new__">+ 새 방 만들기</option>
-          </select>
           <button
             type="button"
-            onClick={handleCopyInvite}
-            disabled={!viewRoom}
-            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-[12px] shadow-[var(--shadow-1)] transition-colors disabled:opacity-40 ${
-              copied
+            onClick={() => setSearchOpen((o) => !o)}
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-[12px] shadow-[var(--shadow-1)] transition-colors ${
+              searchOpen
                 ? "bg-[var(--accent)] text-white"
                 : "bg-[var(--surface)] text-[var(--text-muted)]"
             }`}
-            aria-label={copied ? "초대 링크 복사됨" : "초대 링크 복사"}
+            aria-label={searchOpen ? "장소 검색 닫기" : "장소 검색 열기"}
+            aria-expanded={searchOpen}
           >
-            <Link2 size={19} strokeWidth={2.2} />
+            {searchOpen ? (
+              <X size={19} strokeWidth={2.2} />
+            ) : (
+              <Search size={19} strokeWidth={2.2} />
+            )}
           </button>
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="relative min-w-0 flex-1">
-            <Search
-              size={17}
-              strokeWidth={2.2}
-              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"
-              aria-hidden
-            />
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="어디로 갈까요?"
-              className="dw-input dw-input--sm dw-input--icon"
-            />
+        {searchOpen && (
+          <div className="mt-2 flex items-center gap-2">
+            <div className="relative min-w-0 flex-1">
+              <Search
+                size={17}
+                strokeWidth={2.2}
+                className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"
+                aria-hidden
+              />
+              <input
+                ref={searchRef}
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={handleKeyDown}
+                onFocus={() => {
+                  if (sugs.length > 0) setSugOpen(true);
+                }}
+                onBlur={closeSuggestions}
+                placeholder="어디로 갈까요?"
+                className="dw-input dw-input--sm dw-input--icon"
+                role="combobox"
+                aria-expanded={sugOpen && sugCount > 0}
+                aria-autocomplete="list"
+              />
+
+              {/* 후보 목록 — 글자를 치면 바로 아래에 뜬다. 내 핀이 먼저, 그다음 장소. */}
+              {sugOpen && sugCount > 0 && (
+                <ul
+                  role="listbox"
+                  aria-label="장소 후보"
+                  className="absolute left-0 right-0 top-full z-[1200] mt-2 max-h-72 overflow-y-auto rounded-[16px] bg-[var(--surface)] py-1.5 shadow-[var(--shadow-2)]"
+                  onMouseDown={(e) => e.preventDefault()}
+                >
+                  {pinMatches.map((p, i) => (
+                    <li key={p.id} role="option" aria-selected={sugIdx === i}>
+                      <button
+                        type="button"
+                        onClick={() => goToMyPin(p)}
+                        className={`flex w-full items-center gap-3 px-3.5 py-2.5 text-left ${
+                          sugIdx === i ? "bg-[var(--surface-hover)]" : ""
+                        }`}
+                      >
+                        <span className="w-5 shrink-0 text-center text-base leading-none" aria-hidden>
+                          {p.emoji}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-semibold text-[var(--text)]">
+                            {p.name}
+                          </span>
+                          <span className="block truncate text-xs text-[var(--text-muted)]">
+                            내가 꽂은 핀
+                          </span>
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                  {sugs.map((s, i) => {
+                    const idx = pinMatches.length + i;
+                    return (
+                      <li
+                        key={`${s.name}-${s.lat}-${s.lng}`}
+                        role="option"
+                        aria-selected={sugIdx === idx}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => goToPlace(s)}
+                          className={`flex w-full items-center gap-3 px-3.5 py-2.5 text-left ${
+                            sugIdx === idx ? "bg-[var(--surface-hover)]" : ""
+                          }`}
+                        >
+                          <MapPin
+                            size={17}
+                            strokeWidth={2}
+                            className="w-5 shrink-0 text-[var(--text-faint)]"
+                            aria-hidden
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-semibold text-[var(--text)]">
+                              {s.name}
+                            </span>
+                            {s.address && (
+                              <span className="block truncate text-xs text-[var(--text-muted)]">
+                                {s.address}
+                              </span>
+                            )}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (sugOpen && sugCount > 0) selectSuggestion(sugIdx >= 0 ? sugIdx : 0);
+                else void handleSearch();
+              }}
+              disabled={searching}
+              className="dw-btn-primary h-11 min-h-0 shrink-0 px-4 text-sm"
+            >
+              {searching ? "…" : "이동"}
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={handleSearch}
-            disabled={searching}
-            className="dw-btn-primary h-11 min-h-0 shrink-0 px-4 text-sm"
-          >
-            {searching ? "…" : "이동"}
-          </button>
-        </div>
+        )}
       </header>
 
       {notice && (
@@ -547,11 +767,11 @@ export default function Home() {
 
       {!syncEnabled && (
         <div className="shrink-0 bg-[var(--surface-hover)] px-4 py-1.5 text-xs text-[var(--text-muted)]">
-          아직 혼자만 사용 중 — 함께 편집하려면 서버 데이터베이스(Neon) 연결이 필요해요.
+          지금은 이 기기에만 저장돼요 — 친구와 같이 보려면 서버 연결이 필요해요.
         </div>
       )}
 
-      {/* 몸통 — 지도 위에 패널이 통째로 덮인다 */}
+      {/* 몸통 — 지도 위에 여행 화면이 통째로 덮인다 */}
       <div className="relative min-h-0 flex-1 overflow-hidden">
         <MapView
           onReady={handleMapReady}
@@ -562,34 +782,50 @@ export default function Home() {
           onPinDelete={handlePinDelete}
           onPinDragEnd={handlePinDragEnd}
           onMapClick={handleMapClick}
+          searchTarget={searchTarget}
+          onSearchTargetAdd={handleSearchTargetAdd}
+          onSearchTargetClose={() => setSearchTarget(null)}
           className="h-full w-full"
         />
 
-        {/* 지도 위 플로팅 — AI 맛집 */}
-        <button
-          type="button"
-          onClick={handleAISearch}
-          disabled={aiLoading}
-          className="dw-btn-primary absolute bottom-4 left-1/2 z-[1000] -translate-x-1/2 rounded-full px-5 shadow-[var(--shadow-2)] disabled:opacity-60"
-        >
-          {aiLoading ? (
-            <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-          ) : (
-            <Search size={16} strokeWidth={2.4} aria-hidden />
-          )}
-          AI 맛집 찾기
-        </button>
+        {/* 첫 안내 — 핀이 하나도 없을 때만. 지도 누르기를 막지 않게 통과시킨다. */}
+        {tab === "map" && viewPins.length === 0 && (
+          <div className="pointer-events-none absolute inset-x-8 top-1/2 z-[999] -translate-y-1/2 rounded-[16px] bg-[var(--surface)] px-5 py-4 text-center shadow-[var(--shadow-2)]">
+            <p className="dw-display text-[1.25rem] text-[var(--text)]">
+              가고 싶은 곳을 눌러 보세요
+            </p>
+            <p className="mt-1 text-xs text-[var(--text-muted)]">
+              지도를 누르면 그 자리에 핀이 꽂혀요
+            </p>
+          </div>
+        )}
 
-        {tab !== "map" && (
+        {/* 지도 위 떠 있는 단추 — 가운데 + 단추와 겹치지 않게 왼쪽 아래로 뺐다. */}
+        {tab === "map" && (
+          <button
+            type="button"
+            onClick={handleAISearch}
+            disabled={aiLoading}
+            className="dw-btn-primary absolute bottom-4 left-4 z-[1000] h-11 min-h-0 rounded-full px-4 text-sm shadow-[var(--shadow-2)] disabled:opacity-60"
+          >
+            {aiLoading ? (
+              <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+            ) : (
+              <Sparkles size={16} strokeWidth={2.4} aria-hidden />
+            )}
+            AI 맛집
+          </button>
+        )}
+
+        {tab === "trip" && (
           <div className="absolute inset-0 z-[1010] bg-[var(--bg)]">
-            <Sidebar
+            <TripPanel
               pins={viewPins}
               itinerary={viewItinerary}
               currentUserId={viewUserId}
-              onPinClick={handlePinClick}
+              onShowOnMap={handleShowOnMap}
               onPinDelete={handlePinDelete}
               onItineraryChange={handleItineraryChange}
-              tab={tab}
             />
           </div>
         )}
@@ -603,7 +839,7 @@ export default function Home() {
               <Plus size={22} strokeWidth={2.5} />
             </span>
           </button>
-          <div className="dock-glass">
+          <div className="dock-glass dock-glass--2">
             {DOCK_ITEMS.map((item) => {
               const Icon = item.icon;
               const active = tab === item.key;
@@ -628,6 +864,7 @@ export default function Home() {
         <PinModal
           lat={modalCoord.lat}
           lng={modalCoord.lng}
+          initialName={modalCoord.name}
           onAdd={handleAddPin}
           onClose={() => setModalCoord(null)}
         />

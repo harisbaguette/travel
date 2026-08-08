@@ -18,6 +18,10 @@ interface MapViewProps {
   /** 처음 보여줄 위치와 확대 정도. */
   initialCenter?: [number, number];
   initialZoom?: number;
+  /** 검색으로 찾은 자리 — 파란 점으로 잠시 표시해 둔다. */
+  searchTarget?: { lat: number; lng: number; name: string } | null;
+  onSearchTargetAdd?: () => void;
+  onSearchTargetClose?: () => void;
   onPinDelete?: (id: string) => void;
   onPinDragEnd?: (id: string, lat: number, lng: number) => void;
   onMapClick?: (lat: number, lng: number) => void;
@@ -121,6 +125,9 @@ const MapView = forwardRef<LeafletMap, MapViewProps>(function MapView(
     currentUserId = "",
     initialCenter = DEFAULT_CENTER,
     initialZoom = DEFAULT_ZOOM,
+    searchTarget,
+    onSearchTargetAdd,
+    onSearchTargetClose,
     onPinDelete,
     onPinDragEnd,
     onMapClick,
@@ -141,6 +148,13 @@ const MapView = forwardRef<LeafletMap, MapViewProps>(function MapView(
       {onReady && <MapReadyBridge onReady={onReady} />}
       <MapEventHandler onMapClick={onMapClick} />
       <LocateButton />
+      {searchTarget && (
+        <SearchTargetMarker
+          target={searchTarget}
+          onAdd={onSearchTargetAdd}
+          onClose={onSearchTargetClose}
+        />
+      )}
       {pins.map((pin) => (
         <PinMarker
           key={pin.id}
@@ -221,6 +235,70 @@ function LocateButton() {
   );
 }
 
+// 검색으로 찾은 자리 표식 — 물결이 퍼지는 파란 점. 말풍선에서 바로 핀으로 저장할 수 있다.
+function SearchTargetMarker({
+  target,
+  onAdd,
+  onClose,
+}: {
+  target: { lat: number; lng: number; name: string };
+  onAdd?: () => void;
+  onClose?: () => void;
+}) {
+  const markerRef = useRef<L.Marker | null>(null);
+
+  const icon = L.divIcon({
+    className: "search-target-icon",
+    html: `<div class="search-dot"></div>`,
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
+    popupAnchor: [0, -12],
+  });
+
+  // 찾자마자 이름 말풍선을 펼쳐 "여기예요"를 알려준다.
+  useEffect(() => {
+    const timer = setTimeout(() => markerRef.current?.openPopup(), 350);
+    return () => clearTimeout(timer);
+  }, [target.lat, target.lng]);
+
+  return (
+    <Marker
+      position={[target.lat, target.lng]}
+      icon={icon}
+      zIndexOffset={500}
+      ref={(m) => {
+        markerRef.current = m as L.Marker | null;
+      }}
+    >
+      <Popup>
+        <div className="min-w-[160px]">
+          <div className="mb-2 font-semibold text-[var(--text)]">{target.name}</div>
+          <div className="flex items-center gap-1.5">
+            {onAdd && (
+              <button
+                type="button"
+                onClick={onAdd}
+                className="rounded-md bg-[var(--accent)] px-2 py-1 text-xs font-bold text-white"
+              >
+                핀으로 저장
+              </button>
+            )}
+            {onClose && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-md border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-muted)]"
+              >
+                지우기
+              </button>
+            )}
+          </div>
+        </div>
+      </Popup>
+    </Marker>
+  );
+}
+
 function PinMarker({
   pin,
   isMine,
@@ -235,6 +313,8 @@ function PinMarker({
   const cfg = PIN_TYPES[pin.type];
   // 내가 찍은 핀은 타입 색 테두리, 다른 사람 핀은 회색 점선 테두리로 한눈에 구분.
   const borderColor = isMine ? cfg.color : "#94a3b8";
+  // 지우기는 한 번 더 물어본다 — 손이 스쳐 사라지면 되돌릴 길이 없다.
+  const [asking, setAsking] = useState(false);
 
   const icon = L.divIcon({
     className: isMine ? "pin-icon" : "pin-icon pin-icon--other",
@@ -253,7 +333,7 @@ function PinMarker({
     <Marker
       position={[pin.lat, pin.lng]}
       icon={icon}
-      draggable
+      draggable={isMine}
       eventHandlers={{
         dragend(e) {
           const marker = e.target as L.Marker;
@@ -287,15 +367,39 @@ function PinMarker({
               {pin.memo}
             </p>
           )}
-          {onDelete && (
-            <button
-              type="button"
-              onClick={() => onDelete(pin.id)}
-              className="rounded-md border border-[var(--border)] px-2 py-1 text-xs text-[var(--danger)] transition-colors hover:bg-[var(--surface-hover)]"
-            >
-              삭제
-            </button>
-          )}
+          {onDelete &&
+            (asking ? (
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-[var(--text-muted)]">
+                  {isMine ? "지울까요?" : "친구 핀이에요. 지울까요?"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setAsking(false)}
+                  className="rounded-md border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-muted)]"
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAsking(false);
+                    onDelete(pin.id);
+                  }}
+                  className="rounded-md bg-[var(--danger)] px-2 py-1 text-xs font-bold text-white"
+                >
+                  지우기
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setAsking(true)}
+                className="rounded-md border border-[var(--border)] px-2 py-1 text-xs text-[var(--danger)] transition-colors hover:bg-[var(--surface-hover)]"
+              >
+                삭제
+              </button>
+            ))}
         </div>
       </Popup>
     </Marker>

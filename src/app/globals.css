@@ -283,6 +283,192 @@ body {
 .dock-item.active .dock-label {
   font-weight: 700;
 }
+/* 화면이 둘뿐일 때 — 가운데 + 단추 좌우로 갈라 앉힌다 */
+.dock-glass--2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* ── 상단 여행 전환 알약 — Doweek ProjectSwitcher 이식 ── */
+.ps-bar {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  /* 여행 화면 덮개(1010)보다 위, 바닥에서 올라오는 시트(1100)보다 아래 */
+  z-index: 1050;
+}
+.ps-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 44px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+  transition: transform 0.12s ease;
+}
+.ps-pill:active {
+  transform: scale(0.98);
+}
+.ps-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+.ps-name {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  font-size: 0.95rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ps-chevron {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: transform 0.16s var(--ease);
+}
+.ps-chevron.up {
+  transform: rotate(180deg);
+}
+.ps-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  background: transparent;
+}
+@keyframes ps-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.ps-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  background: var(--surface);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-2), 0 12px 32px rgba(36, 30, 25, 0.14);
+  animation: ps-menu-in 0.16s var(--ease);
+}
+.ps-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: none;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-muted);
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.ps-item:active {
+  background: var(--surface-hover);
+}
+.ps-item:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.ps-item-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ps-check {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+.ps-item-icon {
+  flex-shrink: 0;
+}
+.ps-sep {
+  height: 1px;
+  margin: 6px 8px;
+  background: var(--border-strong);
+}
+.ps-new {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px 6px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .ps-item:not(:disabled):hover {
+    background: var(--surface-hover);
+    color: var(--text);
+  }
+}
+
+/* ── 여행 화면의 접이식 구역 ── */
+.trip-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.trip-section-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 14px;
+  border: none;
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+}
+.trip-section-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+.trip-section-hint {
+  margin-left: auto;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.trip-section-chevron {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: transform 0.16s var(--ease);
+}
+.trip-section-chevron.up {
+  transform: rotate(180deg);
+}
+.trip-section-body {
+  padding: 0 2px 4px;
+}
 
 /* ── 바닥에서 올라오는 입력 시트 — Doweek add-modal 이식 ── */
 @keyframes dw-fade-in {
@@ -585,6 +771,39 @@ body {
   transform: rotate(45deg);
   font-size: 15px;
   line-height: 1;
+}
+
+/* 검색 결과 표식 — 파란 점 둘레로 물결이 퍼진다 */
+.search-target-icon {
+  background: transparent;
+  border: none;
+}
+.search-dot {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent-ink);
+  border: 3px solid #fff;
+  box-shadow: 0 2px 8px rgba(36, 30, 25, 0.35);
+}
+.search-dot::before {
+  content: "";
+  position: absolute;
+  inset: -9px;
+  border-radius: 50%;
+  border: 2px solid var(--accent-ink);
+  animation: search-pulse 1.8s ease-out infinite;
+}
+@keyframes search-pulse {
+  0% {
+    transform: scale(0.55);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(1.35);
+    opacity: 0;
+  }
 }
 
 /* Leaflet 팝업 — 흰 카드 톤 */

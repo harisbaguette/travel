@@ -1,14 +1,15 @@
 "use client";
 
 import { useMemo } from "react";
-import { ArrowDown, ArrowUp, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Map as MapIcon, X } from "lucide-react";
 import type { Itinerary, Pin } from "@/lib/types";
 
 interface ItineraryPanelProps {
   pins: Pin[];
   itinerary: Itinerary;
   onChange: (it: Itinerary) => void;
-  onPinClick: (pin: Pin) => void;
+  /** 지도로 옮겨 가서 그 핀을 보여준다 — 지도 단추를 눌렀을 때만. */
+  onShowOnMap: (pin: Pin) => void;
 }
 
 // 날짜 범위가 실수로 너무 길어져도 카드가 무한히 생기지 않도록 막는 상한.
@@ -40,7 +41,7 @@ export default function ItineraryPanel({
   pins,
   itinerary,
   onChange,
-  onPinClick,
+  onShowOnMap,
 }: ItineraryPanelProps) {
   // 시작·종료일로 날짜 카드 목록을 만든다. 저장된 배정(pinIds)은 날짜로 이어 붙인다.
   const dayList = useMemo(() => {
@@ -134,9 +135,9 @@ export default function ItineraryPanel({
   };
 
   return (
-    <div className="flex h-full flex-col bg-[var(--bg)]">
+    <div className="flex flex-col gap-3">
       {/* 날짜 고르기 — 흰 카드 */}
-      <div className="shrink-0 px-4 pt-3">
+      <div>
         <div className="dw-card flex items-end gap-2 p-3">
           <label className="flex min-w-0 flex-1 flex-col gap-1">
             <span className="text-[11px] font-semibold text-[var(--text-muted)]">시작일</span>
@@ -167,10 +168,10 @@ export default function ItineraryPanel({
       </div>
 
       {/* Day 카드 — 세로 타임라인 */}
-      <div className="flex-1 overflow-y-auto px-4 pb-4 pt-3">
+      <div>
         {dayList.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
-            <span className="dw-display text-[1.5625rem] text-[var(--text)]">
+          <div className="flex flex-col items-center justify-center gap-1.5 py-6 text-center">
+            <span className="dw-display text-[1.375rem] text-[var(--text)]">
               언제 떠나나요?
             </span>
             <span className="text-sm text-[var(--text-muted)]">
@@ -212,17 +213,21 @@ export default function ItineraryPanel({
                             className="dw-input dw-input--time shrink-0 tabular-nums text-[var(--text-muted)]"
                             aria-label={`${pin.name} 방문 시각`}
                           />
-                          <button
-                            type="button"
-                            onClick={() => onPinClick(pin)}
-                            className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
-                          >
+                          <span className="flex min-w-0 flex-1 items-center gap-1.5">
                             <span className="shrink-0 text-sm">{pin.emoji}</span>
                             <span className="truncate text-sm text-[var(--text)]">
                               {pin.name}
                             </span>
-                          </button>
+                          </span>
                           <span className="flex shrink-0 items-center text-[var(--text-muted)]">
+                            <button
+                              type="button"
+                              onClick={() => onShowOnMap(pin)}
+                              className="rounded p-1 hover:text-[var(--accent)]"
+                              aria-label={`${pin.name} 지도에서 보기`}
+                            >
+                              <MapIcon size={14} strokeWidth={2.2} />
+                            </button>
                             <button
                               type="button"
                               onClick={() => move(day.date, pid, -1)}

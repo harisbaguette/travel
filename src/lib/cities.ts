@@ -181,3 +181,108 @@ export async function resolveCity(query: string): Promise<LatLng | null> {
   if (en) return searchCity(en);
   return null;
 }
+
+// ── 글자를 치는 동안 보여줄 후보 목록(자동완성) ──
+// Photon(코무트가 운영하는 무료 장소 사전)을 쓴다 — 열쇠(API 키) 없이 되고,
+// 글자를 치는 중에 계속 물어봐도 되는 곳이라 자동완성에 알맞다.
+// Nominatim은 규칙상 자동완성에 쓰면 안 되므로 마지막 예비용으로만 남긴다.
+
+export interface PlaceSuggestion {
+  name: string; // 장소 이름
+  address: string; // 주소 요약(동네·도시·나라)
+  lat: number;
+  lng: number;
+  /** 장소가 차지하는 네모 영역 [[남,서],[북,동]] — 도시처럼 넓은 곳은 이걸로 화면을 맞춘다 */
+  bounds?: [[number, number], [number, number]];
+  /** 영역 정보가 없을 때 쓸 확대 정도 */
+  zoom: number;
+}
+
+interface PhotonFeature {
+  geometry?: { coordinates?: [number, number] };
+  properties?: {
+    name?: string;
+    housenumber?: string;
+    street?: string;
+    district?: string;
+    city?: string;
+    county?: string;
+    state?: string;
+    country?: string;
+    osm_key?: string;
+    osm_value?: string;
+    extent?: [number, number, number, number]; // [서, 북, 동, 남]
+  };
+}
+
+// 도시급이면 멀리서, 가게급이면 가까이서 보여준다.
+function zoomFor(key?: string, value?: string): number {
+  if (key === "place") {
+    if (value === "city" || value === "town") return 12;
+    if (value === "village" || value === "suburb") return 14;
+  }
+  if (key === "boundary") return 11;
+  return 16;
+}
+
+async function photonSearch(
+  query: string,
+  near?: LatLng,
+  signal?: AbortSignal
+): Promise<PlaceSuggestion[]> {
+  const params = new URLSearchParams({ q: query, limit: "8" });
+  // 지금 보고 있는 지도 근처를 먼저 보여주는 가중치
+  if (near) {
+    params.set("lat", String(near[0]));
+    params.set("lon", String(near[1]));
+  }
+  const res = await fetch(`https://photon.komoot.io/api/?${params}`, { signal });
+  if (!res.ok) return [];
+  const data = (await res.json()) as { features?: PhotonFeature[] };
+  const out: PlaceSuggestion[] = [];
+  const seen = new Set<string>();
+  for (const f of data.features ?? []) {
+    const coord = f.geometry?.coordinates;
+    const p = f.properties;
+    if (!coord || !p) continue;
+    const [lng, lat] = coord;
+    if (typeof lat !== "number" || typeof lng !== "number") continue;
+    const name = p.name ?? p.street ?? p.city;
+    if (!name) continue;
+    // 같은 곳이 여러 줄로 나오면 하나만 남긴다
+    const key = `${name}|${lat.toFixed(3)},${lng.toFixed(3)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const road = [p.street, p.housenumber].filter(Boolean).join(" ");
+    const addressParts: string[] = [];
+    for (const part of [road, p.district, p.city, p.state, p.country]) {
+      if (part && part !== name && !addressParts.includes(part)) addressParts.push(part);
+    }
+    const e = p.extent;
+    out.push({
+      name,
+      address: addressParts.join(", "),
+      lat,
+      lng,
+      bounds: e ? [[e[3], e[0]], [e[1], e[2]]] : undefined,
+      zoom: zoomFor(p.osm_key, p.osm_value),
+    });
+    if (out.length >= 6) break;
+  }
+  return out;
+}
+
+// 한국어로 먼저 찾고, 못 찾으면 아는 낱말을 영어로 바꿔 한 번 더 찾는다.
+export async function suggestPlaces(
+  query: string,
+  near?: LatLng,
+  signal?: AbortSignal
+): Promise<PlaceSuggestion[]> {
+  const q = query.trim();
+  if (q.length < 2) return [];
+  const direct = await photonSearch(q, near, signal);
+  if (direct.length > 0) return direct;
+  const en = toEnglishQuery(q);
+  if (en) return photonSearch(en, near, signal);
+  return [];
+}
