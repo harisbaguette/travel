@@ -238,9 +238,6 @@ function PoiTapLayer({
   const [card, setCard] = useState<TapCard | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
-  // 말풍선이 열린 채로 지도를 눌렀는지 적어 두는 쪽지 — 그 손짓은 "닫기"지 "찾기"가 아니다.
-  const popupOpenRef = useRef(false);
-  const suppressRef = useRef(false);
   // 두 번 빠르게 누르는 확대 손짓과 구분하려고 잠깐 기다리는 시계
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -296,23 +293,10 @@ function PoiTapLayer({
   };
 
   const map = useMapEvents({
-    popupopen() {
-      popupOpenRef.current = true;
-    },
-    popupclose() {
-      popupOpenRef.current = false;
-    },
-    // 손이 닿는 순간(말풍선이 닫히기 전)에 "열린 말풍선이 있었는지"를 먼저 적어 둔다
-    preclick() {
-      suppressRef.current = popupOpenRef.current;
-    },
     click(e) {
-      // 말풍선을 닫으려던 손짓 — 새 카드를 띄우지 않고 조용히 치우기만 한다(구글맵과 같음)
-      if (suppressRef.current) {
-        suppressRef.current = false;
-        setCard(null);
-        return;
-      }
+      // 구글맵과 같은 순서 — 떠 있던 카드는 먼저 치우고, 새로 누른 자리에 가게가
+      // 그려져 있으면 그 가게 카드로 갈아탄다(빈 땅이면 치우기만 하고 끝).
+      setCard(null);
       const { lat, lng } = e.latlng;
       // 두 번 빠르게 누르면 확대 손짓 — 잠깐 기다려서 한 번 누른 게 맞을 때만 찾는다
       if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
@@ -333,7 +317,6 @@ function PoiTapLayer({
         clearTimeout(clickTimerRef.current);
         clickTimerRef.current = null;
       }
-      suppressRef.current = false;
       dropPin(e.latlng.lat, e.latlng.lng);
     },
   });
