@@ -1015,7 +1015,7 @@ export default function Home() {
                   type="button"
                   onClick={() => setListType("all")}
                   aria-pressed={listType === "all"}
-                  className={`flex h-11 shrink-0 items-center rounded-full px-4 text-xs font-bold ${
+                  className={`flex h-[30px] shrink-0 items-center rounded-full px-3 text-xs font-bold ${
                     listType === "all"
                       ? "bg-[var(--accent)] text-white"
                       : "bg-[var(--surface)] text-[var(--text)] shadow-[var(--shadow-1)]"
@@ -1031,7 +1031,7 @@ export default function Home() {
                       type="button"
                       onClick={() => setListType(cfg.type)}
                       aria-pressed={on}
-                      className={`flex h-11 shrink-0 items-center gap-1.5 rounded-full px-4 text-xs font-bold ${
+                      className={`flex h-[30px] shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-bold ${
                         on
                           ? "bg-[var(--accent)] text-white"
                           : "bg-[var(--surface)] text-[var(--text)] shadow-[var(--shadow-1)]"
