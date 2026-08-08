@@ -102,6 +102,11 @@ body {
 .app-shell {
   position: fixed;
   inset: 0;
+  /* 휴대폰 브라우저는 주소창이 화면 아래를 가릴 때 100vh가 "가려진 부분까지" 포함해
+     하단 독이 주소창 뒤로 숨는다. dvh(지금 실제로 보이는 높이)로 잡아 항상 보이게 한다. */
+  bottom: auto;
+  height: 100vh;
+  height: 100dvh;
   left: 50%;
   transform: translateX(-50%);
   width: 100%;
