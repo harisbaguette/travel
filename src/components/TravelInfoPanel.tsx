@@ -14,7 +14,7 @@ import {
 import type { FlightInfo, Itinerary, StayInfo } from "@/lib/types";
 import { EMPTY_FLIGHT } from "@/lib/types";
 import { addDays, daysBetween, shortDate, weekdayOf } from "@/lib/dates";
-import { looksLikeMapLink, mapHrefForText } from "@/lib/mapLinks";
+import { mapHrefForText } from "@/lib/mapLinks";
 
 interface TravelInfoPanelProps {
   itinerary: Itinerary;
@@ -69,12 +69,13 @@ export default function TravelInfoPanel({
     onChange({ ...itinerary, stays: stays.filter((s) => s.id !== id) });
   };
 
-  // 주소 칸에 구글 지도 링크가 들어오면(붙여넣기, 또는 다 적고 칸을 벗어날 때)
-  // 위(page)에 알려 지도에 핀을 꽂게 한다. 이미 그 링크로 꽂았으면 다시 안 꽂는다.
+  // 주소 칸에 무언가 들어오면(붙여넣기, 또는 다 적고 칸을 벗어날 때) 위(page)에 알려
+  // 지도에 핀을 꽂고 이름을 받아 온다. 구글 지도 링크든 그냥 숙소 이름이든 다 찾아 준다.
+  // 방금 넣은 그 값으로 이미 꽂았으면 다시 안 꽂는다.
   const tryStayLink = (s: StayInfo, value: string) => {
     if (!onStayMapLink) return;
     const t = value.trim();
-    if (!t || !looksLikeMapLink(t)) return;
+    if (t.length < 2) return;
     if (s.pinId && t === (s.address ?? "").trim()) return;
     onStayMapLink(s.id, t);
   };
@@ -141,33 +142,34 @@ export default function TravelInfoPanel({
                 : "";
             return (
             <li key={s.id} className="rounded-[12px] bg-[var(--bg)] p-3">
+              {/* 이름은 적는 칸이 없다 — 아래 주소 칸에 넣은 자리에서 받아 와 여기에 보여 준다. */}
               <div className="mb-2 flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => toggleStay(s.id)}
                   aria-expanded={open}
                   aria-label={open ? `${s.name || "숙소"} 접기` : `${s.name || "숙소"} 펼치기`}
-                  className="press flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors duration-200 hover:bg-[var(--surface-hover)]"
+                  className="press flex min-w-0 flex-1 items-center gap-2 text-left"
                 >
                   <ChevronDown
                     size={16}
                     strokeWidth={2.4}
-                    className={`transition-transform duration-150${open ? " rotate-180" : ""}`}
+                    className={`shrink-0 text-[var(--text-muted)] transition-transform duration-150${open ? " rotate-180" : ""}`}
                     aria-hidden
                   />
-                </button>
-                <input
-                  type="text"
-                  value={s.name}
-                  onChange={(e) => patchStay(s.id, { name: e.target.value })}
-                  placeholder="숙소 이름"
-                  className="dw-input dw-input--sm min-w-0 flex-1"
-                />
-                {!open && summary && (
-                  <span className="shrink-0 text-xs font-semibold text-[var(--text-muted)]">
-                    {summary}
+                  <span
+                    className={`min-w-0 flex-1 truncate text-sm font-bold${
+                      s.name ? " text-[var(--text)]" : " text-[var(--text-muted)]"
+                    }`}
+                  >
+                    {s.name || "주소를 넣으면 이름이 채워져요"}
                   </span>
-                )}
+                  {!open && summary && (
+                    <span className="shrink-0 text-xs font-semibold text-[var(--text-muted)]">
+                      {summary}
+                    </span>
+                  )}
+                </button>
                 <button
                   type="button"
                   onClick={() => removeStay(s.id)}
@@ -179,11 +181,28 @@ export default function TravelInfoPanel({
               </div>
               {open && (
               <>
-              {/* 들어가는 날 — 여행 날짜를 정했으면 몇 일차로, 아니면 달력으로 고른다. 시각까지 함께. */}
+              {/* 맨 처음 칸 — 여기에 구글 지도 링크나 숙소 이름을 넣으면 이름과 지도 핀이 따라온다. */}
+              <div className="mb-2">
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px] font-semibold text-[var(--text-muted)]">
+                    구글 지도 주소
+                  </span>
+                  <input
+                    type="text"
+                    value={s.address ?? ""}
+                    onChange={(e) => patchStay(s.id, { address: e.target.value })}
+                    onPaste={(e) => tryStayLink(s, e.clipboardData.getData("text"))}
+                    onBlur={(e) => tryStayLink(s, e.target.value)}
+                    placeholder="공유 링크 붙여넣기 — 이름과 핀이 같이 채워져요"
+                    className="dw-input dw-input--sm text-xs"
+                  />
+                </label>
+              </div>
+              {/* 체크인 — 여행 날짜를 정했으면 몇 일차로, 아니면 달력으로 고른다. 시각까지 함께. */}
               <div className="mb-2 flex items-end gap-2">
                 <label className="flex min-w-0 flex-1 flex-col gap-1">
                   <span className="text-[11px] font-semibold text-[var(--text-muted)]">
-                    들어가는 날 (체크인)
+                    체크인
                   </span>
                   {tripDays.length > 0 ? (
                     <select
@@ -220,11 +239,11 @@ export default function TravelInfoPanel({
                   />
                 </label>
               </div>
-              {/* 나오는 날 — 들어가는 날보다 앞서지 못하게 막는다. */}
+              {/* 체크아웃 — 체크인보다 앞선 날은 고르지 못하게 막는다. */}
               <div className="mb-2 flex items-end gap-2">
                 <label className="flex min-w-0 flex-1 flex-col gap-1">
                   <span className="text-[11px] font-semibold text-[var(--text-muted)]">
-                    나오는 날 (체크아웃)
+                    체크아웃
                   </span>
                   {tripDays.length > 0 ? (
                     <select
@@ -261,37 +280,6 @@ export default function TravelInfoPanel({
                   />
                 </label>
               </div>
-              {/* 주소 — 적어 두면 옆 단추로 구글 지도에서 바로 열린다. */}
-              <div className="mb-2 flex items-end gap-2">
-                <label className="flex min-w-0 flex-1 flex-col gap-1">
-                  <span className="text-[11px] font-semibold text-[var(--text-muted)]">
-                    구글 지도 주소
-                  </span>
-                  <input
-                    type="text"
-                    value={s.address ?? ""}
-                    onChange={(e) => patchStay(s.id, { address: e.target.value })}
-                    onPaste={(e) => tryStayLink(s, e.clipboardData.getData("text"))}
-                    onBlur={(e) => tryStayLink(s, e.target.value)}
-                    placeholder="공유 링크 붙여넣기 — 핀도 같이 꽂혀요"
-                    className="dw-input dw-input--sm text-xs"
-                  />
-                </label>
-                <a
-                  href={mapHrefForText(s.address || s.name)}
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-disabled={!(s.address || s.name).trim()}
-                  className={`dw-btn-ghost h-10 min-h-0 shrink-0 gap-1 px-3 text-xs${
-                    (s.address || s.name).trim()
-                      ? ""
-                      : " pointer-events-none opacity-40"
-                  }`}
-                >
-                  <MapPin size={14} strokeWidth={2.4} aria-hidden />
-                  지도
-                </a>
-              </div>
               {/* 방 번호 + 메모 — 방 번호는 체크인 뒤에 받아 적는 짧은 칸. */}
               <div className="flex items-end gap-2">
                 <label className="flex w-28 shrink-0 flex-col gap-1">
@@ -319,6 +307,19 @@ export default function TravelInfoPanel({
                   />
                 </label>
               </div>
+              {/* 지도 열기 — 맨 아래에서 한 줄을 혼자 다 쓴다(누르기 쉽게). */}
+              <a
+                href={mapHrefForText(s.address || s.name)}
+                target="_blank"
+                rel="noreferrer"
+                aria-disabled={!(s.address || s.name).trim()}
+                className={`dw-btn-ghost mt-2 flex h-10 min-h-0 w-full items-center justify-center gap-1 text-xs${
+                  (s.address || s.name).trim() ? "" : " pointer-events-none opacity-40"
+                }`}
+              >
+                <MapPin size={14} strokeWidth={2.4} aria-hidden />
+                지도
+              </a>
               </>
               )}
             </li>
