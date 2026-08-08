@@ -99,16 +99,6 @@ export default function ChecklistCard({
                 >
                   {item.text}
                 </span>
-                {withAssignee && (
-                  <input
-                    type="text"
-                    value={item.assignee ?? ""}
-                    onChange={(e) => patch(item.id, { assignee: e.target.value })}
-                    placeholder="누가"
-                    className="dw-input dw-input--sm dw-input--who shrink-0 text-xs"
-                    aria-label={`${item.text} 담당자`}
-                  />
-                )}
                 <button
                   type="button"
                   onClick={() => remove(item.id)}
@@ -118,6 +108,17 @@ export default function ChecklistCard({
                   <X size={15} strokeWidth={2.2} aria-hidden />
                 </button>
               </div>
+              {/* 담당자 칸 — 항목 바로 아래에 조그맣게, 누가 맡을지 적는다. */}
+              {withAssignee && (
+                <input
+                  type="text"
+                  value={item.assignee ?? ""}
+                  onChange={(e) => patch(item.id, { assignee: e.target.value })}
+                  placeholder="누가"
+                  className="dw-input dw-input--who"
+                  aria-label={`${item.text} 담당자`}
+                />
+              )}
               {/* 결과 칸 — 회의에서 안건마다 "무엇으로 정해졌는지"를 바로 아래에 적는다. */}
               {withResult && (
                 <input

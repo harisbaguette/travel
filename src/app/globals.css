@@ -681,10 +681,15 @@ body {
 .dw-input--icon {
   padding-left: 40px;
 }
-/* 체크리스트 담당자 칸 — "누가" 한 단어만 들어갈 좁은 폭 고정.
-   Tailwind 폭 유틸(w-20)은 레이어 밖 .dw-input의 width:100%에 지므로 여기서 못 박는다. */
+/* 체크리스트 담당자 칸 — 항목 글줄 아래에 조그맣게 붙는 "누가" 메모.
+   (.dw-input의 width:100%가 Tailwind 유틸보다 세므로 폭·크기를 여기서 못 박는다) */
 .dw-input--who {
-  width: 5rem;
+  margin-left: 2rem;
+  width: 7rem;
+  min-height: 30px;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  border-radius: 8px;
 }
 /* 회의 결과 칸 — 왼쪽으로 들여쓴 만큼 폭을 줄여 카드 밖으로 못 넘게 한다.
    (.dw-input의 width:100%가 Tailwind 유틸보다 세므로 여기서 계산해 못 박는다) */
