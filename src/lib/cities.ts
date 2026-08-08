@@ -230,7 +230,8 @@ async function photonSearch(
   near?: LatLng,
   signal?: AbortSignal
 ): Promise<PlaceSuggestion[]> {
-  const params = new URLSearchParams({ q: query, limit: "8" });
+  // lang=default: 브라우저 언어와 상관없이 그 나라 현지 이름을 준다(지도 라벨과 같은 방식).
+  const params = new URLSearchParams({ q: query, limit: "8", lang: "default" });
   // 지금 보고 있는 지도 근처를 먼저 보여주는 가중치
   if (near) {
     params.set("lat", String(near[0]));
