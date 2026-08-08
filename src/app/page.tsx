@@ -820,6 +820,70 @@ export default function Home() {
     [attachToDay, resolveMapLink]
   );
 
+  // 숙소 칸에 붙여넣은 구글 지도 링크 — 자리를 읽어 숙소 핀으로 지도에 꽂고,
+  // 숙소 이름이 비어 있으면 링크에 적힌 이름으로 채운다. 체크인/아웃 날짜만 고르면
+  // 일정 화면에는 자동으로 나타난다(체크인·체크아웃 줄).
+  // 붙여넣기와 칸 벗어나기가 거의 동시에 올 수 있어, 같은 숙소 건은 한 번에 하나만 처리한다
+  // (안 막으면 링크 읽기가 겹쳐 돌아 핀이 두 개 꽂힌다).
+  const stayLinkBusy = useRef<Set<string>>(new Set());
+  const handleStayMapLink = useCallback(
+    async (stayId: string, raw: string) => {
+      if (stayLinkBusy.current.has(stayId)) return;
+      stayLinkBusy.current.add(stayId);
+      try {
+        const place = await resolveMapLink(raw);
+        if (!place) {
+          setNotice("링크에서 위치를 읽지 못했어요 — 구글 지도 공유 링크를 붙여넣어 주세요");
+          return;
+        }
+        // 그 자리(50m 안)에 이미 핀이 있으면 그 핀을 쓰고, 없으면 숙소 핀을 새로 꽂는다.
+        let pinId: string;
+        let pinName = place.name;
+        const near = pins.find(
+          (p) => distanceMeters(p.lat, p.lng, place.lat, place.lng) < 50
+        );
+        if (near) {
+          pinId = near.id;
+          if (!pinName) pinName = near.name;
+        } else {
+          const newPin: Pin = {
+            id: `pin-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            lat: place.lat,
+            lng: place.lng,
+            type: "stay",
+            name: pinName || "숙소",
+            memo: "",
+            emoji: PIN_TYPES.stay.emoji,
+            isAI: false,
+            createdAt: Date.now(),
+            createdBy: userId || undefined,
+          };
+          setPins((prev) => [...prev, newPin]);
+          void pushPin(room, newPin);
+          pinId = newPin.id;
+        }
+        // 붙여넣기 직후라 이 함수가 들고 있는 일정 사본에는 방금 적힌 주소가 아직 없을 수 있다.
+        // 최신 일정을 받아서 고치는 방식으로, 그 주소가 지워지지 않게 한다.
+        setItinerary((cur) => {
+          const next = {
+            ...cur,
+            stays: (cur.stays ?? []).map((s) =>
+              s.id === stayId
+                ? { ...s, name: s.name.trim() ? s.name : pinName || s.name, pinId }
+                : s
+            ),
+          };
+          pushItinerary(room, next);
+          return next;
+        });
+        setNotice(`${pinName || "숙소"} 핀을 지도에 꽂았어요`);
+      } finally {
+        stayLinkBusy.current.delete(stayId);
+      }
+    },
+    [pins, room, userId, resolveMapLink]
+  );
+
   // 이어받기 전(서버가 그린 첫 화면)에는 저장값 대신 빈 상태를 그린다.
   const viewRoom = hydrated ? room : "";
   const viewRooms = hydrated ? rooms : INITIAL_ROOMS;
@@ -1163,6 +1227,7 @@ export default function Home() {
             <PreparePanel
               itinerary={viewItinerary}
               onItineraryChange={handleItineraryChange}
+              onStayMapLink={handleStayMapLink}
             />
           </div>
         )}

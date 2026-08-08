@@ -12,19 +12,26 @@ import {
 import type { FlightInfo, Itinerary, StayInfo } from "@/lib/types";
 import { EMPTY_FLIGHT } from "@/lib/types";
 import { addDays, daysBetween, shortDate, weekdayOf } from "@/lib/dates";
-import { mapHrefForText } from "@/lib/mapLinks";
+import { looksLikeMapLink, mapHrefForText } from "@/lib/mapLinks";
 
 interface TravelInfoPanelProps {
   itinerary: Itinerary;
   onChange: (it: Itinerary) => void;
   /** 항공 칸만 볼지 숙소 칸만 볼지 — 준비 화면이 둘을 따로 보여 준다. */
   part: "flights" | "stays";
+  /** 숙소 칸에 구글 지도 링크를 붙여넣었을 때 — 지도에 핀을 꽂고 이름을 채워 준다. */
+  onStayMapLink?: (stayId: string, url: string) => void;
 }
 
 // 여행 기록 — 비행(가는/오는 편) + 숙소. 종이 배경 위 흰 카드(DW 문법).
 // 비행 날짜는 여행 날짜와 별개 — 여행 날짜는 일정 화면에서 따로 정한다
 // (전날 밤 출발·다음 날 새벽 도착처럼 비행이 여행의 시작·끝과 다를 수 있어서).
-export default function TravelInfoPanel({ itinerary, onChange, part }: TravelInfoPanelProps) {
+export default function TravelInfoPanel({
+  itinerary,
+  onChange,
+  part,
+  onStayMapLink,
+}: TravelInfoPanelProps) {
   const patchFlight = (key: "outbound" | "inbound", patch: Partial<FlightInfo>) => {
     const cur = itinerary[key] ?? { ...EMPTY_FLIGHT };
     onChange({ ...itinerary, [key]: { ...cur, ...patch } });
@@ -52,6 +59,16 @@ export default function TravelInfoPanel({ itinerary, onChange, part }: TravelInf
 
   const removeStay = (id: string) => {
     onChange({ ...itinerary, stays: stays.filter((s) => s.id !== id) });
+  };
+
+  // 주소 칸에 구글 지도 링크가 들어오면(붙여넣기, 또는 다 적고 칸을 벗어날 때)
+  // 위(page)에 알려 지도에 핀을 꽂게 한다. 이미 그 링크로 꽂았으면 다시 안 꽂는다.
+  const tryStayLink = (s: StayInfo, value: string) => {
+    if (!onStayMapLink) return;
+    const t = value.trim();
+    if (!t || !looksLikeMapLink(t)) return;
+    if (s.pinId && t === (s.address ?? "").trim()) return;
+    onStayMapLink(s.id, t);
   };
 
   // 여행 기간의 날짜 목록 — 숙소 날짜를 "몇 일차"로 고르게 해 준다.
@@ -223,7 +240,9 @@ export default function TravelInfoPanel({ itinerary, onChange, part }: TravelInf
                     type="text"
                     value={s.address ?? ""}
                     onChange={(e) => patchStay(s.id, { address: e.target.value })}
-                    placeholder="주소나 호텔 이름 붙여넣기"
+                    onPaste={(e) => tryStayLink(s, e.clipboardData.getData("text"))}
+                    onBlur={(e) => tryStayLink(s, e.target.value)}
+                    placeholder="공유 링크 붙여넣기 — 핀도 같이 꽂혀요"
                     className="dw-input dw-input--sm text-xs"
                   />
                 </label>
@@ -242,13 +261,33 @@ export default function TravelInfoPanel({ itinerary, onChange, part }: TravelInf
                   지도
                 </a>
               </div>
-              <input
-                type="text"
-                value={s.memo}
-                onChange={(e) => patchStay(s.id, { memo: e.target.value })}
-                placeholder="메모 — 예약 번호, 조식 여부 등"
-                className="dw-input dw-input--sm text-xs"
-              />
+              {/* 방 번호 + 메모 — 방 번호는 체크인 뒤에 받아 적는 짧은 칸. */}
+              <div className="flex items-end gap-2">
+                <label className="flex w-28 shrink-0 flex-col gap-1">
+                  <span className="text-[11px] font-semibold text-[var(--text-muted)]">
+                    방 번호
+                  </span>
+                  <input
+                    type="text"
+                    value={s.roomNo ?? ""}
+                    onChange={(e) => patchStay(s.id, { roomNo: e.target.value })}
+                    placeholder="1203호"
+                    className="dw-input dw-input--sm text-xs"
+                  />
+                </label>
+                <label className="flex min-w-0 flex-1 flex-col gap-1">
+                  <span className="text-[11px] font-semibold text-[var(--text-muted)]">
+                    메모
+                  </span>
+                  <input
+                    type="text"
+                    value={s.memo}
+                    onChange={(e) => patchStay(s.id, { memo: e.target.value })}
+                    placeholder="입장 비밀번호, 예약 번호 등"
+                    className="dw-input dw-input--sm text-xs"
+                  />
+                </label>
+              </div>
             </li>
           ))}
         </ul>

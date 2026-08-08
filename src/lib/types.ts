@@ -93,6 +93,10 @@ export interface StayInfo {
   // 체크인/아웃 시각(HH:MM) — 옛 저장본에는 없으므로 선택 사항.
   checkInTime?: string;
   checkOutTime?: string;
+  // 방 번호 — 옛 저장본에는 없으므로 선택 사항.
+  roomNo?: string;
+  // 구글 지도 링크로 지도에 꽂아 준 핀의 번호 — 같은 링크를 다시 붙여도 겹으로 안 꽂게 기억.
+  pinId?: string;
 }
 
 // 체크리스트 한 줄 — 짐 챙기기·회의 안건·장보기가 같은 모양을 쓴다.

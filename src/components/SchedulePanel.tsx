@@ -584,7 +584,8 @@ function AddPlaceBox({
 function StayRow({ stay, kind }: { stay: StayInfo; kind: "in" | "out" }) {
   const label = kind === "in" ? "체크인" : "체크아웃";
   const time = kind === "in" ? stay.checkInTime : stay.checkOutTime;
-  const sub = [label, time].filter(Boolean).join(" · ");
+  // 방 번호를 적어 뒀으면 여기서도 같이 보여 준다 — 여행 중엔 이 화면을 보니까.
+  const sub = [label, time, stay.roomNo].filter(Boolean).join(" · ");
   return (
     <div className="dw-card flex items-center gap-3 p-3">
       <span
