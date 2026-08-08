@@ -390,8 +390,8 @@ export default function SchedulePanel({
                       </ol>
                     )}
 
-                    {/* 갈 곳 넣기 — 꽂아 둔 곳에서 고르거나, 구글 지도 링크를 붙여넣는다.
-                        지도에서 곳을 눌러 "일정에 넣기"로 넣는 길도 함께 있다. */}
+                    {/* 갈 곳 넣기 — 한 칸에 적으면 되고, 꽂아 둔 곳과 이름이 닮으면
+                        아래에 추천으로 떠서 눌러 고를 수 있다. 링크를 붙여넣어도 된다. */}
                     <AddPlaceBox
                       date={day.date}
                       candidates={unassigned}
@@ -412,9 +412,9 @@ export default function SchedulePanel({
   );
 }
 
-// 갈 곳 넣기 — 평소엔 점선 단추 한 칸이고, 누르면 아래로 펼쳐진다.
-// 펼치면 ① 지도에 꽂아 둔 곳을 이름 그대로 눌러 고르거나 ② 한 칸에 글이든 구글 지도
-// 링크든 아무거나 적어 넣을 수 있다 — 링크 모양이면 알아서 지도로, 아니면 글로 들어간다.
+// 갈 곳 넣기 — 평소엔 점선 단추 한 칸이고, 누르면 적는 칸 하나만 펼쳐진다.
+// 적는 중에 꽂아 둔 곳과 이름이 닮은 게 있으면 아래에 추천으로 떠서 눌러 고를 수 있고,
+// 링크 모양이면 알아서 지도로, 아니면 글(할 일)로 들어간다.
 function AddPlaceBox({
   date,
   candidates,
@@ -429,96 +429,17 @@ function AddPlaceBox({
   onAddText: (text: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-
-  if (!open) {
-    return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="flex h-11 w-full items-center justify-center gap-1.5 rounded-[13px] border-[1.5px] border-dashed border-[var(--border-strong)] text-xs font-bold text-[var(--text-muted)] transition-colors active:bg-[var(--surface-hover)]"
-      >
-        <Plus size={15} strokeWidth={2.6} aria-hidden />
-        갈 곳 넣기
-      </button>
-    );
-  }
-
-  return (
-    <div className="rounded-[13px] bg-[var(--surface-raised)] p-2.5">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="text-[11px] font-bold text-[var(--text-muted)]">
-          꽂아 둔 곳에서 고르기
-        </span>
-        <button
-          type="button"
-          onClick={() => setOpen(false)}
-          className="-my-1 flex h-7 w-7 items-center justify-center rounded-lg text-[var(--text-muted)]"
-          aria-label="갈 곳 넣기 닫기"
-        >
-          <X size={14} strokeWidth={2.4} aria-hidden />
-        </button>
-      </div>
-
-      {candidates.length > 0 ? (
-        <ul className="mb-3 flex max-h-56 flex-col gap-1 overflow-y-auto">
-          {candidates.map((p) => {
-            const cfg = PIN_TYPES[p.type];
-            return (
-              <li key={p.id}>
-                <button
-                  type="button"
-                  onClick={() => onPick(p.id)}
-                  className="flex w-full items-center gap-2 rounded-[10px] bg-[var(--surface)] px-2.5 py-2 text-left shadow-[var(--shadow-1)] transition-transform active:scale-[0.99]"
-                >
-                  <cfg.Icon size={15} color={cfg.color} className="shrink-0" aria-hidden />
-                  <span className="min-w-0 flex-1 truncate text-sm text-[var(--text)]">
-                    {p.name}
-                  </span>
-                  <Plus
-                    size={14}
-                    strokeWidth={2.6}
-                    className="shrink-0 text-[var(--text-faint)]"
-                    aria-hidden
-                  />
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      ) : (
-        <p className="mb-3 text-xs text-[var(--text-muted)]">
-          꽂아 둔 곳이 모두 일정에 들어갔어요
-        </p>
-      )}
-
-      <span className="mb-1.5 flex items-center gap-1 text-[11px] font-bold text-[var(--text-muted)]">
-        <NotebookPen size={12} strokeWidth={2.4} aria-hidden />
-        적어서 넣기
-      </span>
-      <SmartAddRow date={date} onAddText={onAddText} onAddLink={onAddLink} />
-      <p className="mt-2 text-[11px] text-[var(--text-faint)]">
-        지도에서 곳을 눌러 “일정에 넣기”로도 넣을 수 있어요
-      </p>
-    </div>
-  );
-}
-
-// 한 칸에 글이든 구글 지도 링크든 아무거나 적어 넣는 줄.
-// http(s)로 시작하는 링크 모양이면 지도 링크로, 아니면 그냥 글(할 일)로 넣는다 —
-// 사람이 "이건 링크칸, 이건 글칸" 골라 넣을 필요가 없게 한 칸으로 합쳤다.
-function SmartAddRow({
-  date,
-  onAddText,
-  onAddLink,
-}: {
-  date: string;
-  onAddText: (text: string) => void;
-  onAddLink: (date: string, url: string) => Promise<boolean>;
-}) {
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
 
   const looksLikeLink = (v: string) => /^https?:\/\/\S+$/i.test(v);
+
+  // 적은 글자가 이름에 들어 있는 꽂아 둔 곳 — 링크를 붙여넣는 중이면 추천하지 않는다.
+  const q = value.trim().toLowerCase();
+  const matches =
+    q && !looksLikeLink(q)
+      ? candidates.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 5)
+      : [];
 
   const submit = async () => {
     const v = value.trim();
@@ -537,30 +458,88 @@ function SmartAddRow({
     setValue("");
   };
 
-  return (
-    <div className="flex items-center gap-2">
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            void submit();
-          }
-        }}
-        placeholder="렌트카 받기, 짐 맡기기, 또는 구글 지도 링크 붙여넣기"
-        className="dw-input dw-input--sm min-w-0 flex-1"
-        aria-label={`${date}에 할 일이나 구글 지도 링크 넣기`}
-      />
+  if (!open) {
+    return (
       <button
         type="button"
-        onClick={() => void submit()}
-        disabled={busy || !value.trim()}
-        className="dw-btn-primary h-10 min-h-0 shrink-0 px-3 text-xs disabled:opacity-40"
+        onClick={() => setOpen(true)}
+        className="flex h-11 w-full items-center justify-center gap-1.5 rounded-[13px] border-[1.5px] border-dashed border-[var(--border-strong)] text-xs font-bold text-[var(--text-muted)] transition-colors active:bg-[var(--surface-hover)]"
       >
-        {busy ? "…" : "넣기"}
+        <Plus size={15} strokeWidth={2.6} aria-hidden />
+        갈 곳 넣기
       </button>
+    );
+  }
+
+  return (
+    <div className="rounded-[13px] bg-[var(--surface-raised)] p-2.5">
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              void submit();
+            }
+          }}
+          autoFocus
+          placeholder="렌트카 받기, 짐 맡기기, 또는 구글 지도 링크 붙여넣기"
+          className="dw-input dw-input--sm min-w-0 flex-1"
+          aria-label={`${date}에 할 일이나 구글 지도 링크 넣기`}
+        />
+        <button
+          type="button"
+          onClick={() => void submit()}
+          disabled={busy || !value.trim()}
+          className="dw-btn-primary h-10 min-h-0 shrink-0 px-3 text-xs disabled:opacity-40"
+        >
+          {busy ? "…" : "넣기"}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setOpen(false);
+            setValue("");
+          }}
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--text-muted)]"
+          aria-label="갈 곳 넣기 닫기"
+        >
+          <X size={14} strokeWidth={2.4} aria-hidden />
+        </button>
+      </div>
+
+      {matches.length > 0 && (
+        <ul className="mt-2 flex max-h-56 flex-col gap-1 overflow-y-auto">
+          {matches.map((p) => {
+            const cfg = PIN_TYPES[p.type];
+            return (
+              <li key={p.id}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onPick(p.id);
+                    setValue("");
+                  }}
+                  className="flex w-full items-center gap-2 rounded-[10px] bg-[var(--surface)] px-2.5 py-2 text-left shadow-[var(--shadow-1)] transition-transform active:scale-[0.99]"
+                >
+                  <cfg.Icon size={15} color={cfg.color} className="shrink-0" aria-hidden />
+                  <span className="min-w-0 flex-1 truncate text-sm text-[var(--text)]">
+                    {p.name}
+                  </span>
+                  <Plus
+                    size={14}
+                    strokeWidth={2.6}
+                    className="shrink-0 text-[var(--text-faint)]"
+                    aria-hidden
+                  />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }
