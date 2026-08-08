@@ -686,6 +686,12 @@ body {
 .dw-input--who {
   width: 5rem;
 }
+/* 회의 결과 칸 — 왼쪽으로 들여쓴 만큼 폭을 줄여 카드 밖으로 못 넘게 한다.
+   (.dw-input의 width:100%가 Tailwind 유틸보다 세므로 여기서 계산해 못 박는다) */
+.dw-input--result {
+  margin-left: 2rem;
+  width: calc(100% - 2rem);
+}
 /* 타임라인 속 작은 시각 입력칸 — 폭을 고정해 이름 자리를 지킨다 */
 .dw-input--time {
   width: 4.9rem;

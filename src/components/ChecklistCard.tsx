@@ -125,7 +125,7 @@ export default function ChecklistCard({
                   value={item.result ?? ""}
                   onChange={(e) => patch(item.id, { result: e.target.value })}
                   placeholder="결과 — 정해진 내용"
-                  className="dw-input dw-input--sm ml-8 text-xs"
+                  className="dw-input dw-input--sm dw-input--result text-xs"
                   aria-label={`${item.text} 회의 결과`}
                 />
               )}
