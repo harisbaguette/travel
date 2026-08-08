@@ -1131,21 +1131,6 @@ body {
 .pin-icon > span > i > svg {
   display: block;
 }
-/* 자리 옮기는 중 — 핀이 두근두근 커졌다 작아져 "지금은 끌 수 있다"를 눈으로 알려 준다.
-   바깥 칸은 Leaflet이 위치 잡기(transform)에 쓰므로 안쪽 칸만 움직인다. */
-.pin-icon--moving > span {
-  animation: pin-moving 0.9s ease-in-out infinite;
-  box-shadow: 0 8px 18px rgba(36, 30, 25, 0.45);
-}
-@keyframes pin-moving {
-  0%,
-  100% {
-    transform: rotate(-45deg) scale(1);
-  }
-  50% {
-    transform: rotate(-45deg) scale(1.18);
-  }
-}
 
 /* 검색 결과 표식 — 파란 점 둘레로 물결이 퍼진다 */
 .search-target-icon {
@@ -1195,21 +1180,6 @@ body {
 .leaflet-popup-content {
   margin: 12px 14px;
   font-family: var(--font-sans);
-}
-/* 지도 위 짧은 안내 쪽지(툴팁) — 카드와 같은 흰 종이 톤 */
-.leaflet-tooltip {
-  background: var(--surface);
-  color: var(--text);
-  border: none;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(36, 30, 25, 0.2);
-  font-family: var(--font-sans);
-  font-size: 12px;
-  font-weight: 600;
-  padding: 5px 9px;
-}
-.leaflet-tooltip-top::before {
-  border-top-color: var(--surface);
 }
 .leaflet-container a.leaflet-popup-close-button {
   color: var(--text-faint);

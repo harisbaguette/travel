@@ -41,7 +41,6 @@ interface MapViewProps {
   onSearchTargetAdd?: () => void;
   onSearchTargetClose?: () => void;
   onPinDelete?: (id: string) => void;
-  onPinDragEnd?: (id: string, lat: number, lng: number) => void;
   /** 말풍선의 "일정에 넣기" — 며칠째에 넣을지 고르는 창을 부모가 띄운다. */
   onAddToSchedule?: (place: {
     lat: number;
@@ -144,31 +143,74 @@ function PoiTapLayer({
   const [poi, setPoi] = useState<PoiInfo | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
+  // 말풍선이 열린 채로 지도를 눌렀는지 적어 두는 쪽지 — 그 손짓은 "닫기"지 "찾기"가 아니다.
+  const popupOpenRef = useRef(false);
+  const suppressRef = useRef(false);
+  // 두 번 빠르게 누르는 확대 손짓과 구분하려고 잠깐 기다리는 시계
+  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
+      abortRef.current?.abort();
+    };
+  }, []);
+
+  const lookup = (lat: number, lng: number) => {
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+    // 답을 기다리는 동안에도 점을 먼저 찍어 "눌렸다"는 느낌을 준다
+    setPoi({ kind: "address", name: "무슨 곳인지 알아보는 중…", lat, lng, pending: true });
+    void fetch(`/api/poi-at?lat=${lat}&lng=${lng}`, { signal: ac.signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (ac.signal.aborted) return;
+        const found = (d as { poi?: PoiInfo | null } | null)?.poi;
+        // 아무것도 못 찾았으면 좌표라도 보여 준다
+        setPoi(
+          found ?? {
+            kind: "address",
+            name: `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+            lat,
+            lng,
+          }
+        );
+      })
+      .catch(() => {});
+  };
 
   useMapEvents({
+    popupopen() {
+      popupOpenRef.current = true;
+    },
+    popupclose() {
+      popupOpenRef.current = false;
+    },
+    // 손이 닿는 순간(말풍선이 닫히기 전)에 "열린 말풍선이 있었는지"를 먼저 적어 둔다
+    preclick() {
+      suppressRef.current = popupOpenRef.current;
+    },
     click(e) {
+      // 말풍선을 닫으려던 손짓 — 새 카드를 띄우지 않고 조용히 치우기만 한다(구글맵과 같음)
+      if (suppressRef.current) {
+        suppressRef.current = false;
+        setPoi(null);
+        return;
+      }
       const { lat, lng } = e.latlng;
-      abortRef.current?.abort();
-      const ac = new AbortController();
-      abortRef.current = ac;
-      // 답을 기다리는 동안에도 점을 먼저 찍어 "눌렸다"는 느낌을 준다
-      setPoi({ kind: "address", name: "무슨 곳인지 알아보는 중…", lat, lng, pending: true });
-      void fetch(`/api/poi-at?lat=${lat}&lng=${lng}`, { signal: ac.signal })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((d) => {
-          if (ac.signal.aborted) return;
-          const found = (d as { poi?: PoiInfo | null } | null)?.poi;
-          // 아무것도 못 찾았으면 좌표라도 보여 준다
-          setPoi(
-            found ?? {
-              kind: "address",
-              name: `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
-              lat,
-              lng,
-            }
-          );
-        })
-        .catch(() => {});
+      // 두 번 빠르게 누르면 확대 손짓 — 잠깐 기다려서 한 번 누른 게 맞을 때만 찾는다
+      if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
+      clickTimerRef.current = setTimeout(() => {
+        clickTimerRef.current = null;
+        lookup(lat, lng);
+      }, 260);
+    },
+    dblclick() {
+      if (clickTimerRef.current) {
+        clearTimeout(clickTimerRef.current);
+        clickTimerRef.current = null;
+      }
     },
   });
 
@@ -261,7 +303,6 @@ const MapView = forwardRef<LeafletMap, MapViewProps>(function MapView(
     onSearchTargetAdd,
     onSearchTargetClose,
     onPinDelete,
-    onPinDragEnd,
     onAddToSchedule,
     className,
   },
@@ -319,7 +360,6 @@ const MapView = forwardRef<LeafletMap, MapViewProps>(function MapView(
           pin={pin}
           isMine={!pin.createdBy || !currentUserId || pin.createdBy === currentUserId}
           onDelete={onPinDelete}
-          onDragEnd={onPinDragEnd}
           onAddToSchedule={onAddToSchedule}
         />
       ))}
@@ -451,13 +491,11 @@ function PinMarker({
   pin,
   isMine,
   onDelete,
-  onDragEnd,
   onAddToSchedule,
 }: {
   pin: Pin;
   isMine: boolean;
   onDelete?: (id: string) => void;
-  onDragEnd?: (id: string, lat: number, lng: number) => void;
   onAddToSchedule?: MapViewProps["onAddToSchedule"];
 }) {
   const cfg = PIN_TYPES[pin.type];
@@ -484,16 +522,10 @@ function PinMarker({
       icon={icon}
       // 핀은 키보드로도 고를 수 있는 단추다 — 이름이 없으면 읽어 주는 프로그램이
       // "단추"라고만 말한다. 이름을 붙여 어떤 핀인지 들리게 한다.
+      // 끌기는 아예 잠가 둔다 — 지도를 밀던 손가락에 핀이 딸려 가는 사고의 뿌리였다.
+      // 자리가 틀린 핀은 지우고 다시 꽂는 게 길이다.
       title={pin.name}
       alt={pin.name}
-      draggable={isMine}
-      eventHandlers={{
-        dragend(e) {
-          const marker = e.target as L.Marker;
-          const ll = marker.getLatLng();
-          onDragEnd?.(pin.id, ll.lat, ll.lng);
-        },
-      }}
     >
       <Popup className="pin-popup">
         <div className="min-w-[180px]">

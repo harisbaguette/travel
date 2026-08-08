@@ -560,20 +560,6 @@ export default function Home() {
     [room, itinerary]
   );
 
-  const handlePinDragEnd = useCallback(
-    (id: string, lat: number, lng: number) => {
-      setPins((prev) =>
-        prev.map((p) => (p.id === id ? { ...p, lat, lng } : p))
-      );
-      const moved = pins.find((p) => p.id === id);
-      if (moved) {
-        void pushPin(room, { ...moved, lat, lng });
-        setNotice(`${moved.name} 자리를 옮겼어요`);
-      }
-    },
-    [pins, room]
-  );
-
   // 목록에서 지도 단추를 눌렀을 때만 지도로 넘어간다(이름만 눌러선 안 튕김).
   const handleShowOnMap = useCallback((pin: Pin) => {
     setTab("map");
@@ -1057,7 +1043,6 @@ export default function Home() {
           initialCenter={initialView.center}
           initialZoom={initialView.zoom}
           onPinDelete={handlePinDelete}
-          onPinDragEnd={handlePinDragEnd}
           onAddToSchedule={handleAddToSchedule}
           searchTarget={searchTarget}
           onSearchTargetAdd={handleSearchTargetAdd}
