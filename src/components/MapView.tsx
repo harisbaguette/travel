@@ -14,6 +14,7 @@ import L, { type Map as LeafletMap } from "leaflet";
 import "leaflet.gridlayer.googlemutant";
 import type { Pin } from "@/lib/types";
 import { PIN_TYPES, pinMarkerSvg } from "@/lib/pinTypes";
+import { googleMapsUrl } from "@/lib/mapLinks";
 import { hasGoogleKey, loadGoogleMaps, onGoogleAuthFailure } from "@/lib/googleMaps";
 
 export type MapViewHandle = LeafletMap | null;
@@ -450,12 +451,15 @@ function PinMarker({
               {pin.memo}
             </p>
           )}
+          {pin.address && (
+            <p className="mb-1 text-xs text-[var(--text-faint)]">{pin.address}</p>
+          )}
           {pin.sources?.[0] && (
             <a
               href={pin.sources[0].url}
               target="_blank"
               rel="noopener noreferrer"
-              className="mb-2 flex items-center gap-1 text-xs text-[var(--text-faint)]"
+              className="mb-1 flex items-center gap-1 text-xs text-[var(--text-faint)]"
             >
               <span className="shrink-0">출처:</span>
               <span className="min-w-0 truncate underline underline-offset-2">
@@ -463,6 +467,14 @@ function PinMarker({
               </span>
             </a>
           )}
+          <a
+            href={googleMapsUrl(pin)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mb-2 block text-xs text-[var(--text-faint)] underline underline-offset-2"
+          >
+            구글 지도에서 열기
+          </a>
           {onDelete &&
             (asking ? (
               <div className="flex items-center gap-1.5">
