@@ -685,10 +685,12 @@ body {
   color: var(--text-faint) !important;
 }
 
+/* 내 위치 단추 — 오른쪽 아래 + 단추 바로 위에 한 줄로 세운다(겹치지 않게).
+   + 단추가 오른쪽 16px·아래 16px·지름 56px이므로 그 위 88px 자리에 가운데를 맞춘다. */
 .map-locate-btn {
   position: absolute;
-  right: 12px;
-  bottom: 32px;
+  right: 22px;
+  bottom: 88px;
   z-index: 1000;
   width: 44px;
   height: 44px;
@@ -706,6 +708,29 @@ body {
 .map-locate-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* 자리 고르기 십자 — 지도 한가운데에 뜨는 과녁. 핀 끝이 닿을 자리를 가리킨다. */
+.map-crosshair {
+  position: relative;
+  display: block;
+  width: 26px;
+  height: 26px;
+  border: 3px solid var(--accent);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9);
+}
+.map-crosshair::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  border-radius: 999px;
+  background: var(--accent);
 }
 
 /* 핀 마커 — 종류 색으로 꽉 찬 물방울 + 흰 아이콘(Lucide), 흰 테두리 링.

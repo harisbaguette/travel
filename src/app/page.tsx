@@ -40,7 +40,6 @@ import {
   DEFAULT_ROOM,
   loadRooms,
   OLD_ROOMS,
-  renameRoom,
   saveRooms,
   type Room,
 } from "@/lib/rooms";
@@ -194,7 +193,7 @@ export default function Home() {
   const skipSuggestRef = useRef(false);
   const [room, setRoom] = useState<string>(() => resolveInitialRoom());
   // 초대 링크로 처음 들어온 여행도 목록에 넣어 둬야 나중에 다시 찾아올 수 있다.
-  const [rooms, setRooms] = useState<Room[]>(() =>
+  const [rooms] = useState<Room[]>(() =>
     addRoom(loadRooms(), resolveInitialRoom())
   );
   const [notice, setNotice] = useState<string>("");
@@ -209,6 +208,8 @@ export default function Home() {
     lng: number;
     name?: string;
   } | null>(null);
+  // + 를 눌러 "자리 고르기"를 켠 상태 — 지도 가운데 십자를 보여 준다.
+  const [picking, setPicking] = useState(false);
   const [aiLoading, setAILoading] = useState(false);
   // AI가 찾아온 후보들 — 고르는 시트가 열려 있는 동안만 들고 있는다.
   const [aiFound, setAIFound] = useState<Pin[] | null>(null);
@@ -360,20 +361,12 @@ export default function Home() {
       // 다른 여행으로 넘어가면 이전 검색·비서 대화 흔적은 지운다
       setSearchTarget(null);
       setSugOpen(false);
+      setPicking(false);
       setChat([]);
       flyToRoom(value, nextPins);
     },
     [flyToRoom]
   );
-
-  // 여행 이름 바꾸기 — 초대 링크로 들어와 이름이 암호처럼 보일 때 알아보기 쉽게.
-  const handleRenameRoom = useCallback((id: string, label: string) => {
-    setRooms((cur) => {
-      const next = renameRoom(cur, id, label);
-      saveRooms(next);
-      return next;
-    });
-  }, []);
 
   // 후보 목록 닫기 — 목록과 고른 자리 표시를 함께 정리
   const closeSuggestions = useCallback(() => {
@@ -478,16 +471,18 @@ export default function Home() {
     });
   };
 
-  const handleMapClick = useCallback((lat: number, lng: number) => {
-    setModalCoord({ lat, lng });
-  }, []);
-
-  // 독 가운데 + 단추 — 지금 보고 있는 지도 한가운데에 핀을 추가한다.
+  // + 단추 — 바로 꽂지 않고 "자리 고르기"를 켠다. 지도를 움직여 가운데 십자에
+  // 원하는 곳을 맞춘 다음 확인을 눌러야 핀이 꽂힌다(지도를 눌러선 꽂히지 않는다).
   const handleFab = useCallback(() => {
     setTab("map");
+    setPicking(true);
+  }, []);
+
+  const confirmPick = useCallback(() => {
     const map = mapRef.current;
     if (!map) return;
     const c = map.getCenter();
+    setPicking(false);
     setModalCoord({ lat: c.lat, lng: c.lng });
   }, []);
 
@@ -705,7 +700,6 @@ export default function Home() {
             rooms={viewRooms}
             currentId={viewRoom || DEFAULT_ROOM.id}
             onSelect={switchRoom}
-            onRename={handleRenameRoom}
           />
           <button
             type="button"
@@ -901,36 +895,63 @@ export default function Home() {
           initialZoom={initialView.zoom}
           onPinDelete={handlePinDelete}
           onPinDragEnd={handlePinDragEnd}
-          onMapClick={handleMapClick}
           searchTarget={searchTarget}
           onSearchTargetAdd={handleSearchTargetAdd}
           onSearchTargetClose={() => setSearchTarget(null)}
           className="h-full w-full"
         />
 
-        {/* 첫 안내 — 핀이 하나도 없을 때만. 검색 결과를 보는 중엔 가리지 않게 숨긴다. */}
-        {tab === "map" && viewPins.length === 0 && !searchTarget && (
+        {/* 첫 안내 — 핀이 하나도 없을 때만. 검색 중이거나 자리를 고르는 중엔 가리지 않게 숨긴다. */}
+        {tab === "map" && viewPins.length === 0 && !searchTarget && !picking && (
           <div className="pointer-events-none absolute inset-x-8 top-1/2 z-[999] -translate-y-1/2 rounded-[16px] bg-[var(--surface)] px-5 py-4 text-center shadow-[var(--shadow-2)]">
             <p className="dw-display text-[1.25rem] text-[var(--text)]">
-              가고 싶은 곳을 눌러 보세요
+              오른쪽 아래 + 를 눌러 보세요
             </p>
             <p className="mt-1 text-xs text-[var(--text-muted)]">
-              지도를 누르면 그 자리에 핀이 꽂혀요
+              지도를 움직여 자리를 맞추면 핀이 꽂혀요
             </p>
           </div>
         )}
 
-        {/* 지도 위 떠 있는 + 단추 — 지금 보는 지도 한가운데에 핀을 꽂는다. */}
-        {tab === "map" && (
-          <button
-            type="button"
-            onClick={handleFab}
-            aria-label="핀 추가"
-            className="absolute bottom-4 right-4 z-[1000] flex h-14 w-14 items-center justify-center rounded-full bg-[var(--accent)] text-white shadow-[var(--shadow-2)] active:scale-95"
+        {/* 자리 고르기 — 가운데 십자. 손가락 입력은 그대로 지도로 통과시킨다. */}
+        {tab === "map" && picking && (
+          <div
+            className="pointer-events-none absolute inset-0 z-[1000] flex items-center justify-center"
+            aria-hidden
           >
-            <Plus size={24} strokeWidth={2.5} aria-hidden />
-          </button>
+            <span className="map-crosshair" />
+          </div>
         )}
+
+        {/* 지도 위 떠 있는 단추 — 평소엔 +, 자리를 고르는 중엔 확인/취소 막대 */}
+        {tab === "map" &&
+          (picking ? (
+            <div className="absolute inset-x-4 bottom-4 z-[1001] flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPicking(false)}
+                className="h-12 shrink-0 rounded-[14px] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--text-muted)] shadow-[var(--shadow-2)]"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={confirmPick}
+                className="h-12 min-w-0 flex-1 rounded-[14px] bg-[var(--accent)] text-sm font-bold text-white shadow-[var(--shadow-2)] active:scale-[0.98]"
+              >
+                여기에 핀 꽂기
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={handleFab}
+              aria-label="핀 추가"
+              className="absolute bottom-4 right-4 z-[1000] flex h-14 w-14 items-center justify-center rounded-full bg-[var(--accent)] text-white shadow-[var(--shadow-2)] active:scale-95"
+            >
+              <Plus size={24} strokeWidth={2.5} aria-hidden />
+            </button>
+          ))}
 
         {/* 비서 — AI에게 말로 시키는 화면. 대화는 페이지가 들고 있어 탭을 오가도 남는다. */}
         {tab === "assistant" && (
@@ -972,7 +993,11 @@ export default function Home() {
                   key={item.key}
                   type="button"
                   className={`dock-item${active ? " active" : ""}`}
-                  onClick={() => setTab(item.key)}
+                  onClick={() => {
+                    // 다른 화면으로 넘어가면 고르던 자리는 접는다
+                    if (item.key !== "map") setPicking(false);
+                    setTab(item.key);
+                  }}
                   aria-current={active ? "page" : undefined}
                 >
                   <Icon size={21} strokeWidth={active ? 2.5 : 1.5} />
