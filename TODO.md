@@ -2,7 +2,7 @@
 
 > 마지막 갱신: 2026-08-08
 > 저장소: git@github.com:harisbaguette/travel.git (main 푸시)
-> 배포: https://travel-chi-lilac.vercel.app
+> 배포: https://travel-pin-kr.vercel.app (travel-pin은 남이 선점 → -kr / 예전 주소 travel-chi-lilac도 동작)
 
 ---
 
