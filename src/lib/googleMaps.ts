@@ -11,7 +11,7 @@ export function hasGoogleKey(): boolean {
 
 let loadPromise: Promise<boolean> | null = null;
 
-// 열쇠가 틀렸을 때 구글이 불러 주는 신고 전화 — 받으면 무료 지도로 되돌릴 수 있게 한다.
+// 열쇠가 틀렸을 때 구글이 불러 주는 신고 전화 — 받으면 열쇠 없는 구글 조각으로 되돌린다.
 export function onGoogleAuthFailure(cb: () => void): void {
   if (typeof window === "undefined") return;
   (window as typeof window & { gm_authFailure?: () => void }).gm_authFailure = cb;

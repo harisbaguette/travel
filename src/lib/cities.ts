@@ -173,19 +173,17 @@ function toEnglishQuery(query: string): string | null {
   return q;
 }
 
-// 테이블 → 주소 사전(한국어) → 주소 사전(영어) → 구글(열쇠 없이) 순서로 찾는다.
+// 테이블 → 구글(열쇠 없이) → 주소 사전(한국어) → 주소 사전(영어) 순서로 찾는다.
+// 구글맵과 같은 답을 주는 것이 기본이고, 주소 사전은 구글이 막혔을 때의 예비.
 export async function resolveCity(query: string): Promise<LatLng | null> {
   const fromTable = findCity(query);
   if (fromTable) return fromTable;
+  const fromGoogle = await googleEmbedSearch(query);
+  if (fromGoogle.length > 0) return [fromGoogle[0].lat, fromGoogle[0].lng];
   const direct = await searchCity(query);
   if (direct) return direct;
   const en = toEnglishQuery(query);
-  if (en) {
-    const fromEn = await searchCity(en);
-    if (fromEn) return fromEn;
-  }
-  const fromGoogle = await googleEmbedSearch(query);
-  if (fromGoogle.length > 0) return [fromGoogle[0].lat, fromGoogle[0].lng];
+  if (en) return searchCity(en);
   return null;
 }
 
@@ -281,7 +279,7 @@ async function photonSearch(
 }
 
 // ── 구글 장소 검색(Places API) — 열쇠가 있을 때만 ──
-// 구글이 모은 가게·건물 자료까지 뒤지므로, 무료 지도 사전에 없는 한국 상호도 찾는다.
+// 구글이 모은 가게·건물 자료까지 뒤지므로, 주소 사전에 없는 한국 상호도 찾는다.
 interface GooglePlace {
   displayName?: { text?: string };
   formattedAddress?: string;
@@ -356,9 +354,9 @@ async function googlePlacesSearch(
 }
 
 // ── 구글 검색(열쇠 없이) — 우리 서버가 구글 지도 끼워넣기 화면을 대신 읽어 준다 ──
-// 무료 사전(Photon/Nominatim)이 모르는 한국 상호("누리플렉스" 등)까지 찾는다.
-// 위치가 아니라 이름으로만 찾으므로, 지도 근처 우선이 필요한 일반 낱말 검색에서는
-// 무료 사전을 먼저 쓰고 이건 마지막 예비로만 부른다.
+// 주소 사전(Photon/Nominatim)이 모르는 한국 상호("누리플렉스" 등)까지 찾는다.
+// simplify: 위치 편향이 안 먹혀 이름으로만 찾는다 — 지도 근처 우선이 필요한 일반
+// 낱말("야시장" 등)은 뒤이은 주소 사전 단계가 지도 근처 가중치로 받쳐 준다.
 async function googleEmbedSearch(
   query: string,
   signal?: AbortSignal
@@ -385,7 +383,7 @@ async function googleEmbedSearch(
   }
 }
 
-// 구글 공식(열쇠 있을 때) → 무료 사전 한국어 → 무료 사전 영어 → 구글(열쇠 없이) 순서.
+// 구글이 기본: 공식(열쇠 있을 때) → 열쇠 없는 구글 → 예비 주소 사전(한국어→영어) 순서.
 export async function suggestPlaces(
   query: string,
   near?: LatLng,
@@ -398,16 +396,15 @@ export async function suggestPlaces(
       const fromGoogle = await googlePlacesSearch(q, near, signal);
       if (fromGoogle.length > 0) return fromGoogle;
     } catch (e) {
-      // 도중 취소는 그대로 알리고, 그 밖의 실패는 무료 사전으로 넘어간다
+      // 도중 취소는 그대로 알리고, 그 밖의 실패는 다음 단계로 넘어간다
       if (e instanceof DOMException && e.name === "AbortError") throw e;
     }
   }
+  const fromEmbed = await googleEmbedSearch(q, signal);
+  if (fromEmbed.length > 0) return fromEmbed;
   const direct = await photonSearch(q, near, signal);
   if (direct.length > 0) return direct;
   const en = toEnglishQuery(q);
-  if (en) {
-    const fromEn = await photonSearch(en, near, signal);
-    if (fromEn.length > 0) return fromEn;
-  }
-  return googleEmbedSearch(q, signal);
+  if (en) return photonSearch(en, near, signal);
+  return [];
 }

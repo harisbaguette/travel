@@ -4,7 +4,6 @@ import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import { LocateFixed } from "lucide-react";
 import L, { type Map as LeafletMap } from "leaflet";
-import "@maplibre/maplibre-gl-leaflet";
 import "leaflet.gridlayer.googlemutant";
 import type { Pin } from "@/lib/types";
 import { PIN_TYPES, pinMarkerSvg } from "@/lib/pinTypes";
@@ -31,63 +30,21 @@ interface MapViewProps {
 
 // 구글 지도 그림 조각(타일) 주소 — 열쇠(API 키)나 계정 없이 바로 받아올 수 있다.
 // hl=ko: 지명을 구글맵 앱처럼 한국어로 보여 준다.
-// 주의: 구글이 공식으로 열어 둔 문은 아니라서, 언젠가 막히면 아래 무료 지도로 자동 복귀한다.
+// simplify: 구글이 공식으로 열어 둔 문은 아님 — 막히는 날이 오면 공식 열쇠를 넣어 올린다.
 const GOOGLE_TILE_URL =
   "https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&hl=ko";
-
-// 한국어 라벨이 나오는 무료 벡터 지도(OpenFreeMap). 열쇠(API 키) 없이 쓸 수 있다.
-// 확인일 2026-08-08: https://openfreemap.org/quick_start/
-const VECTOR_STYLE_URL = "https://tiles.openfreemap.org/styles/bright";
-const OSM_ATTRIBUTION =
-  '&copy; <a href="https://openfreemap.org">OpenFreeMap</a> &copy; OpenMapTiles &copy; OpenStreetMap contributors';
-// WebGL이 안 되는 기기용 예비 지도(글자는 현지어로 나옴)
-const OSM_TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 
 const DEFAULT_CENTER: [number, number] = [10.2899, 103.984]; // 푸꾸옥
 const DEFAULT_ZOOM = 11;
 
-function webglAvailable(): boolean {
-  try {
-    const canvas = document.createElement("canvas");
-    return Boolean(
-      canvas.getContext("webgl2") ?? canvas.getContext("webgl")
-    );
-  } catch {
-    return false;
-  }
-}
-
-// 지도 글자를 한국어 우선으로 바꾼다 — 한국어 이름이 없으면 현지 이름 그대로.
-// 도로 번호판(ref) 같은 글자는 건드리면 깨지므로, name을 쓰는 라벨만 바꾼다.
-function applyKoreanLabels(glMap: import("maplibre-gl").Map): void {
-  const style = glMap.getStyle();
-  if (!style?.layers) return;
-  for (const layer of style.layers) {
-    if (layer.type !== "symbol") continue;
-    const textField = glMap.getLayoutProperty(layer.id, "text-field");
-    if (!textField) continue;
-    const raw = JSON.stringify(textField);
-    if (!raw.includes("name")) continue;
-    glMap.setLayoutProperty(layer.id, "text-field", [
-      "coalesce",
-      ["get", "name:ko"],
-      ["get", "name"],
-    ]);
-  }
-}
-
-// 바탕 지도 층 — 구글 열쇠가 있으면 공식 구글 지도를, 없어도 구글 지도 조각을 깐다.
-// 순서: 구글 공식(열쇠 있을 때) → 구글 조각(열쇠 없이) → 벡터(무료) → 래스터(예비)
-function VectorBaseLayer() {
+// 바탕 지도 층 — 구글 지도만 쓴다.
+// 열쇠가 있으면 공식 구글 지도(googlemutant), 없으면 열쇠 없는 구글 조각.
+function GoogleBaseLayer() {
   const map = useMap();
-  const [mode, setMode] = useState<"google" | "gtile" | "vector" | "raster">(
-    () => {
-      if (typeof window === "undefined") return "gtile";
-      return hasGoogleKey() ? "google" : "gtile";
-    }
-  );
-  // 구글 조각을 하나라도 받았는지/몇 번 실패했는지 — 전부 실패면 무료 지도로 되돌린다
-  const gtileStateRef = useRef({ loaded: false, errors: 0 });
+  const [mode, setMode] = useState<"google" | "gtile">(() => {
+    if (typeof window === "undefined") return "gtile";
+    return hasGoogleKey() ? "google" : "gtile";
+  });
 
   // 출처 표기는 평소 작은 ⓘ 동그라미로 접어 둔다(지도를 가리지 않게).
   // "Leaflet" 링크는 지우고, 손가락으로 눌러도 펼쳐지도록 초점을 받게 한다.
@@ -127,32 +84,7 @@ function VectorBaseLayer() {
     };
   }, [map, mode]);
 
-  useEffect(() => {
-    if (mode !== "vector") return;
-    let cancelled = false;
-    let layer: L.MaplibreGL | null = null;
-    try {
-      layer = L.maplibreGL({ style: VECTOR_STYLE_URL });
-      layer.addTo(map);
-      map.attributionControl?.addAttribution(OSM_ATTRIBUTION);
-      const glMap = layer.getMaplibreMap();
-      // 스타일이 다 읽힌 뒤 라벨을 한국어로 교체
-      if (glMap.isStyleLoaded()) applyKoreanLabels(glMap);
-      else glMap.once("styledata", () => applyKoreanLabels(glMap));
-    } catch {
-      // 벡터 지도 생성 실패 — 다음 틱에 래스터로 전환(렌더 중 setState 금지 규칙 준수)
-      queueMicrotask(() => {
-        if (!cancelled) setMode("raster");
-      });
-    }
-    return () => {
-      cancelled = true;
-      if (layer) map.removeLayer(layer);
-      map.attributionControl?.removeAttribution(OSM_ATTRIBUTION);
-    };
-  }, [map, mode]);
-
-  // 열쇠 없는 구글 조각 — 받다가 전부 실패하면(구글이 문을 닫으면) 무료 지도로 되돌린다
+  // 열쇠 없는 구글 조각 — 공식 층이 없거나 실패했을 때의 기본 바탕
   if (mode === "gtile") {
     return (
       <TileLayer
@@ -160,23 +92,8 @@ function VectorBaseLayer() {
         url={GOOGLE_TILE_URL}
         subdomains={["0", "1", "2", "3"]}
         maxZoom={20}
-        eventHandlers={{
-          tileload: () => {
-            gtileStateRef.current.loaded = true;
-          },
-          tileerror: () => {
-            const s = gtileStateRef.current;
-            s.errors += 1;
-            if (!s.loaded && s.errors >= 4) {
-              setMode(webglAvailable() ? "vector" : "raster");
-            }
-          },
-        }}
       />
     );
-  }
-  if (mode === "raster") {
-    return <TileLayer attribution="&copy; OpenStreetMap contributors" url={OSM_TILE_URL} />;
   }
   return null;
 }
@@ -207,7 +124,7 @@ const MapView = forwardRef<LeafletMap, MapViewProps>(function MapView(
       className={className}
       style={{ height: "100%", width: "100%" }}
     >
-      <VectorBaseLayer />
+      <GoogleBaseLayer />
       {onReady && <MapReadyBridge onReady={onReady} />}
       <LocateButton />
       {searchTarget && (

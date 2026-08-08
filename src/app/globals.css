@@ -1,6 +1,5 @@
 @import "tailwindcss";
 @import "leaflet/dist/leaflet.css";
-@import "maplibre-gl/dist/maplibre-gl.css";
 
 /* DW(Doweek) 디자인 시스템 이식 — 정본: Z:\Doweek\design-system\DESIGN.md
    종이 수첩 컨셉: 따뜻한 종이 위 흰 카드 + 만년필 잉크 파랑 + 손글씨 시그니처.
@@ -141,6 +140,9 @@ body {
 .dock-nav {
   display: flex;
   justify-content: center;
+  /* 탭 화면 덮개(z 1010)보다 위 — 안 그러면 위로 튀어나온 + 단추의 윗부분이 덮개에 잘린다 */
+  position: relative;
+  z-index: 1020;
   /* 위 여백은 가운데 + 단추가 튀어나올 자리 — dock-wrap이 relative라 여기 안에서 겹치지 않는다 */
   padding: 12px 14px calc(12px + env(safe-area-inset-bottom)) 14px;
   background: var(--bg);
