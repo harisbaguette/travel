@@ -520,8 +520,11 @@ body {
 }
 .prep-chip {
   display: flex;
-  flex: 0 0 auto;
+  /* 칸을 고르게 나눠 가진다 — 세 칸이 판을 꽉 채우는 Doweek 필터 모양. */
+  flex: 1 1 0;
+  min-width: 0;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   min-height: 44px;
   padding: 0 14px;
@@ -568,7 +571,9 @@ body {
 }
 
 /* ── 보기 전환 마디(지도 | 리스트) — Doweek 세그먼트 문법:
-   흰 판 한 줄을 가로로 꽉 채우고, 고른 쪽만 파란 알약으로 채운다. ── */
+   흰 판 한 줄을 가로로 꽉 채우고, 고른 쪽만 파란 알약으로 채운다.
+   크기(판 높이·칩 높이·모서리·글씨)는 준비 화면 고르는 줄(.prep-filter/.prep-chip)과
+   같은 값으로 맞춰 둔다 — 한쪽만 바꾸면 두 화면 크기가 어긋나므로 함께 고칠 것. ── */
 .map-seg {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -581,13 +586,14 @@ body {
 }
 .map-seg-item {
   min-width: 0;
-  height: 44px;
+  min-height: 44px;
+  padding: 0 14px;
   border: none;
   border-radius: 14px;
   background: transparent;
   color: var(--text-muted);
   font-family: inherit;
-  font-size: 0.9375rem;
+  font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
   transition: background 0.18s var(--ease), color 0.18s var(--ease);
@@ -595,8 +601,7 @@ body {
 .map-seg-item.active {
   background: var(--accent);
   color: #fff;
-  font-weight: 800;
-  box-shadow: 0 2px 8px -2px color-mix(in srgb, var(--accent) 50%, transparent);
+  font-weight: 700;
 }
 
 /* ── 바닥에서 올라오는 입력 시트 — Doweek add-modal 이식 ── */
