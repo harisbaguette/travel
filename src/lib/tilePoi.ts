@@ -130,22 +130,28 @@ function parseFt(text: string, tx: number, ty: number): Candidate[] {
 }
 
 async function fetchFt(tx: number, ty: number, z: number): Promise<Candidate[]> {
-  try {
-    const res = await fetch(
-      `https://mt0.google.com/vt/ft?lyrs=m&hl=ko&x=${tx}&y=${ty}&z=${z}`,
-      {
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-        },
-        signal: AbortSignal.timeout(FT_TIMEOUT_MS),
-      }
-    );
-    if (!res.ok) return [];
-    return parseFt(await res.text(), tx, ty);
-  } catch {
-    return [];
+  // 구글 문이 여러 개(mt0~mt3) 있다 — 한 곳이 막히거나 늦으면 다른 문으로 한 번 더 두드린다.
+  // 문 선택은 조각 번호로 갈라 요청을 골고루 나눈다.
+  const first = (tx + ty) % 4;
+  for (const host of [`mt${first}`, `mt${(first + 1) % 4}`]) {
+    try {
+      const res = await fetch(
+        `https://${host}.google.com/vt/ft?lyrs=m&hl=ko&x=${tx}&y=${ty}&z=${z}`,
+        {
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+          },
+          signal: AbortSignal.timeout(FT_TIMEOUT_MS),
+        }
+      );
+      if (!res.ok) continue;
+      return parseFt(await res.text(), tx, ty);
+    } catch {
+      // 이 문은 실패 — 다음 문으로
+    }
   }
+  return [];
 }
 
 /**

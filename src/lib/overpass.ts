@@ -19,14 +19,16 @@ const OVERPASS_MIRRORS = [
   "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
 ];
 
-// 서버 하나당 8초 안에 답이 없으면 다음 서버로 넘어간다 (전체가 늦어지지 않게)
-const PER_MIRROR_TIMEOUT_SEC = 8;
+// 서버 하나당 6초 안에 답이 없으면 포기한다
+const PER_MIRROR_TIMEOUT_SEC = 6;
+// 앞 서버 답을 이만큼 기다려 보고, 없으면 다음 서버도 겹쳐서 출발시킨다
+const HEDGE_DELAY_MS = 400;
 
 async function fetchFromMirror(
   url: string,
-  query: string
+  query: string,
+  controller: AbortController
 ): Promise<OverpassElement[]> {
-  const controller = new AbortController();
   const timeoutId = setTimeout(
     () => controller.abort(),
     PER_MIRROR_TIMEOUT_SEC * 1000
@@ -55,25 +57,51 @@ async function fetchFromMirror(
   }
 }
 
-/** 미러를 차례로 시도한다. 전부 실패하면 elements가 null이고 failures에 사유가 남는다. */
+/**
+ * 미러를 시간차로 겹쳐 부른다 — 앞 서버가 늦으면 기다리고만 있지 않고 0.6초 뒤
+ * 다음 서버도 출발시켜, 먼저 도착한 답 하나만 쓰고 나머지는 끊는다.
+ * (지도 클릭 카드는 2.5초 안에 떠야 해서, 한 서버씩 차례로 기다리면 답이 못 낀다.)
+ * 전부 실패하면 elements가 null이고 failures에 사유가 남는다.
+ */
 export async function runOverpass(
   query: string
 ): Promise<{ elements: OverpassElement[] | null; failures: string[] }> {
   const failures: string[] = [];
-  for (const mirror of OVERPASS_MIRRORS) {
-    try {
-      return { elements: await fetchFromMirror(mirror, query), failures };
-    } catch (err) {
-      // 이 서버는 실패 — 다음 미러로 (실패 사유는 진단용으로 수집)
-      const host = new URL(mirror).host;
-      const reason =
-        err instanceof Error
-          ? err.name === "AbortError" || err.name === "TimeoutError"
-            ? "timeout"
-            : err.message
-          : String(err);
-      failures.push(`${host}: ${reason}`);
-    }
+  const controllers = OVERPASS_MIRRORS.map(() => new AbortController());
+  let done = false;
+
+  const attempts = OVERPASS_MIRRORS.map((mirror, i) =>
+    (async () => {
+      if (i > 0)
+        await new Promise((resolve) => setTimeout(resolve, i * HEDGE_DELAY_MS));
+      if (done) throw new Error("hedge-skip"); // 이미 답을 얻어 출발 취소
+      try {
+        const elements = await fetchFromMirror(mirror, query, controllers[i]);
+        done = true;
+        controllers.forEach((c, j) => {
+          if (j !== i) c.abort(); // 남은 서버 호출은 끊는다
+        });
+        return elements;
+      } catch (err) {
+        // 이긴 답이 이미 있으면 실패로 치지 않는다(우리가 끊은 것)
+        if (!done) {
+          const host = new URL(mirror).host;
+          const reason =
+            err instanceof Error
+              ? err.name === "AbortError" || err.name === "TimeoutError"
+                ? "timeout"
+                : err.message
+              : String(err);
+          failures.push(`${host}: ${reason}`);
+        }
+        throw err;
+      }
+    })()
+  );
+
+  try {
+    return { elements: await Promise.any(attempts), failures };
+  } catch {
+    return { elements: null, failures };
   }
-  return { elements: null, failures };
 }

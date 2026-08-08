@@ -148,12 +148,68 @@ async function reverseAddress(lat: number, lng: number): Promise<PoiInfo | null>
   }
 }
 
-// 이름이 서로 겹치는가 — 띄어쓰기와 대소문자를 지우고 한쪽이 다른 쪽을 품으면 같은 곳으로 본다.
+// 이름이 서로 겹치는가 — 글자 모양 통일(NFC) 뒤 띄어쓰기·문장부호·대소문자를 지우고
+// 한쪽이 다른 쪽을 품으면 같은 곳으로 본다. ("Bar & Restaurant" ↔ "Bar&Restaurant",
+// 베트남어처럼 같은 글자가 두 가지 코드로 적히는 경우까지 잡는다.)
 function namesOverlap(a: string, b: string): boolean {
-  const na = a.toLowerCase().replace(/\s+/g, "");
-  const nb = b.toLowerCase().replace(/\s+/g, "");
+  const clean = (s: string) =>
+    s.normalize("NFC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+  const na = clean(a);
+  const nb = clean(b);
   if (na.length < 2 || nb.length < 2) return false;
   return na.includes(nb) || nb.includes(na);
+}
+
+// 구글에서 집어낸 가게 이름으로 OSM에서 "같은 가게"를 찾아 속살(종류·시간·전화)을 빌린다.
+// 두 지도의 같은 가게 좌표가 수십 m 어긋나는 일이 흔해서, 가까운 것 하나만 보지 않고
+// 120m 안 후보 전부를 이름으로 맞춰 본 뒤 그중 가장 가까운 것을 고른다.
+async function findOsmMatch(
+  lat: number,
+  lng: number,
+  googleName: string
+): Promise<PoiInfo | null> {
+  const keys = "amenity|shop|tourism|leisure|office|craft|historic|healthcare";
+  const query = `[out:json][timeout:6];
+  (
+    node(around:120,${lat},${lng})["name"][~"^(${keys})$"~"."];
+    way(around:120,${lat},${lng})["name"][~"^(${keys})$"~"."];
+  );
+  out tags center 40;`;
+
+  const { elements } = await runOverpass(query);
+  if (!elements) return null;
+
+  let best: { info: PoiInfo; d: number } | null = null;
+  for (const e of elements) {
+    const tags = e.tags ?? {};
+    const coord = elementCoord(e);
+    if (!coord) continue;
+    // 표기가 여럿인 가게가 많다 — 아무 표기든 하나라도 겹치면 같은 가게로 본다
+    const candidates = [
+      tags.name,
+      tags["name:ko"],
+      tags["name:en"],
+      tags["name:vi"],
+      tags.alt_name,
+    ].filter((n): n is string => Boolean(n));
+    if (!candidates.some((n) => namesOverlap(n, googleName))) continue;
+    const d = dist2(lat, lng, coord.lat, coord.lng);
+    if (best && best.d <= d) continue;
+    best = {
+      d,
+      info: {
+        kind: "poi",
+        name: tags["name:ko"] ?? tags.name ?? googleName,
+        category: categoryLabel(tags),
+        lat: coord.lat,
+        lng: coord.lng,
+        hours: tags.opening_hours,
+        phone: tags.phone ?? tags["contact:phone"],
+        website: tags.website ?? tags["contact:website"],
+      },
+    };
+  }
+  return best?.info ?? null;
 }
 
 export async function GET(request: Request): Promise<Response> {
@@ -183,12 +239,11 @@ export async function GET(request: Request): Promise<Response> {
     const tile = await findTilePoiAt(lat, lng, zoom);
     if (tile) {
       // 여는 시간·전화 같은 속살은 OSM에서 같은 이름의 가게를 찾았을 때만 빌려 온다.
-      // 가게는 이미 찾았으니 이 덧붙임 조회가 늦으면(2.5초) 그냥 없이 답한다 — 카드가 늦게 뜨는 것보다 낫다.
-      const osm = await Promise.race([
-        findNearbyPoi(tile.lat, tile.lng),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500)),
+      // 가게는 이미 찾았으니 이 덧붙임 조회가 늦으면(3.2초) 그냥 없이 답한다 — 카드가 늦게 뜨는 것보다 낫다.
+      const same = await Promise.race([
+        findOsmMatch(tile.lat, tile.lng, tile.name),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 3200)),
       ]);
-      const same = osm && namesOverlap(osm.name, tile.name) ? osm : null;
       const poi: PoiInfo = {
         kind: "poi",
         name: tile.name,
