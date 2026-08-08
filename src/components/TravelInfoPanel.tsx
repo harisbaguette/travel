@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import {
   ArrowRight,
   BedDouble,
+  ChevronDown,
   MapPin,
   PlaneLanding,
   PlaneTakeoff,
@@ -307,121 +309,146 @@ function FlightCard({
   toPlaceholder: string;
   onPatch: (p: Partial<FlightInfo>) => void;
 }) {
+  // 접었다 폈다 — 기본은 펼침. 접으면 노선·시각만 한 줄로 남아 카드가 짧아진다.
+  const [open, setOpen] = useState(true);
+  const route = flight.from || flight.to ? `${flight.from || fromPlaceholder} → ${flight.to || toPlaceholder}` : "";
+
   return (
     <section className="dw-card p-4">
-      <h3 className="mb-3 flex items-center gap-1.5 text-sm font-bold text-[var(--text)]">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-1.5 text-left"
+      >
         <span className="text-[var(--accent-ink)]">{icon}</span>
-        {title}
-      </h3>
-      <div className="mb-2 flex items-center gap-2">
-        <label className="flex min-w-0 flex-1 flex-col gap-1">
-          <span className="text-[11px] font-semibold text-[var(--text-muted)]">날짜</span>
-          <input
-            type="date"
-            value={flight.date}
-            onChange={(e) => onPatch({ date: e.target.value })}
-            className="dw-input dw-input--sm text-xs"
-          />
-        </label>
-      </div>
-      <div className="mb-2 flex items-center gap-2">
-        <label className="flex min-w-0 flex-1 flex-col gap-1">
-          <span className="text-[11px] font-semibold text-[var(--text-muted)]">항공사</span>
+        <h3 className="text-sm font-bold text-[var(--text)]">{title}</h3>
+        {!open && (route || flight.depTime) && (
+          <span className="min-w-0 truncate text-xs font-semibold text-[var(--text-muted)]">
+            · {route}
+            {flight.depTime ? ` ${flight.depTime}` : ""}
+          </span>
+        )}
+        <ChevronDown
+          size={17}
+          strokeWidth={2.4}
+          className={`ml-auto shrink-0 text-[var(--text-muted)] transition-transform duration-150${open ? " rotate-180" : ""}`}
+          aria-hidden
+        />
+      </button>
+      {open && (
+        <div className="mt-3 flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <label className="flex min-w-0 flex-1 flex-col gap-1">
+              <span className="text-[11px] font-semibold text-[var(--text-muted)]">날짜</span>
+              <input
+                type="date"
+                value={flight.date}
+                onChange={(e) => onPatch({ date: e.target.value })}
+                className="dw-input dw-input--sm text-xs"
+              />
+            </label>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="flex min-w-0 flex-1 flex-col gap-1">
+              <span className="text-[11px] font-semibold text-[var(--text-muted)]">항공사</span>
+              <input
+                type="text"
+                value={flight.airline ?? ""}
+                onChange={(e) => onPatch({ airline: e.target.value })}
+                placeholder="비엣젯항공"
+                className="dw-input dw-input--sm text-xs"
+              />
+            </label>
+            <label className="flex w-28 shrink-0 flex-col gap-1">
+              <span className="text-[11px] font-semibold text-[var(--text-muted)]">편명</span>
+              <input
+                type="text"
+                value={flight.flightNo}
+                onChange={(e) => onPatch({ flightNo: e.target.value })}
+                placeholder="VJ975"
+                className="dw-input dw-input--sm text-xs"
+              />
+            </label>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="flex min-w-0 flex-1 flex-col gap-1">
+              <span className="text-[11px] font-semibold text-[var(--text-muted)]">출발</span>
+              <input
+                type="text"
+                value={flight.from}
+                onChange={(e) => onPatch({ from: e.target.value })}
+                placeholder={fromPlaceholder}
+                className="dw-input dw-input--sm text-xs"
+              />
+            </label>
+            <span aria-hidden className="mt-4 shrink-0 text-[var(--text-muted)]">
+              <ArrowRight size={14} strokeWidth={2.2} />
+            </span>
+            <label className="flex min-w-0 flex-1 flex-col gap-1">
+              <span className="text-[11px] font-semibold text-[var(--text-muted)]">도착</span>
+              <input
+                type="text"
+                value={flight.to}
+                onChange={(e) => onPatch({ to: e.target.value })}
+                placeholder={toPlaceholder}
+                className="dw-input dw-input--sm text-xs"
+              />
+            </label>
+          </div>
+          {/* 터미널 — 인천 T1/T2처럼 건물이 갈리는 공항용. 위 줄의 출발·도착과 세로로 짝이 맞는다. */}
+          <div className="flex items-center gap-2">
+            <label className="flex min-w-0 flex-1 flex-col gap-1">
+              <span className="text-[11px] font-semibold text-[var(--text-muted)]">출발 터미널</span>
+              <input
+                type="text"
+                value={flight.depTerminal ?? ""}
+                onChange={(e) => onPatch({ depTerminal: e.target.value })}
+                placeholder="T1"
+                className="dw-input dw-input--sm text-xs"
+              />
+            </label>
+            <span aria-hidden className="mt-4 w-[14px] shrink-0" />
+            <label className="flex min-w-0 flex-1 flex-col gap-1">
+              <span className="text-[11px] font-semibold text-[var(--text-muted)]">도착 터미널</span>
+              <input
+                type="text"
+                value={flight.arrTerminal ?? ""}
+                onChange={(e) => onPatch({ arrTerminal: e.target.value })}
+                placeholder="T2"
+                className="dw-input dw-input--sm text-xs"
+              />
+            </label>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="flex min-w-0 flex-1 flex-col gap-1">
+              <span className="text-[11px] font-semibold text-[var(--text-muted)]">출발 시각</span>
+              <input
+                type="time"
+                value={flight.depTime}
+                onChange={(e) => onPatch({ depTime: e.target.value })}
+                className="dw-input dw-input--sm text-xs tabular-nums"
+              />
+            </label>
+            <label className="flex min-w-0 flex-1 flex-col gap-1">
+              <span className="text-[11px] font-semibold text-[var(--text-muted)]">도착 시각</span>
+              <input
+                type="time"
+                value={flight.arrTime}
+                onChange={(e) => onPatch({ arrTime: e.target.value })}
+                className="dw-input dw-input--sm text-xs tabular-nums"
+              />
+            </label>
+          </div>
           <input
             type="text"
-            value={flight.airline ?? ""}
-            onChange={(e) => onPatch({ airline: e.target.value })}
-            placeholder="비엣젯항공"
+            value={flight.memo}
+            onChange={(e) => onPatch({ memo: e.target.value })}
+            placeholder="메모 — 수하물, 좌석 등"
             className="dw-input dw-input--sm text-xs"
           />
-        </label>
-        <label className="flex w-28 shrink-0 flex-col gap-1">
-          <span className="text-[11px] font-semibold text-[var(--text-muted)]">편명</span>
-          <input
-            type="text"
-            value={flight.flightNo}
-            onChange={(e) => onPatch({ flightNo: e.target.value })}
-            placeholder="VJ975"
-            className="dw-input dw-input--sm text-xs"
-          />
-        </label>
-      </div>
-      <div className="mb-2 flex items-center gap-2">
-        <label className="flex min-w-0 flex-1 flex-col gap-1">
-          <span className="text-[11px] font-semibold text-[var(--text-muted)]">출발</span>
-          <input
-            type="text"
-            value={flight.from}
-            onChange={(e) => onPatch({ from: e.target.value })}
-            placeholder={fromPlaceholder}
-            className="dw-input dw-input--sm text-xs"
-          />
-        </label>
-        <span aria-hidden className="mt-4 shrink-0 text-[var(--text-muted)]">
-          <ArrowRight size={14} strokeWidth={2.2} />
-        </span>
-        <label className="flex min-w-0 flex-1 flex-col gap-1">
-          <span className="text-[11px] font-semibold text-[var(--text-muted)]">도착</span>
-          <input
-            type="text"
-            value={flight.to}
-            onChange={(e) => onPatch({ to: e.target.value })}
-            placeholder={toPlaceholder}
-            className="dw-input dw-input--sm text-xs"
-          />
-        </label>
-      </div>
-      {/* 터미널 — 인천 T1/T2처럼 건물이 갈리는 공항용. 위 줄의 출발·도착과 세로로 짝이 맞는다. */}
-      <div className="mb-2 flex items-center gap-2">
-        <label className="flex min-w-0 flex-1 flex-col gap-1">
-          <span className="text-[11px] font-semibold text-[var(--text-muted)]">출발 터미널</span>
-          <input
-            type="text"
-            value={flight.depTerminal ?? ""}
-            onChange={(e) => onPatch({ depTerminal: e.target.value })}
-            placeholder="T1"
-            className="dw-input dw-input--sm text-xs"
-          />
-        </label>
-        <span aria-hidden className="mt-4 w-[14px] shrink-0" />
-        <label className="flex min-w-0 flex-1 flex-col gap-1">
-          <span className="text-[11px] font-semibold text-[var(--text-muted)]">도착 터미널</span>
-          <input
-            type="text"
-            value={flight.arrTerminal ?? ""}
-            onChange={(e) => onPatch({ arrTerminal: e.target.value })}
-            placeholder="T2"
-            className="dw-input dw-input--sm text-xs"
-          />
-        </label>
-      </div>
-      <div className="mb-2 flex items-center gap-2">
-        <label className="flex min-w-0 flex-1 flex-col gap-1">
-          <span className="text-[11px] font-semibold text-[var(--text-muted)]">출발 시각</span>
-          <input
-            type="time"
-            value={flight.depTime}
-            onChange={(e) => onPatch({ depTime: e.target.value })}
-            className="dw-input dw-input--sm text-xs tabular-nums"
-          />
-        </label>
-        <label className="flex min-w-0 flex-1 flex-col gap-1">
-          <span className="text-[11px] font-semibold text-[var(--text-muted)]">도착 시각</span>
-          <input
-            type="time"
-            value={flight.arrTime}
-            onChange={(e) => onPatch({ arrTime: e.target.value })}
-            className="dw-input dw-input--sm text-xs tabular-nums"
-          />
-        </label>
-      </div>
-      <input
-        type="text"
-        value={flight.memo}
-        onChange={(e) => onPatch({ memo: e.target.value })}
-        placeholder="메모 — 수하물, 좌석 등"
-        className="dw-input dw-input--sm text-xs"
-      />
+        </div>
+      )}
     </section>
   );
 }
