@@ -8,6 +8,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import dynamic from "next/dynamic";
+import Image from "next/image";
 import type { Map as LeafletMap } from "leaflet";
 import {
   CalendarDays,
@@ -467,8 +468,16 @@ export default function Home() {
       {/* 머리 — 손글씨 앱 이름 + 방 + 검색 */}
       <header className="shrink-0 px-4 pb-3 pt-3">
         <div className="mb-2.5 flex items-center gap-2">
+          <Image
+            src="/logo.png"
+            alt="핀지도"
+            width={28}
+            height={28}
+            className="shrink-0 rounded-[8px]"
+            priority
+          />
           <h1 className="dw-display min-w-0 flex-1 truncate text-[1.5625rem] leading-tight text-[var(--text)]">
-            여행 핀 지도
+            핀지도
           </h1>
           <select
             value={viewRoom}
