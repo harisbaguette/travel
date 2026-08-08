@@ -54,6 +54,7 @@ import {
   useSaveStatus,
 } from "@/lib/sync";
 import AIPickSheet from "@/components/AIPickSheet";
+import AssistantPanel, { type AssistantMsg } from "@/components/AssistantPanel";
 import PinModal from "@/components/PinModal";
 import ProjectSwitcher from "@/components/ProjectSwitcher";
 import TripPanel from "@/components/TripPanel";
@@ -161,9 +162,10 @@ function useHydrated(): boolean {
   );
 }
 
-// 화면은 둘뿐 — 한눈에 보는 지도, 그리고 계획을 전부 모아 둔 여행 화면.
+// 화면은 셋 — 손으로 꽂는 지도, AI에게 시키는 비서, 계획을 모아 둔 여행.
 const DOCK_ITEMS = [
   { key: "map", icon: MapIcon, label: "지도" },
+  { key: "assistant", icon: Bot, label: "비서" },
   { key: "trip", icon: NotebookPen, label: "여행" },
 ] as const;
 
@@ -211,6 +213,9 @@ export default function Home() {
   // AI가 찾아온 후보들 — 고르는 시트가 열려 있는 동안만 들고 있는다.
   const [aiFound, setAIFound] = useState<Pin[] | null>(null);
   const [tab, setTab] = useState<Tab>("map");
+  // 비서 채팅 — 여행(방)을 바꾸면 비운다(다른 도시 이야기가 섞이지 않게).
+  const [chat, setChat] = useState<AssistantMsg[]>([]);
+  const [chatLoading, setChatLoading] = useState(false);
 
   // 로그인 없이 브라우저를 구분하는 ID — 렌더에도 쓰이므로 state(첫 렌더에 한 번만 계산).
   const [userId] = useState<string>(() => getUserId());
@@ -352,9 +357,10 @@ export default function Home() {
       setItinerary(loadItinerary(value));
       localStorage.setItem("currentRoom", value);
       window.history.replaceState(null, "", `?room=${encodeURIComponent(value)}`);
-      // 다른 여행으로 넘어가면 이전 검색 흔적은 지운다
+      // 다른 여행으로 넘어가면 이전 검색·비서 대화 흔적은 지운다
       setSearchTarget(null);
       setSugOpen(false);
+      setChat([]);
       flyToRoom(value, nextPins);
     },
     [flyToRoom]
@@ -603,8 +609,75 @@ export default function Home() {
       setPins((prev) => [...prev, ...chosen]);
       for (const p of chosen) void pushPin(room, p);
       setNotice(`${chosen.length}곳을 꽂았어요`);
+      // 꽂은 결과가 바로 보이게 지도로 넘어간다
+      setTab("map");
     },
     [room]
+  );
+
+  // 비서에게 한 마디 보내기 — 서버 AI가 조사해서 답 + 핀 후보를 돌려준다.
+  const handleAssistantSend = useCallback(
+    async (text: string) => {
+      const history: AssistantMsg[] = [...chat, { role: "user", text }];
+      setChat(history);
+      setChatLoading(true);
+      try {
+        const c = mapRef.current?.getCenter();
+        const res = await fetch("/api/assistant", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            // 실패 안내문은 대화 맥락에서 뺀다
+            messages: history
+              .filter((m) => !m.isError)
+              .map((m) => ({ role: m.role, text: m.text })),
+            context: {
+              room: rooms.find((r) => r.id === room)?.label,
+              center: c ? { lat: c.lat, lng: c.lng } : undefined,
+              pinNames: pins.map((p) => p.name).slice(0, 40),
+            },
+          }),
+        });
+        const data = (await res.json()) as {
+          ok: boolean;
+          reply?: string;
+          pins?: Pin[];
+          error?: string;
+        };
+        if (!data.ok) {
+          setChat((cur) => [
+            ...cur,
+            { role: "assistant", text: data.error ?? "문제가 생겼어요.", isError: true },
+          ]);
+          return;
+        }
+        // 이미 꽂힌 핀과 50m 안쪽으로 겹치는 후보는 뺀다
+        const fresh = (data.pins ?? []).filter(
+          (np) =>
+            !pins.some((ep) => distanceMeters(ep.lat, ep.lng, np.lat, np.lng) < 50)
+        );
+        setChat((cur) => [
+          ...cur,
+          {
+            role: "assistant",
+            text: data.reply ?? "",
+            pins: fresh.length > 0 ? fresh : undefined,
+          },
+        ]);
+      } catch {
+        setChat((cur) => [
+          ...cur,
+          {
+            role: "assistant",
+            text: "서버와 연결하지 못했어요. 잠시 뒤 다시 시도해 주세요.",
+            isError: true,
+          },
+        ]);
+      } finally {
+        setChatLoading(false);
+      }
+    },
+    [chat, room, rooms, pins]
   );
 
   // 일정 변경 — 로컬 반영 + 서버 전송(내부에서 0.8초 모아 보냄)
@@ -847,21 +920,30 @@ export default function Home() {
           </div>
         )}
 
-        {/* 지도 위 떠 있는 단추 — 가운데 + 단추와 겹치지 않게 왼쪽 아래로 뺐다. */}
+        {/* 지도 위 떠 있는 + 단추 — 지금 보는 지도 한가운데에 핀을 꽂는다. */}
         {tab === "map" && (
           <button
             type="button"
-            onClick={handleAISearch}
-            disabled={aiLoading}
-            className="dw-btn-primary absolute bottom-4 left-4 z-[1000] h-11 min-h-0 rounded-full px-4 text-sm shadow-[var(--shadow-2)] disabled:opacity-60"
+            onClick={handleFab}
+            aria-label="핀 추가"
+            className="absolute bottom-4 right-4 z-[1000] flex h-14 w-14 items-center justify-center rounded-full bg-[var(--accent)] text-white shadow-[var(--shadow-2)] active:scale-95"
           >
-            {aiLoading ? (
-              <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-            ) : (
-              <Sparkles size={16} strokeWidth={2.4} aria-hidden />
-            )}
-            AI 맛집
+            <Plus size={24} strokeWidth={2.5} aria-hidden />
           </button>
+        )}
+
+        {/* 비서 — AI에게 말로 시키는 화면. 대화는 페이지가 들고 있어 탭을 오가도 남는다. */}
+        {tab === "assistant" && (
+          <div className="absolute inset-0 z-[1010] bg-[var(--bg)]">
+            <AssistantPanel
+              messages={chat}
+              loading={chatLoading}
+              onSend={handleAssistantSend}
+              onPickPins={(found) => setAIFound(found)}
+              onQuickFood={handleAISearch}
+              quickLoading={aiLoading}
+            />
+          </div>
         )}
 
         {tab === "trip" && (
@@ -878,15 +960,10 @@ export default function Home() {
         )}
       </div>
 
-      {/* 하단 독 — Doweek 문법: 유리판 + 가운데 추가 단추 */}
+      {/* 하단 독 — Doweek 문법: 유리판 세 칸. 핀 추가 단추는 지도 위로 옮겼다. */}
       <nav className="dock-nav" aria-label="화면 이동">
         <div className="dock-wrap">
-          <button type="button" className="dock-fab" onClick={handleFab} aria-label="핀 추가">
-            <span className="fab-glyph flex">
-              <Plus size={22} strokeWidth={2.5} />
-            </span>
-          </button>
-          <div className="dock-glass dock-glass--2">
+          <div className="dock-glass dock-glass--3">
             {DOCK_ITEMS.map((item) => {
               const Icon = item.icon;
               const active = tab === item.key;
