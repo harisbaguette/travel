@@ -936,7 +936,7 @@ body {
   }
 }
 
-/* ── 빈 화면 — 글로 설명하는 대신 그림 하나와 한 줄, 그리고 바로 누를 거리 ── */
+/* ── 빈 화면 — 글로 길게 설명하는 대신 그림 하나와 한 줄 ── */
 .dw-empty {
   display: flex;
   flex-direction: column;
@@ -960,35 +960,6 @@ body {
   font-size: 1rem;
   font-weight: 700;
   color: var(--text);
-}
-.dw-empty-chips {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
-}
-.dw-empty-chip {
-  min-height: 38px;
-  padding: 0 14px;
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--text);
-  font-family: inherit;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: border-color 0.14s var(--ease), color 0.14s var(--ease);
-}
-.dw-empty-chip:active {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-@media (hover: hover) and (pointer: fine) {
-  .dw-empty-chip:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-  }
 }
 
 
@@ -1820,40 +1791,12 @@ li.dw-card:nth-child(n + 7) {
   animation: dw-pop 0.3s var(--ease-spring) 0.12s backwards;
 }
 
-/* 아무것도 없는 화면 — 그림이 톡 뜨고, 제목과 예시 알약이 차례로 따라 올라온다.
-   빈 화면은 사용자가 가장 오래 들여다보는 자리라 여기가 심심하면 앱 전체가 심심해 보인다. */
+/* 아무것도 없는 화면 — 그림이 톡 뜨고 제목이 따라 올라온다 */
 .dw-empty-art {
   animation: dw-pop 0.42s var(--ease-spring) backwards;
 }
 .dw-empty-title {
   animation: dw-rise 0.36s var(--ease-out) 0.06s backwards;
-}
-.dw-empty-chips > * {
-  animation: dw-rise 0.36s var(--ease-out) backwards;
-}
-.dw-empty-chips > *:nth-child(1) {
-  animation-delay: 0.12s;
-}
-.dw-empty-chips > *:nth-child(2) {
-  animation-delay: 0.17s;
-}
-.dw-empty-chips > *:nth-child(3) {
-  animation-delay: 0.22s;
-}
-.dw-empty-chips > *:nth-child(n + 4) {
-  animation-delay: 0.27s;
-}
-.dw-empty-chip {
-  transition: border-color 0.14s var(--ease), color 0.14s var(--ease),
-    background var(--dur-hover) var(--ease-out), box-shadow var(--dur-hover) var(--ease-out),
-    transform var(--dur-press) var(--ease-out);
-}
-@media (hover: hover) and (pointer: fine) {
-  .dw-empty-chip:hover {
-    background: var(--surface-hover);
-    box-shadow: var(--shadow-lift);
-    transform: translateY(-2px);
-  }
 }
 
 /* 기다리는 자리 — 회색 판 위로 빛줄기가 지나간다 */

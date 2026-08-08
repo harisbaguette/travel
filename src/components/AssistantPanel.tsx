@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, Check, ExternalLink, Pin as PinIcon, RotateCcw, Sparkles } from "lucide-react";
+import { ArrowUp, Check, ExternalLink, Pin as PinIcon, RotateCcw } from "lucide-react";
 import type { Pin } from "@/lib/types";
 import { PIN_TYPES } from "@/lib/pinTypes";
 import { googleMapsUrl } from "@/lib/mapLinks";
@@ -39,15 +39,6 @@ interface AssistantPanelProps {
 }
 
 const MAX_SHOWN_SOURCES = 6;
-
-// 처음 들어왔을 때 눌러 볼 수 있는 부탁 네 가지 — 빈 화면에 뭘 물어야 할지 몰라
-// 그냥 나가는 일을 막는다. 누르면 그대로 비서에게 보낸다.
-const STARTER_ASKS = [
-  "맛집 추천해 줘",
-  "분위기 좋은 카페",
-  "꼭 가볼 곳",
-  "마사지 잘하는 곳",
-];
 
 // 기다리는 동안 지금 무슨 일을 하는지 순서대로 보여 준다 — 실제 일 순서와 같다
 // (검색 → 글 읽기 → 자리 확인). 몇 초에 넘어갈지는 대략의 경험값.
@@ -184,26 +175,6 @@ export default function AssistantPanel({
   return (
     <div className="flex h-full flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-3">
-        {messages.length === 0 && !loading && (
-          <div className="dw-empty mt-[14vh]">
-            <span className="dw-empty-art" aria-hidden>
-              <Sparkles size={28} strokeWidth={1.8} />
-            </span>
-            <span className="dw-empty-title">어디가 좋을지 물어보세요</span>
-            <div className="dw-empty-chips">
-              {STARTER_ASKS.map((ask) => (
-                <button
-                  key={ask}
-                  type="button"
-                  onClick={() => onSend(ask)}
-                  className="dw-empty-chip"
-                >
-                  {ask}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
         <ul className="flex flex-col gap-2.5 pb-3">
           {messages.map((m, i) => {
             const hasPins = Boolean(m.pins && m.pins.length > 0);
