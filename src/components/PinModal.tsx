@@ -36,10 +36,13 @@ export default function PinModal({
   const editing = mode === "edit";
   useSheet(onClose);
 
-  // 종류 칸은 5칸×2줄 격자 — 알약이 미끄러질 칸의 가로·세로 자리를 넘긴다.
-  const COLS = 5;
-  const activeIdx = PIN_TYPE_LIST.findIndex((c) => c.type === type);
-  const activeColor = PIN_TYPE_LIST[activeIdx]?.color;
+  // 종류 칸은 3칸×2줄 격자 — 알약이 미끄러질 칸의 가로·세로 자리를 넘긴다.
+  // 숙소·공항처럼 손으로 고를 수 없는 종류의 핀을 열면 짝이 없다(-1). 그럴 땐
+  // 알약을 첫 칸에 두고 색만 지워, 엉뚱한 칸이 칠해지는 것을 막는다.
+  const COLS = 3;
+  const foundIdx = PIN_TYPE_LIST.findIndex((c) => c.type === type);
+  const activeIdx = foundIdx < 0 ? 0 : foundIdx;
+  const activeColor = foundIdx < 0 ? "transparent" : PIN_TYPE_LIST[foundIdx].color;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

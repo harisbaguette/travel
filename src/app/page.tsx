@@ -930,6 +930,72 @@ export default function Home() {
     [pins, room, userId, resolveMapLink]
   );
 
+  // 항공 칸의 출발·도착 공항 이름 → 공항 핀.
+  // 종류 고르개에서 공항을 뺐으므로, 공항 핀은 오직 여기서만 생긴다.
+  // 글자를 치는 동안에는 묻지 않고, 1.2초 손을 뗀 뒤에 한 번만 구글에게 물어본다.
+  // 한 번 물어본 이름은 기억해 두어 같은 이름을 다시 묻지 않는다.
+  const pinsRef = useRef(pins);
+  useEffect(() => {
+    pinsRef.current = pins;
+  }, [pins]);
+  const airportAsked = useRef<Set<string>>(new Set());
+  const { outbound, inbound } = itinerary;
+  useEffect(() => {
+    if (!hydrated) return;
+    const names = [outbound?.from, outbound?.to, inbound?.from, inbound?.to]
+      .map((s) => (s ?? "").trim())
+      .filter((s) => s.length >= 2);
+    const todo = [...new Set(names)].filter(
+      (n) => !airportAsked.current.has(`${room} ${n}`)
+    );
+    if (todo.length === 0) return;
+    let alive = true;
+    const timer = window.setTimeout(async () => {
+      for (const name of todo) {
+        if (!alive) return;
+        airportAsked.current.add(`${room} ${name}`);
+        // 이미 그 공항 핀이 있으면 그만둔다(다른 기기가 먼저 꽂아 둔 경우 포함).
+        if (pinsRef.current.some((p) => p.type === "airport" && p.name.includes(name))) continue;
+        const query = /공항|airport/i.test(name) ? name : `${name} 공항`;
+        let place: PlaceSuggestion | undefined;
+        try {
+          place = (await suggestPlaces(query))[0];
+        } catch {
+          // 못 물어봐도 앱은 그대로 돈다 — 다음에 이름을 고치면 다시 물어본다
+          airportAsked.current.delete(`${room} ${name}`);
+        }
+        if (!alive || !place) continue;
+        const spot = place;
+        // 공항은 넓어서 좌표가 조금씩 다르게 온다 — 1km 안에 공항 핀이 있으면 같은 곳으로 본다.
+        const near = pinsRef.current.some(
+          (p) =>
+            p.type === "airport" &&
+            distanceMeters(p.lat, p.lng, spot.lat, spot.lng) < 1000
+        );
+        if (near) continue;
+        const newPin: Pin = {
+          id: `pin-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          lat: spot.lat,
+          lng: spot.lng,
+          type: "airport",
+          name: spot.name || query,
+          memo: "",
+          emoji: PIN_TYPES.airport.emoji,
+          isAI: false,
+          createdAt: Date.now(),
+          createdBy: userId || undefined,
+        };
+        pinsRef.current = [...pinsRef.current, newPin];
+        setPins((prev) => [...prev, newPin]);
+        void pushPin(room, newPin);
+      }
+    }, 1200);
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, [hydrated, outbound, inbound, room, userId]);
+
   // 이어받기 전(서버가 그린 첫 화면)에는 저장값 대신 빈 상태를 그린다.
   const viewRoom = hydrated ? room : "";
   const viewRooms = hydrated ? rooms : INITIAL_ROOMS;

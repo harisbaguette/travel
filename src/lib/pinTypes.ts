@@ -121,18 +121,17 @@ export const PIN_TYPES: Record<PinType, PinTypeConfig> = {
   },
 };
 
-// Display order (chips in the list filter and the pin sheet's first row).
-// Shopping outranks stay — stays are planned in the prepare tab, rarely pinned.
+// Choices offered to the user (list filter + pin sheet). Six, not ten:
+// - market / fruit fold into shopping — a mart, a market and a fruit stall are all "쇼핑" to us,
+//   and splitting them left two chips reading 0.
+// - stay / airport are never picked by hand: the prepare tab drops a stay pin from the lodging
+//   card and an airport pin from the flight card. They stay in PIN_TYPES so those pins still draw.
 export const PIN_TYPE_LIST: PinTypeConfig[] = [
   PIN_TYPES.food,
   PIN_TYPES.spot,
   PIN_TYPES.cafe,
   PIN_TYPES.shopping,
   PIN_TYPES.massage,
-  PIN_TYPES.airport,
-  PIN_TYPES.fruit,
-  PIN_TYPES.stay,
-  PIN_TYPES.market,
   PIN_TYPES.etc,
 ];
 
