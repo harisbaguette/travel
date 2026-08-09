@@ -244,6 +244,28 @@ export default function SchedulePanel({
             const sleeping = stays.filter(
               (s) => s.checkIn && s.checkOut && s.checkIn < day.date && day.date < s.checkOut
             );
+            // 주소를 넣어 지도 자리가 붙은 잠자리는 이 날 줄에 이미 한 칸으로 들어가 있다.
+            // 그 줄 밑에 "체크인 · 시각 · 방 번호"를 덧붙이고, 같은 내용의 카드는 따로 안 그린다
+            // (안 그러면 같은 잠자리가 한 날에 두 번 보인다).
+            const stayNote = new Map<string, string>();
+            const noteOn = (pinId: string, text: string) => {
+              const had = stayNote.get(pinId);
+              stayNote.set(pinId, had ? `${had} · ${text}` : text);
+            };
+            for (const s of checkOuts) {
+              if (s.pinId && day.pinIds.includes(s.pinId))
+                noteOn(s.pinId, ["체크아웃", s.checkOutTime].filter(Boolean).join(" · "));
+            }
+            for (const s of checkIns) {
+              if (s.pinId && day.pinIds.includes(s.pinId))
+                noteOn(
+                  s.pinId,
+                  ["체크인", s.checkInTime, s.roomNo].filter(Boolean).join(" · ")
+                );
+            }
+            const onSchedule = (s: StayInfo) => Boolean(s.pinId && stayNote.has(s.pinId));
+            const cardCheckIns = checkIns.filter((s) => !onSchedule(s));
+            const cardCheckOuts = checkOuts.filter((s) => !onSchedule(s));
             const showOutbound =
               outbound && flightDayIndex(outbound, 0) === i ? outbound : null;
             const showInbound =
@@ -252,8 +274,8 @@ export default function SchedulePanel({
             const autoCount =
               (showOutbound ? 1 : 0) +
               (showInbound ? 1 : 0) +
-              checkIns.length +
-              checkOuts.length;
+              cardCheckIns.length +
+              cardCheckOuts.length;
             return (
               <li key={day.date} className="trip-section">
                 <button
@@ -298,11 +320,12 @@ export default function SchedulePanel({
                   <div className="trip-section-body flex flex-col gap-2">
                     {showOutbound && <FlightRow flight={showOutbound} />}
 
-                    {/* 나오는 날 아침 체크아웃 → 들어가는 날 체크인 순서로 보여 준다. */}
-                    {checkOuts.map((s) => (
+                    {/* 나오는 날 아침 체크아웃 → 들어가는 날 체크인 순서로 보여 준다.
+                        지도 자리가 붙은 잠자리는 아래 줄 목록에 들어가므로 여기선 뺀다. */}
+                    {cardCheckOuts.map((s) => (
                       <StayRow key={`out-${s.id}`} stay={s} kind="out" />
                     ))}
-                    {checkIns.map((s) => (
+                    {cardCheckIns.map((s) => (
                       <StayRow key={`in-${s.id}`} stay={s} kind="in" />
                     ))}
 
@@ -353,13 +376,21 @@ export default function SchedulePanel({
                                 aria-label={`${label} 시각`}
                               />
                               {pin && cfg ? (
-                                <span className="flex min-w-0 flex-1 items-center gap-1.5">
-                                  <span className="shrink-0" aria-hidden>
-                                    <cfg.Icon size={14} color={cfg.color} />
+                                <span className="flex min-w-0 flex-1 flex-col">
+                                  <span className="flex min-w-0 items-center gap-1.5">
+                                    <span className="shrink-0" aria-hidden>
+                                      <cfg.Icon size={14} color={cfg.color} />
+                                    </span>
+                                    <span className="truncate text-sm text-[var(--text)]">
+                                      {pin.name}
+                                    </span>
                                   </span>
-                                  <span className="truncate text-sm text-[var(--text)]">
-                                    {pin.name}
-                                  </span>
+                                  {/* 잠자리면 그 줄 밑에 체크인·시각·방 번호를 작게 붙인다 */}
+                                  {stayNote.has(pin.id) && (
+                                    <span className="truncate pl-[22px] text-[11px] font-semibold tabular-nums text-[var(--text-muted)]">
+                                      {stayNote.get(pin.id)}
+                                    </span>
+                                  )}
                                 </span>
                               ) : (
                                 <span className="flex min-w-0 flex-1 items-center gap-1.5">

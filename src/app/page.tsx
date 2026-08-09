@@ -29,7 +29,7 @@ import type { Itinerary, Pin, PinType } from "@/lib/types";
 import { PIN_TYPES, PIN_TYPE_LIST } from "@/lib/pinTypes";
 import { isShortMapLink, looksLikeMapLink, parseGoogleMapsUrl } from "@/lib/mapLinks";
 import { dateRange, daysBetween } from "@/lib/dates";
-import { dayOrder, removePinsFromDay } from "@/lib/dayEntries";
+import { dayOrder, removePinsFromDay, syncStayDays } from "@/lib/dayEntries";
 import type { DayRoute, MapHandle } from "@/components/MapView";
 import { loadPins, savePins } from "@/lib/pinStorage";
 import {
@@ -702,10 +702,14 @@ export default function Home() {
   );
 
   // 일정 변경 — 로컬 반영 + 서버 전송(내부에서 0.8초 모아 보냄)
+  // 잠자리의 들어가는 날·나오는 날을 고치면, 그 잠자리 자리도 일정의 그 날 칸으로 함께 옮긴다.
   const handleItineraryChange = useCallback(
     (it: Itinerary) => {
-      setItinerary(it);
-      pushItinerary(room, it);
+      setItinerary((cur) => {
+        const next = syncStayDays(cur, it);
+        pushItinerary(room, next);
+        return next;
+      });
     },
     [room]
   );
@@ -831,11 +835,17 @@ export default function Home() {
   );
 
   // 숙소 칸에 적어 넣은 구글 지도 링크(또는 숙소 이름) — 자리를 읽어 숙소 핀으로 지도에 꽂고,
-  // 숙소 이름 칸이 따로 없으므로 찾아낸 이름을 그대로 숙소 이름으로 채운다. 체크인/아웃 날짜만 고르면
-  // 일정 화면에는 자동으로 나타난다(체크인·체크아웃 줄).
+  // 숙소 이름 칸이 따로 없으므로 찾아낸 이름을 그대로 숙소 이름으로 채운다.
+  // 들어가는 날·나오는 날을 골라 뒀으면 그 날 일정 칸에도 한 줄로 같이 올린다.
   // 붙여넣기와 칸 벗어나기가 거의 동시에 올 수 있어, 같은 숙소 건은 한 번에 하나만 처리한다
   // (안 막으면 링크 읽기가 겹쳐 돌아 핀이 두 개 꽂힌다).
   const stayLinkBusy = useRef<Set<string>>(new Set());
+  // 링크 읽기가 끝날 때쯤의 "가장 최근 일정"을 꺼내 쓰는 창구 —
+  // 함수가 만들어질 때 들고 있던 옛 사본을 쓰면 방금 적힌 주소가 지워진다.
+  const itineraryRef = useRef(itinerary);
+  useEffect(() => {
+    itineraryRef.current = itinerary;
+  }, [itinerary]);
   const handleStayMapLink = useCallback(
     async (stayId: string, raw: string) => {
       if (stayLinkBusy.current.has(stayId)) return;
@@ -874,19 +884,24 @@ export default function Home() {
         }
         // 붙여넣기 직후라 이 함수가 들고 있는 일정 사본에는 방금 적힌 주소가 아직 없을 수 있다.
         // 최신 일정을 받아서 고치는 방식으로, 그 주소가 지워지지 않게 한다.
-        setItinerary((cur) => {
-          const next = {
-            ...cur,
-            stays: (cur.stays ?? []).map((s) =>
-              s.id === stayId
-                ? { ...s, name: pinName || s.name, pinId }
-                : s
-            ),
-          };
-          pushItinerary(room, next);
-          return next;
-        });
-        setNotice(`${pinName || "숙소"} 핀을 지도에 꽂았어요`);
+        const cur = itineraryRef.current;
+        const patched = {
+          ...cur,
+          stays: (cur.stays ?? []).map((s) =>
+            s.id === stayId ? { ...s, name: pinName || s.name, pinId } : s
+          ),
+        };
+        // 들어가는 날·나오는 날을 이미 골라 뒀으면 그 날 일정에도 같이 올린다.
+        const next = syncStayDays(cur, patched);
+        const onSchedule = next.days !== patched.days;
+        setItinerary(next);
+        itineraryRef.current = next;
+        pushItinerary(room, next);
+        setNotice(
+          onSchedule
+            ? `${pinName || "숙소"}을(를) 지도와 일정에 넣었어요`
+            : `${pinName || "숙소"} 핀을 지도에 꽂았어요 — 체크인 날짜를 고르면 일정에도 들어가요`
+        );
       } finally {
         stayLinkBusy.current.delete(stayId);
       }
