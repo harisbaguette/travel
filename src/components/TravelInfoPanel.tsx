@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   BedDouble,
@@ -23,8 +23,9 @@ interface TravelInfoPanelProps {
   onChange: (it: Itinerary) => void;
   /** 항공 칸만 볼지 숙소 칸만 볼지 — 준비 화면이 둘을 따로 보여 준다. */
   part: "flights" | "stays";
-  /** 숙소 칸에 구글 지도 링크를 붙여넣었을 때 — 지도에 핀을 꽂고 이름을 채워 준다. */
-  onStayMapLink?: (stayId: string, url: string) => void;
+  /** 숙소 칸에 구글 지도 링크를 붙여넣었을 때 — 지도에 핀을 꽂고 이름을 채워 준다.
+   *  quiet는 사람이 시킨 게 아니라 화면이 알아서 다시 물어보는 경우 — 실패해도 조용히 넘어간다. */
+  onStayMapLink?: (stayId: string, url: string, quiet?: boolean) => void;
 }
 
 // 주소 칸에 아직 붙여넣은 링크만 있으면 옮겨 담을 게 없다 — 주소로 바뀐 뒤에만 복사 단추를 보인다.
@@ -47,7 +48,9 @@ export default function TravelInfoPanel({
     onChange({ ...itinerary, [key]: { ...cur, ...patch } });
   };
 
-  const stays = itinerary.stays ?? [];
+  // 저장본에 숙소 칸이 아예 없을 수도 있다 — 그때 쓸 빈 목록을 매번 새로 만들지 않게 붙잡아 둔다
+  // (새로 만들면 아래 "다시 물어보기" 장치가 화면을 그릴 때마다 헛돈다).
+  const stays = useMemo(() => itinerary.stays ?? [], [itinerary.stays]);
 
   // 숙소 카드 접었다 폈다 — 기본은 펼침. 한 번 만지면 그 뒤로 그 상태를 기억한다.
   const [openStays, setOpenStays] = useState<Record<string, boolean>>({});
@@ -79,14 +82,29 @@ export default function TravelInfoPanel({
 
   // 주소 칸에 무언가 들어오면(붙여넣기, 또는 다 적고 칸을 벗어날 때) 위(page)에 알려
   // 지도에 핀을 꽂고 이름을 받아 온다. 구글 지도 링크든 그냥 숙소 이름이든 다 찾아 준다.
-  // 방금 넣은 그 값으로 이미 꽂았으면 다시 안 꽂는다.
+  // 같은 글자로 이미 다 받아 왔으면(자리도 이름도) 다시 묻지 않는다. 자리는 꽂혔는데
+  // 이름이 비어 있으면 아직 덜 된 것이므로 다시 묻는다 — 안 그러면 영영 빈 이름으로 굳는다.
   const tryStayLink = (s: StayInfo, value: string) => {
     if (!onStayMapLink) return;
     const t = value.trim();
     if (t.length < 2) return;
-    if (s.pinId && t === (s.address ?? "").trim()) return;
+    if (s.pinId && s.name.trim() && t === (s.address ?? "").trim()) return;
     onStayMapLink(s.id, t);
   };
+
+  // 주소는 적혀 있는데 이름이 비어 있는 잠자리 — 화면을 열 때 조용히 한 번 더 물어본다.
+  // 예전에 인터넷이 느려 이름을 못 받아 온 채로 굳어 버린 칸을 스스로 고치는 장치다.
+  // 한 잠자리당 화면을 여는 동안 딱 한 번만 물어본다(계속 물어 대지 않게).
+  const asked = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (part !== "stays" || !onStayMapLink) return;
+    for (const s of stays) {
+      const written = (s.address ?? "").trim();
+      if (!written || s.name.trim() || asked.current.has(s.id)) continue;
+      asked.current.add(s.id);
+      onStayMapLink(s.id, written, true);
+    }
+  }, [part, stays, onStayMapLink]);
 
   // 채워진 영문 주소를 한 번 눌러 옮겨 담기 — 입국·세관 서류 칸에 그대로 붙여 넣으라고.
   // 누른 뒤 잠깐 체크 표시로 바뀌어, 담겼는지 눈으로 확인된다.

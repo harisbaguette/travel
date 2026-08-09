@@ -9,7 +9,7 @@ interface PreparePanelProps {
   itinerary: Itinerary;
   onItineraryChange: (it: Itinerary) => void;
   /** 숙소 칸에 구글 지도 링크를 붙여넣었을 때 — 지도에 핀을 꽂고 이름을 채워 준다. */
-  onStayMapLink?: (stayId: string, url: string) => void;
+  onStayMapLink?: (stayId: string, url: string, quiet?: boolean) => void;
 }
 
 type SectionKey = "flights" | "stays" | "shopping" | "packing" | "agenda";

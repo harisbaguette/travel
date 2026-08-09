@@ -848,13 +848,15 @@ export default function Home() {
     itineraryRef.current = itinerary;
   }, [itinerary]);
   const handleStayMapLink = useCallback(
-    async (stayId: string, raw: string) => {
+    async (stayId: string, raw: string, quiet = false) => {
       if (stayLinkBusy.current.has(stayId)) return;
       stayLinkBusy.current.add(stayId);
       try {
         const place = await resolveMapLink(raw);
         if (!place) {
-          setNotice("그 자리를 못 찾았어요 — 구글 지도 공유 링크를 붙여넣어 주세요");
+          // 화면이 알아서 다시 물어본 경우엔 실패해도 말없이 넘어간다 — 사람이 시킨 일이 아니라서.
+          if (!quiet)
+            setNotice("그 자리를 못 찾았어요 — 구글 지도 공유 링크를 붙여넣어 주세요");
           return;
         }
         // 그 자리(50m 안)에 이미 핀이 있으면 그 핀을 쓰고, 없으면 숙소 핀을 새로 꽂는다.
@@ -866,6 +868,13 @@ export default function Home() {
         if (near) {
           pinId = near.id;
           if (!pinName) pinName = near.name;
+          // 예전에 이름을 못 받아 와 "숙소"라고만 꽂혀 있던 자리 — 이제 진짜 이름을
+          // 알았으니 지도 위 이름표도 같이 고쳐 준다(사람이 손으로 붙인 이름은 안 건드림).
+          else if (near.name !== pinName && (!near.name.trim() || near.name === "숙소")) {
+            const renamed: Pin = { ...near, name: pinName };
+            setPins((prev) => prev.map((p) => (p.id === renamed.id ? renamed : p)));
+            void pushPin(room, renamed);
+          }
         } else {
           const newPin: Pin = {
             id: `pin-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
