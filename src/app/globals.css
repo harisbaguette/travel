@@ -1007,6 +1007,17 @@ body {
 .gm-style .gm-style-cc {
   bottom: var(--dock-space) !important;
 }
+/* 저작권·약관 글씨는 구글이 지우는 것을 막아 두었으므로, 지우는 대신 아주 옅게 만들어
+   눈에 거의 안 띄게 한다. 손을 올리거나 누르면 다시 또렷해져 언제든 읽을 수 있다. */
+.gm-style .gm-style-cc {
+  opacity: 0.22;
+  transition: opacity var(--dur-hover) var(--ease-out);
+}
+.gm-style .gm-style-cc:hover,
+.gm-style .gm-style-cc:focus-within,
+.gm-style .gm-style-cc:active {
+  opacity: 1;
+}
 
 /* 내 위치 단추 — 지도 오른쪽 아래, 아래 메뉴 바로 위(엄지 닿는 자리). 지도가 메뉴 뒤까지
    깔리므로 메뉴 높이만큼 올리고, 그 아래 출처 ⓘ(20px)와 겹치지 않게 조금 더 띄운다. */
@@ -1277,6 +1288,33 @@ body {
 }
 .anim-reveal {
   animation: dw-reveal 0.28s var(--ease-out) backwards;
+}
+/* 폈다 접었다 하는 칸 — 열 때도 닫을 때도 높이가 스르륵 늘고 줄어든다.
+   한 칸짜리 바둑판(grid) 높이를 0fr↔1fr로 옮기는 방식이라, 안쪽 내용이
+   몇 줄이든 미리 재지 않고도 부드럽게 움직인다. 닫힌 동안에는 보이지 않게
+   해서 탭 키로도 안 걸린다(움직임이 끝난 뒤에 감춘다). */
+.dw-fold {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    grid-template-rows 0.26s var(--ease-out),
+    opacity 0.18s var(--ease-out),
+    visibility 0s linear 0.26s;
+}
+.dw-fold > * {
+  min-height: 0;
+  overflow: hidden;
+}
+.dw-fold.is-open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  visibility: visible;
+  transition:
+    grid-template-rows 0.26s var(--ease-out),
+    opacity 0.22s var(--ease-out),
+    visibility 0s;
 }
 /* 한 자리에서 그림이 바뀔 때 — 돋보기 ↔ X처럼. 살짝 돌면서 나타나 "같은 단추"로 읽힌다 */
 @keyframes dw-swap {

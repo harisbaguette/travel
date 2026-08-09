@@ -1307,6 +1307,8 @@ const MapView = forwardRef<MapHandle, MapViewProps>(function MapView(
           center: { lat: initialCenter[0], lng: initialCenter[1] },
           zoom: initialZoom,
           disableDefaultUI: true,
+          // 지도 구석의 "키보드 단축키" 표시를 아예 만들지 않는다(손으로 쓰는 화면이라 쓸 일이 없다).
+          keyboardShortcuts: false,
           // 이게 꺼지면 구글이 그려 둔 가게를 눌러도 아무 소식이 안 온다 — 이 앱의 핵심이다.
           clickableIcons: true,
           gestureHandling: "greedy",
