@@ -841,19 +841,18 @@ function SearchTargetMarker({
         openSignal={openTick}
       >
         <div className="map-popup">
-          {info?.photo && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img className="map-popup__photo" src={info.photo} alt="" loading="lazy" />
-          )}
-          <div className="map-popup__title font-semibold text-[var(--text)]">
-            {target.name}
-          </div>
+          {/* 이름은 카드 속살이 한 번만 그린다 — 여기서 또 그리면 이름이 두 줄로 겹친다 */}
           {info ? (
-            <PlaceCardBody info={{ ...info, name: target.name, photo: undefined }} />
+            <PlaceCardBody info={{ ...info, name: target.name }} />
           ) : (
-            address && (
-              <div className="mt-0.5 text-xs text-[var(--text-muted)]">{address}</div>
-            )
+            <>
+              <div className="map-popup__title font-semibold text-[var(--text)]">
+                {target.name}
+              </div>
+              {address && (
+                <div className="mt-0.5 text-xs text-[var(--text-muted)]">{address}</div>
+              )}
+            </>
           )}
           <div className="popup-actions">
             {onAdd && (
