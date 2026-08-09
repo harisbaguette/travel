@@ -507,7 +507,8 @@ export async function POST(request: Request): Promise<Response> {
               cardsSeen,
               readBodies,
               context.center,
-              request.url
+              request.url,
+              startedAt + TOTAL_BUDGET_MS
             );
             proposed = pins;
             // 어떤 이름이 화면 카드로 나갔는지 그대로 알려 준다 — 이 목록에 없는 이름을
@@ -573,10 +574,38 @@ export async function POST(request: Request): Promise<Response> {
   return Response.json({
     ok: true,
     reply:
-      reply || (proposed.length > 0 ? `${proposed.length}곳을 찾았어요 — 골라서 꽂아 보세요.` : ""),
+      tidyReply(reply) ||
+      (proposed.length > 0 ? `${proposed.length}곳을 찾았어요 — 골라서 꽂아 보세요.` : ""),
     pins: proposed,
     sources,
   });
+}
+
+/**
+ * 답변 글을 화면 모양에 맞게 다듬는다.
+ * 말로 "짧게 쓰라"고 아무리 일러도 AI는 곧잘 어긴다 — 별표로 굵게 칠하거나 맺음말을 덧붙인다.
+ * 화면은 별표를 굵은 글씨로 바꿔 주지 않아 그대로 보이고, 줄이 늘면 다시 글 벽이 된다.
+ * 그래서 코드로도 한 번 더 자른다: 별표는 지우고, 요약 한 줄 + 점 줄 3개까지만 남긴다.
+ */
+function tidyReply(reply: string): string {
+  const lines = reply
+    .replace(/\*\*|__|##+/g, "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const out: string[] = [];
+  let bullets = 0;
+  for (const line of lines) {
+    const isBullet = /^[-•*·]\s+/.test(line);
+    if (isBullet) {
+      if (bullets >= 3) continue;
+      bullets++;
+      out.push(line);
+    } else if (out.length === 0) {
+      out.push(line); // 첫 줄(요약)만 남기고, 뒤따르는 줄글 문단은 버린다
+    }
+  }
+  return out.join("\n");
 }
 
 /** 이름을 견주기 좋게 다듬는다 — 띄어쓰기·괄호·점 따위를 빼고 소문자로. */
@@ -592,10 +621,14 @@ function squeeze(s: string): string {
 function nameKeys(name: string): string[] {
   const inParen = /\(([^)]+)\)/.exec(name)?.[1] ?? "";
   const outParen = name.replace(/\([^)]*\)/g, "");
+  // 한글 덩어리와 알파벳 덩어리를 따로 모은다 — 간판이 "엠어이반미 EMOI Bánh Mì"처럼
+  // 두 글자를 섞어 쓰면, 통째로 견주는 순간 어느 글에도 안 걸린다.
+  const korean = (name.match(/[가-힣0-9]+/g) ?? []).join("");
+  const latin = (name.match(/[A-Za-zÀ-ỹ0-9]+/g) ?? []).join("");
   const keys: string[] = [];
-  for (const part of [outParen, inParen, name]) {
+  for (const part of [outParen, inParen, korean, latin, name]) {
     const k = squeeze(part);
-    if (k.length >= 2 && !keys.includes(k)) keys.push(k);
+    if (k.length >= 3 && !keys.includes(k)) keys.push(k);
   }
   return keys;
 }
@@ -613,7 +646,9 @@ async function locate(
   name: string,
   hints: string[],
   anchor: { lat: number; lng: number } | undefined,
-  base: string
+  base: string,
+  /** 이 시각(밀리초)을 넘기면 추가 조회를 포기한다 — 답 전체가 늦어지는 것보다 낫다 */
+  deadline: number
 ): Promise<{ lat: number; lng: number; address: string } | null> {
   // 간판에 두 이름이 붙어 있는 곳이 많다 — "옥뎀39 (Ốc Đêm 39)"처럼.
   // 한 벌로만 물으면 못 찾으니 이름을 갈래로 나눠 여러 벌을 만든다.
@@ -636,7 +671,8 @@ async function locate(
 
   // 빗나갔을 때만 나머지 벌을 한꺼번에 던진다. 차례로 물으면 8초씩 쌓여 시간 상한에 걸리고,
   // 처음부터 다 던지면 장소 사전이 "너무 잦다"며 답을 흘려버린다 — 그래서 2단으로 나눴다.
-  const rest = queries.slice(1, 3);
+  // 남은 시간이 빠듯하면 아예 건너뛴다 — 한 곳을 더 건지려다 답 전체를 놓치면 손해다.
+  const rest = Date.now() < deadline - 15_000 ? queries.slice(1, 3) : [];
   if (rest.length === 0) return null;
   const tries = await Promise.all(
     rest.map((q) => locateOnce(q, name, anchor, base).catch(() => null))
@@ -701,7 +737,8 @@ async function buildPins(
   cardsSeen: BlogPlaceCard[],
   readBodies: Map<string, { title: string; url: string; text: string }>,
   near: { lat: number; lng: number } | undefined,
-  base: string
+  base: string,
+  deadline: number
 ): Promise<{
   pins: Pin[];
   /** 카드로 못 만들고 버린 곳 이름 — AI가 답변에서 언급하지 못하게 그대로 알려 준다 */
@@ -743,14 +780,25 @@ async function buildPins(
     // 지어낸 연결이 아니다 — 퍼플렉시티도 '검색으로 가져온 것'만 근거로 삼는다).
     if (sources.length < MIN_SOURCES_PER_PIN) {
       const keys = nameKeys(name);
+      const hasName = (haystack: string) => {
+        const squeezed = squeeze(haystack);
+        return keys.some((k) => squeezed.includes(k));
+      };
+      // ① 본문까지 읽은 글 — 가장 든든한 근거
       for (const body of readBodies.values()) {
         if (sources.length >= MAX_SOURCES_PER_PIN) break;
         const key = normalizeUrl(body.url);
-        if (seenHere.has(key)) continue;
-        const squeezed = squeeze(body.text);
-        if (!keys.some((k) => squeezed.includes(k))) continue;
+        if (seenHere.has(key) || !hasName(body.text)) continue;
         seenHere.add(key);
         sources.push({ title: body.title, url: body.url });
+      }
+      // ② 본문은 안 읽었어도 제목·요약에 그 가게 이름이 나온 검색 결과
+      for (const item of blogSeen.values()) {
+        if (sources.length >= MIN_SOURCES_PER_PIN) break;
+        const key = normalizeUrl(item.url);
+        if (seenHere.has(key) || !hasName(`${item.title} ${item.snippet}`)) continue;
+        seenHere.add(key);
+        sources.push({ title: item.title, url: item.url });
       }
     }
     if (sources.length === 0) {
@@ -812,7 +860,7 @@ async function buildPins(
         };
       }
       await new Promise((r) => setTimeout(r, i * 150));
-      const spot = await locate(k.name, [k.address, k.area], anchor, base);
+      const spot = await locate(k.name, [k.address, k.area], anchor, base, deadline);
       return spot ? { ...spot, address: spot.address || k.address } : null;
     })
   );
