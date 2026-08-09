@@ -27,7 +27,7 @@ import {
   type PlaceSuggestion,
 } from "@/lib/cities";
 import type { Itinerary, Pin, PinType } from "@/lib/types";
-import { PIN_TYPES, PIN_TYPE_LIST } from "@/lib/pinTypes";
+import { PIN_TYPES } from "@/lib/pinTypes";
 import { isShortMapLink, looksLikeMapLink, parseGoogleMapsUrl } from "@/lib/mapLinks";
 import { dateRange, daysBetween } from "@/lib/dates";
 import { dayOrder, removePinsFromDay, syncStayDays } from "@/lib/dayEntries";
@@ -61,6 +61,7 @@ import AssistantPanel, { type AssistantMsg } from "@/components/AssistantPanel";
 import DayPickSheet, { type DayPickOption } from "@/components/DayPickSheet";
 import PinList from "@/components/PinList";
 import PinModal from "@/components/PinModal";
+import PinTypeFilter from "@/components/PinTypeFilter";
 import PreparePanel from "@/components/PreparePanel";
 import ProjectSwitcher from "@/components/ProjectSwitcher";
 import SchedulePanel from "@/components/SchedulePanel";
@@ -1195,45 +1196,16 @@ export default function Home() {
       {/* 몸통 — 지도 위에 여행 화면이 통째로 덮인다. 아무것도 덮이지 않은 자리는 손가락
           입력을 뒤 지도로 흘려보낸다(pointer-events-none). 덮개마다 다시 켜 준다. */}
       <div className="pointer-events-none relative min-h-0 flex-1 overflow-hidden">
-        {/* 리스트 — 지도를 덮는 판. 종류는 준비 탭과 같은 알약 필터 줄에서 하나 눌러
-            걸러 보고, 지도 단추를 누르면 그 자리로 지도가 넘어간다. */}
+        {/* 리스트 — 지도를 덮는 판. 종류는 위 드롭다운에서 하나 골라 걸러 보고,
+            지도 단추를 누르면 그 자리로 지도가 넘어간다. */}
         {listing && (
           <div className="screen-in pointer-events-auto absolute inset-0 z-[1005] flex flex-col bg-[var(--bg)] pt-2">
             <div className="shrink-0 px-4 pb-2">
-              <div className="prep-filter">
-                <button
-                  type="button"
-                  onClick={() => setListType("all")}
-                  aria-pressed={listType === "all"}
-                  className={`prep-chip${listType === "all" ? " active" : ""}`}
-                >
-                  전체
-                  {viewPins.length > 0 && (
-                    <span className="prep-chip-badge">{viewPins.length}</span>
-                  )}
-                </button>
-                {PIN_TYPE_LIST.map((cfg) => {
-                  const count = viewPins.filter(
-                    (p) => p.type === cfg.type,
-                  ).length;
-                  const on = listType === cfg.type;
-                  return (
-                    <button
-                      key={cfg.type}
-                      type="button"
-                      onClick={() => setListType(cfg.type)}
-                      aria-pressed={on}
-                      className={`prep-chip${on ? " active" : ""}`}
-                    >
-                      <span aria-hidden>{cfg.emoji}</span>
-                      {cfg.label}
-                      {count > 0 && (
-                        <span className="prep-chip-badge">{count}</span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
+              <PinTypeFilter
+                pins={viewPins}
+                value={listType}
+                onChange={setListType}
+              />
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
               {listPins.length === 0 && listType !== "all" ? (

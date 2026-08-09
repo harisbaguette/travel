@@ -359,6 +359,12 @@ body {
   box-shadow: var(--shadow-2), 0 12px 32px rgba(36, 30, 25, 0.14);
   animation: ps-menu-in 0.16s var(--ease);
 }
+/* 고를 것이 많은 메뉴(핀 종류 열한 가지)는 화면보다 길어지므로 안에서 굴린다. */
+.ps-menu-scroll {
+  max-height: min(70vh, 520px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 .ps-item {
   display: flex;
   align-items: center;
