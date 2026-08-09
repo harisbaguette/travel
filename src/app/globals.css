@@ -123,9 +123,9 @@ body {
   overflow: hidden;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.02), 0 20px 40px rgba(0, 0, 0, 0.1);
   padding-top: env(safe-area-inset-top);
-  /* 아래 메뉴가 차지하는 높이(위여백 36 + 막대 68 + 아래여백 12 + 안전 여백).
+  /* 아래 메뉴가 차지하는 높이(위여백 10 + 막대 68 + 아래여백 12 + 안전 여백).
      지도가 메뉴 뒤까지 깔리므로, 지도 위 작은 단추들은 이만큼 띄워 가리지 않게 한다. */
-  --dock-space: calc(116px + env(safe-area-inset-bottom));
+  --dock-space: calc(90px + env(safe-area-inset-bottom));
 }
 
 /* 지도 판 — 위 알약 줄과 아래 메뉴 뒤까지 화면 전체에 깔린다.
@@ -165,8 +165,11 @@ body {
   /* 탭 화면 덮개(z 1010)보다 위 — 안 그러면 위로 튀어나온 + 단추의 윗부분이 덮개에 잘린다 */
   position: relative;
   z-index: 1020;
-  /* 위 여백은 가운데 + 단추가 튀어나올 자리 — Doweek 원본 수치(36px) 그대로 */
-  padding: 36px 14px calc(12px + env(safe-area-inset-bottom)) 14px;
+  /* Doweek 원본은 가운데 + 단추(.dock-fab)가 막대 위로 튀어나와서 위 여백이 36px였다.
+     이 앱에는 그 + 단추가 없어 36px가 빈 띠로만 남았으므로, 유리판이 화면 끝에
+     붙어 보이지 않을 만큼만(10px) 남긴다. 나중에 + 단추를 넣으면 36px로 되돌릴 것
+     (--dock-space도 116px로 함께 되돌린다). */
+  padding: 10px 14px calc(12px + env(safe-area-inset-bottom)) 14px;
   background: var(--bg);
   flex-shrink: 0;
 }
