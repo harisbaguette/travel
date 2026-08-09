@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { BedDouble, ListChecks, Luggage, Plane, ShoppingCart } from "lucide-react";
 import type { ChecklistItem, Itinerary } from "@/lib/types";
 import ChecklistCard from "./ChecklistCard";
 import TravelInfoPanel from "./TravelInfoPanel";
@@ -17,7 +16,6 @@ type SectionKey = "flights" | "stays" | "shopping" | "packing" | "agenda";
 
 interface Section {
   key: SectionKey;
-  Icon: typeof Plane;
   label: string;
   /** 칩에 붙는 숫자 — 0이면 감춘다. */
   count: number;
@@ -50,7 +48,6 @@ export default function PreparePanel({
   const sections: Section[] = [
     {
       key: "flights",
-      Icon: Plane,
       label: "항공",
       count: flightCount,
       body: () => (
@@ -59,7 +56,6 @@ export default function PreparePanel({
     },
     {
       key: "stays",
-      Icon: BedDouble,
       label: "숙소",
       count: stayCount,
       body: () => (
@@ -73,7 +69,6 @@ export default function PreparePanel({
     },
     {
       key: "shopping",
-      Icon: ShoppingCart,
       label: "장보기",
       count: todoOf(shopping),
       body: () => (
@@ -87,7 +82,6 @@ export default function PreparePanel({
     },
     {
       key: "packing",
-      Icon: Luggage,
       label: "챙기기",
       count: todoOf(packing),
       body: () => (
@@ -101,7 +95,6 @@ export default function PreparePanel({
     },
     {
       key: "agenda",
-      Icon: ListChecks,
       label: "회의",
       count: todoOf(agenda),
       body: () => (
@@ -133,7 +126,6 @@ export default function PreparePanel({
                 aria-pressed={on}
                 className={`prep-chip${on ? " active" : ""}`}
               >
-                <s.Icon size={15} strokeWidth={2.2} aria-hidden />
                 {s.label}
                 {s.count > 0 && <span className="prep-chip-badge">{s.count}</span>}
               </button>

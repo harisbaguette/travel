@@ -462,29 +462,24 @@ body {
 
 /* ── 준비 화면 항목 고르기 — Doweek 필터 줄 이식(접이식 머리 대체) ──
    흰 알약 판 안에서 하나만 채워지고, 남은 개수는 오른쪽 작은 원에 붙는다.
-   칩이 화면보다 길면 줄 안에서 옆으로 밀려 스크롤된다.
+   칩이 판보다 길면 아랫줄로 접힌다 — 예전에는 옆으로 밀려 스크롤됐는데, 오른쪽 칩이
+   화면 밖에 숨어 있는 줄 모르는 문제가 있었다. 접히면 몇 줄이 되든 전부 보인다.
    줄 자체는 스크롤 밖 고정 머리에 있다 — sticky로 띄우던 시절, 스크롤된 내용이
    위 틈으로 비쳐 겹쳐 보이는 문제가 있어 구조를 바꿨다(PreparePanel 참고). */
 .prep-filter {
   display: flex;
+  flex-wrap: wrap;
   gap: 2px;
   /* 고정값: 판 여백 3, 모서리 13, 칸 높이 30 — Doweek 세그먼트 크기. */
   padding: 3px;
   border-radius: 13px;
   background: var(--surface);
   box-shadow: var(--shadow-1);
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
-}
-.prep-filter::-webkit-scrollbar {
-  display: none;
 }
 .prep-chip {
   display: flex;
   /* 남는 자리를 나눠 가져 판을 꽉 채우되(1), 글자보다 좁아지지는 않는다(0).
-     아주 좁은 폰에서는 글자가 잘리는 대신 줄이 옆으로 밀린다. */
+     아주 좁은 폰에서는 글자가 잘리는 대신 뒷칩이 아랫줄로 접힌다. */
   flex: 1 0 auto;
   align-items: center;
   justify-content: center;
@@ -530,6 +525,14 @@ body {
   .prep-chip:not(.active):hover {
     background: var(--surface-hover);
     color: var(--text);
+  }
+}
+/* 좁은 폰(판 폭 330 안팎)에서는 칩 좌우 여백만 줄여 다섯 칸을 한 줄에 눕힌다.
+   실측: 여백 10·사이 5로는 384px가 필요해 320px 판에서 한 칸이 아랫줄로 밀렸다. */
+@media (max-width: 400px) {
+  .prep-chip {
+    gap: 3px;
+    padding: 0 5px;
   }
 }
 
