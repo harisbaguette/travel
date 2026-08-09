@@ -664,11 +664,17 @@ export default function Home() {
         // 이미 꽂힌 핀과 50m 안쪽으로 겹치는 후보는 그 핀의 번호를 물려받게 한다.
         // 목록에서 빼 버리면 "세 곳 찾았다"는 말과 달리 카드가 한 장만 남아 이상해진다 —
         // 카드는 그대로 두고 '꽂음'으로만 보이게 해, 찾은 개수와 카드 수를 맞춘다.
+        // 한 핀에 두 후보가 겹칠 수도 있다 — 번호를 물려주는 것은 한 번뿐이고,
+        // 그다음 후보는 제 번호를 쓴다(같은 번호가 두 장이면 카드가 겹쳐 깨진다).
+        const taken = new Set<string>();
         const found = (data.pins ?? []).map((np) => {
           const already = pins.find(
-            (ep) => distanceMeters(ep.lat, ep.lng, np.lat, np.lng) < 50
+            (ep) =>
+              !taken.has(ep.id) && distanceMeters(ep.lat, ep.lng, np.lat, np.lng) < 50
           );
-          return already ? { ...np, id: already.id } : np;
+          if (!already) return np;
+          taken.add(already.id);
+          return { ...np, id: already.id };
         });
         setChat((cur) => [
           ...cur,

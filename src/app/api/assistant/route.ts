@@ -80,8 +80,10 @@ async function geocode(
     params.set("lat", String(near.lat));
     params.set("lon", String(near.lng));
   }
+  // 5초 안에 답이 없으면 포기한다 — 이 사전은 보통 1~2초에 답한다. 오래 기다려 봤자
+  // 답이 오는 일은 드물고, 그동안 AI가 마지막 정리를 할 시간만 깎아 먹는다.
   const res = await fetch(`https://photon.komoot.io/api/?${params}`, {
-    signal: AbortSignal.timeout(8000),
+    signal: AbortSignal.timeout(5000),
   });
   if (!res.ok) return [];
   const data = (await res.json()) as { features?: PhotonFeature[] };
@@ -105,7 +107,7 @@ async function geocodeByPlaceApi(
   base: string
 ): Promise<{ name: string; lat: number; lng: number; address: string }[]> {
   const url = new URL(`/api/search-place?q=${encodeURIComponent(query)}`, base);
-  const res = await fetch(url, { signal: AbortSignal.timeout(9000) });
+  const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
   if (!res.ok) return [];
   const data = (await res.json()) as {
     results?: { name?: string; lat?: number; lng?: number; address?: string }[];
@@ -128,7 +130,7 @@ async function geocodeByPlaceApi(
 async function reverseAddress(lat: number, lng: number): Promise<string> {
   const res = await fetch(
     `https://photon.komoot.io/reverse?lat=${lat}&lon=${lng}&lang=default&limit=1`,
-    { signal: AbortSignal.timeout(6000) }
+    { signal: AbortSignal.timeout(4000) }
   );
   if (!res.ok) return "";
   const data = (await res.json()) as {
@@ -574,7 +576,7 @@ export async function POST(request: Request): Promise<Response> {
   return Response.json({
     ok: true,
     reply:
-      tidyReply(reply) ||
+      tidyReply(reply, proposed.length > 0) ||
       (proposed.length > 0 ? `${proposed.length}곳을 찾았어요 — 골라서 꽂아 보세요.` : ""),
     pins: proposed,
     sources,
@@ -587,9 +589,12 @@ export async function POST(request: Request): Promise<Response> {
  * 화면은 별표를 굵은 글씨로 바꿔 주지 않아 그대로 보이고, 줄이 늘면 다시 글 벽이 된다.
  * 그래서 코드로도 한 번 더 자른다: 별표는 지우고, 요약 한 줄 + 점 줄 3개까지만 남긴다.
  */
-function tidyReply(reply: string): string {
-  const lines = reply
-    .replace(/\*\*|__|##+/g, "")
+function tidyReply(reply: string, hasCards: boolean): string {
+  const cleaned = reply.replace(/\*\*|__|##+/g, "").trim();
+  // 장소를 찾아 준 답일 때만 줄을 자른다. "환전은 어디서 해요?" 같은 그냥 질문에는
+  // 카드가 없어 글이 답의 전부다 — 여기서 첫 줄만 남기면 답이 통째로 사라진다.
+  if (!hasCards) return cleaned;
+  const lines = cleaned
     .split("\n")
     .map((l) => l.trim())
     .filter(Boolean);
