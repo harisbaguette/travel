@@ -138,18 +138,23 @@ export default function PinList({
                       aria-expanded={sourceOpen}
                       aria-label="추천 근거 글"
                       title="추천 근거 글"
-                      className="press flex h-7 w-7 items-center justify-center rounded-full text-[var(--text-faint)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--accent)]"
+                      className={`press flex h-7 w-7 items-center justify-center rounded-full transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--accent)] ${
+                        sourceOpen
+                          ? "bg-[var(--surface-hover)] text-[var(--accent)]"
+                          : "text-[var(--text-faint)]"
+                      }`}
                     >
                       <Link2 size={14} strokeWidth={2.2} aria-hidden />
                     </button>
-                    {sourceOpen && (
-                      <div className="mt-1 flex flex-col gap-1">
+                    <div className={`dw-fold${sourceOpen ? " is-open" : ""}`}>
+                      <div className="flex flex-col gap-1 pt-1">
                         {sources.map((source) => (
                           <a
                             key={source.url}
                             href={source.url}
                             target="_blank"
                             rel="noopener noreferrer"
+                            tabIndex={sourceOpen ? undefined : -1}
                             className="flex items-center gap-1 text-xs text-[var(--text-faint)] transition-colors hover:text-[var(--accent)]"
                           >
                             <span className="min-w-0 truncate underline underline-offset-2">
@@ -159,7 +164,7 @@ export default function PinList({
                           </a>
                         ))}
                       </div>
-                    )}
+                    </div>
                   </div>
                 )}
 
