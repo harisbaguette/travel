@@ -28,10 +28,9 @@ interface TravelInfoPanelProps {
   onStayMapLink?: (stayId: string, url: string, quiet?: boolean) => void;
 }
 
-// 주소 칸에 아직 붙여넣은 링크만 있으면 옮겨 담을 게 없다 — 주소로 바뀐 뒤에만 복사 단추를 보인다.
-function canCopyAddress(s: StayInfo): boolean {
-  const t = (s.address ?? "").trim();
-  return t.length > 0 && !/^https?:\/\//i.test(t);
+// 적힌 글이 인터넷 링크인지 — 예전 저장본은 링크를 주소 칸에 담아 뒀다.
+function isLinkText(text: string | undefined): boolean {
+  return /^https?:\/\//i.test((text ?? "").trim());
 }
 
 // 여행 기록 — 비행(가는/오는 편) + 숙소. 종이 배경 위 흰 카드(DW 문법).
@@ -80,26 +79,40 @@ export default function TravelInfoPanel({
     onChange({ ...itinerary, stays: stays.filter((s) => s.id !== id) });
   };
 
-  // 주소 칸에 무언가 들어오면(붙여넣기, 또는 다 적고 칸을 벗어날 때) 위(page)에 알려
-  // 지도에 핀을 꽂고 이름을 받아 온다. 구글 지도 링크든 그냥 숙소 이름이든 다 찾아 준다.
+  // 링크 칸에 무언가 들어오면(붙여넣기, 또는 다 적고 칸을 벗어날 때) 위(page)에 알려
+  // 지도에 핀을 꽂고 이름과 영문 주소를 받아 온다. 구글 지도 링크든 그냥 숙소 이름이든 다 찾아 준다.
   // 같은 글자로 이미 다 받아 왔으면(자리도 이름도) 다시 묻지 않는다. 자리는 꽂혔는데
   // 이름이 비어 있으면 아직 덜 된 것이므로 다시 묻는다 — 안 그러면 영영 빈 이름으로 굳는다.
   const tryStayLink = (s: StayInfo, value: string) => {
     if (!onStayMapLink) return;
     const t = value.trim();
     if (t.length < 2) return;
-    if (s.pinId && s.name.trim() && t === (s.address ?? "").trim()) return;
+    if (s.pinId && s.name.trim() && t === (s.mapUrl ?? "").trim()) return;
     onStayMapLink(s.id, t);
   };
 
-  // 주소는 적혀 있는데 이름이 비어 있는 잠자리 — 화면을 열 때 조용히 한 번 더 물어본다.
+  // 예전 저장본은 붙여넣은 링크를 주소 칸에 담아 뒀다 — 화면을 열 때 링크 칸으로 한 번 옮겨 준다.
+  // 그래야 주소 칸이 사람이 읽는 영문 주소만 담는 칸이 된다.
+  useEffect(() => {
+    if (part !== "stays") return;
+    const stale = (s: StayInfo) => !s.mapUrl && isLinkText(s.address);
+    if (!stays.some(stale)) return;
+    onChange({
+      ...itinerary,
+      stays: stays.map((s) =>
+        stale(s) ? { ...s, mapUrl: (s.address ?? "").trim(), address: "" } : s
+      ),
+    });
+  }, [part, stays, itinerary, onChange]);
+
+  // 링크는 적혀 있는데 이름이 비어 있는 잠자리 — 화면을 열 때 조용히 한 번 더 물어본다.
   // 예전에 인터넷이 느려 이름을 못 받아 온 채로 굳어 버린 칸을 스스로 고치는 장치다.
   // 한 잠자리당 화면을 여는 동안 딱 한 번만 물어본다(계속 물어 대지 않게).
   const asked = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (part !== "stays" || !onStayMapLink) return;
     for (const s of stays) {
-      const written = (s.address ?? "").trim();
+      const written = (s.mapUrl ?? "").trim();
       if (!written || s.name.trim() || asked.current.has(s.id)) continue;
       asked.current.add(s.id);
       onStayMapLink(s.id, written, true);
@@ -181,7 +194,7 @@ export default function TravelInfoPanel({
                 : "";
             return (
             <li key={s.id} className="rounded-[12px] bg-[var(--bg)] p-3">
-              {/* 이름은 적는 칸이 없다 — 아래 주소 칸에 넣은 자리에서 받아 와 여기에 보여 준다. */}
+              {/* 접었을 때도 보이는 머리줄 — 아래 이름 칸에 적힌 글을 그대로 보여 준다. */}
               <div className="mb-2 flex items-center gap-2">
                 <button
                   type="button"
@@ -201,7 +214,7 @@ export default function TravelInfoPanel({
                       s.name ? " text-[var(--text)]" : " text-[var(--text-muted)]"
                     }`}
                   >
-                    {s.name || "주소를 넣으면 이름이 채워져요"}
+                    {s.name || "지도 링크를 넣으면 이름이 채워져요"}
                   </span>
                   {!open && summary && (
                     <span className="shrink-0 text-xs font-semibold text-[var(--text-muted)]">
@@ -220,14 +233,41 @@ export default function TravelInfoPanel({
               </div>
               {open && (
               <>
-              {/* 맨 처음 칸 — 여기에 구글 지도 링크나 숙소 이름을 넣으면 이름·지도 핀·영문 주소가 따라온다.
-                  링크가 영문 주소로 바뀌어 남으므로, 세관 서류에 적을 때 이 칸을 그대로 보면 된다. */}
+              {/* 맨 처음 칸 — 구글 지도 링크를 붙여넣는 자리. 넣으면 아래 이름·주소 칸이 저절로 채워진다. */}
+              <label className="mb-2 flex flex-col gap-1">
+                <span className="text-[11px] font-semibold text-[var(--text-muted)]">
+                  구글 지도 링크
+                </span>
+                <input
+                  type="text"
+                  value={s.mapUrl ?? ""}
+                  onChange={(e) => patchStay(s.id, { mapUrl: e.target.value })}
+                  onPaste={(e) => tryStayLink(s, e.clipboardData.getData("text"))}
+                  onBlur={(e) => tryStayLink(s, e.target.value)}
+                  placeholder="공유 링크 붙여넣기 — 이름과 주소가 채워져요"
+                  className="dw-input dw-input--sm text-xs"
+                />
+              </label>
+              {/* 이름 — 링크에서 받아 오지만, 마음에 안 들면 손으로 고쳐 적어도 된다. */}
+              <label className="mb-2 flex flex-col gap-1">
+                <span className="text-[11px] font-semibold text-[var(--text-muted)]">
+                  이름
+                </span>
+                <input
+                  type="text"
+                  value={s.name}
+                  onChange={(e) => patchStay(s.id, { name: e.target.value })}
+                  placeholder="빈펄 원더월드 푸꾸옥"
+                  className="dw-input dw-input--sm text-xs"
+                />
+              </label>
+              {/* 주소(영문) — 입국·세관 서류의 머무는 곳 칸에 그대로 옮겨 적는 글. 복사 단추로 바로 담는다. */}
               <div className="mb-2">
                 <div className="mb-1 flex items-center justify-between gap-2">
                   <span className="text-[11px] font-semibold text-[var(--text-muted)]">
                     주소 (영문)
                   </span>
-                  {canCopyAddress(s) && (
+                  {(s.address ?? "").trim() && (
                     <button
                       type="button"
                       onClick={() => copyAddress(s.id, (s.address ?? "").trim())}
@@ -252,9 +292,7 @@ export default function TravelInfoPanel({
                   type="text"
                   value={s.address ?? ""}
                   onChange={(e) => patchStay(s.id, { address: e.target.value })}
-                  onPaste={(e) => tryStayLink(s, e.clipboardData.getData("text"))}
-                  onBlur={(e) => tryStayLink(s, e.target.value)}
-                  placeholder="구글 지도 공유 링크 붙여넣기 — 이름과 영문 주소가 채워져요"
+                  placeholder="세관 신고서에 적을 영문 주소"
                   aria-label="주소 (영문)"
                   className="dw-input dw-input--sm text-xs"
                 />
@@ -368,14 +406,17 @@ export default function TravelInfoPanel({
                   />
                 </label>
               </div>
-              {/* 지도 열기 — 맨 아래에서 한 줄을 혼자 다 쓴다(누르기 쉽게). */}
+              {/* 지도 열기 — 맨 아래에서 한 줄을 혼자 다 쓴다(누르기 쉽게).
+                  붙여넣은 링크가 있으면 그 링크를 그대로 열고, 없으면 이름·주소로 찾아 연다. */}
               <a
-                href={mapHrefForText(s.address || s.name)}
+                href={mapHrefForText(s.mapUrl || s.name || s.address || "")}
                 target="_blank"
                 rel="noreferrer"
-                aria-disabled={!(s.address || s.name).trim()}
+                aria-disabled={!(s.mapUrl || s.name || s.address || "").trim()}
                 className={`dw-btn-ghost mt-2 flex h-10 min-h-0 w-full items-center justify-center gap-1 text-xs${
-                  (s.address || s.name).trim() ? "" : " pointer-events-none opacity-40"
+                  (s.mapUrl || s.name || s.address || "").trim()
+                    ? ""
+                    : " pointer-events-none opacity-40"
                 }`}
               >
                 <MapPin size={14} strokeWidth={2.4} aria-hidden />

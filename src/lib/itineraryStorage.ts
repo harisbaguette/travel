@@ -156,6 +156,7 @@ function isStay(s: unknown): s is StayInfo {
     typeof o.checkIn === "string" &&
     typeof o.checkOut === "string" &&
     typeof o.memo === "string" &&
+    (o.mapUrl === undefined || typeof o.mapUrl === "string") &&
     (o.address === undefined || typeof o.address === "string") &&
     (o.checkInTime === undefined || typeof o.checkInTime === "string") &&
     (o.checkOutTime === undefined || typeof o.checkOutTime === "string")
