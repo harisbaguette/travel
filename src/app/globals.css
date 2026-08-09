@@ -1007,10 +1007,11 @@ body {
 .gm-style .gm-style-cc {
   bottom: var(--dock-space) !important;
 }
-/* 저작권·약관 글씨는 구글이 지우는 것을 막아 두었으므로, 지우는 대신 아주 옅게 만들어
-   눈에 거의 안 띄게 한다. 손을 올리거나 누르면 다시 또렷해져 언제든 읽을 수 있다. */
+/* "지도 데이터·이용약관·지도 오류 신고" 글씨 — 구글이 지우는 것을 막아 두었으므로 실제로
+   없애지는 않고, 평소에는 완전히 투명하게 두어 안 보이게 한다. 그 자리는 그대로 살아 있어서
+   손을 올리거나 손가락으로 누르면 스르륵 나타나고, 눌러서 열어 볼 수도 있다. */
 .gm-style .gm-style-cc {
-  opacity: 0.22;
+  opacity: 0;
   transition: opacity var(--dur-hover) var(--ease-out);
 }
 .gm-style .gm-style-cc:hover,
