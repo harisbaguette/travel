@@ -146,23 +146,27 @@ export default function PinList({
                     >
                       <Link2 size={14} strokeWidth={2.2} aria-hidden />
                     </button>
+                    {/* 접혔을 때 높이가 딱 0이 되도록 여백은 안쪽 칸에 둔다 —
+                        바깥 칸에 두면 접어도 그만큼 틈이 남는다. */}
                     <div className={`dw-fold${sourceOpen ? " is-open" : ""}`}>
-                      <div className="flex flex-col gap-1 pt-1">
-                        {sources.map((source) => (
-                          <a
-                            key={source.url}
-                            href={source.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            tabIndex={sourceOpen ? undefined : -1}
-                            className="flex items-center gap-1 text-xs text-[var(--text-faint)] transition-colors hover:text-[var(--accent)]"
-                          >
-                            <span className="min-w-0 truncate underline underline-offset-2">
-                              {source.title}
-                            </span>
-                            <ExternalLink size={11} className="shrink-0" aria-hidden />
-                          </a>
-                        ))}
+                      <div>
+                        <div className="flex flex-col gap-1 pt-1">
+                          {sources.map((source) => (
+                            <a
+                              key={source.url}
+                              href={source.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              tabIndex={sourceOpen ? undefined : -1}
+                              className="flex items-center gap-1 text-xs text-[var(--text-faint)] transition-colors hover:text-[var(--accent)]"
+                            >
+                              <span className="min-w-0 truncate underline underline-offset-2">
+                                {source.title}
+                              </span>
+                              <ExternalLink size={11} className="shrink-0" aria-hidden />
+                            </a>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   </div>
