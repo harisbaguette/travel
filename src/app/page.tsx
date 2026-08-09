@@ -20,6 +20,7 @@ import {
   X,
 } from "lucide-react";
 import {
+  findAddressInEnglish,
   resolveCity,
   suggestPlaces,
   type LatLng,
@@ -882,13 +883,22 @@ export default function Home() {
           void pushPin(room, newPin);
           pinId = newPin.id;
         }
+        // 비행기에서 적는 입국·세관 서류의 "머무는 곳" 칸에 그대로 옮겨 적을 수 있게,
+        // 그 자리의 주소를 영어로 받아 와 주소 칸에 채운다(붙여넣은 긴 링크를 대신한다).
+        // 못 받아 오면 원래 적혀 있던 글자를 그대로 둔다.
+        const addressEn = await findAddressInEnglish(pinName || raw, [
+          place.lat,
+          place.lng,
+        ]);
         // 붙여넣기 직후라 이 함수가 들고 있는 일정 사본에는 방금 적힌 주소가 아직 없을 수 있다.
         // 최신 일정을 받아서 고치는 방식으로, 그 주소가 지워지지 않게 한다.
         const cur = itineraryRef.current;
         const patched = {
           ...cur,
           stays: (cur.stays ?? []).map((s) =>
-            s.id === stayId ? { ...s, name: pinName || s.name, pinId } : s
+            s.id === stayId
+              ? { ...s, name: pinName || s.name, pinId, address: addressEn || s.address }
+              : s
           ),
         };
         // 들어가는 날·나오는 날을 이미 골라 뒀으면 그 날 일정에도 같이 올린다.
@@ -897,10 +907,11 @@ export default function Home() {
         setItinerary(next);
         itineraryRef.current = next;
         pushItinerary(room, next);
+        const addrNote = addressEn ? " · 영문 주소도 채웠어요" : "";
         setNotice(
           onSchedule
-            ? `${pinName || "숙소"}을(를) 지도와 일정에 넣었어요`
-            : `${pinName || "숙소"} 핀을 지도에 꽂았어요 — 체크인 날짜를 고르면 일정에도 들어가요`
+            ? `${pinName || "숙소"}을(를) 지도와 일정에 넣었어요${addrNote}`
+            : `${pinName || "숙소"} 핀을 지도에 꽂았어요 — 체크인 날짜를 고르면 일정에도 들어가요${addrNote}`
         );
       } finally {
         stayLinkBusy.current.delete(stayId);

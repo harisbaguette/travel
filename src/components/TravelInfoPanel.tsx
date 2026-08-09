@@ -4,7 +4,9 @@ import { useState } from "react";
 import {
   ArrowRight,
   BedDouble,
+  Check,
   ChevronDown,
+  Copy,
   MapPin,
   PlaneLanding,
   PlaneTakeoff,
@@ -23,6 +25,12 @@ interface TravelInfoPanelProps {
   part: "flights" | "stays";
   /** 숙소 칸에 구글 지도 링크를 붙여넣었을 때 — 지도에 핀을 꽂고 이름을 채워 준다. */
   onStayMapLink?: (stayId: string, url: string) => void;
+}
+
+// 주소 칸에 아직 붙여넣은 링크만 있으면 옮겨 담을 게 없다 — 주소로 바뀐 뒤에만 복사 단추를 보인다.
+function canCopyAddress(s: StayInfo): boolean {
+  const t = (s.address ?? "").trim();
+  return t.length > 0 && !/^https?:\/\//i.test(t);
 }
 
 // 여행 기록 — 비행(가는/오는 편) + 숙소. 종이 배경 위 흰 카드(DW 문법).
@@ -78,6 +86,19 @@ export default function TravelInfoPanel({
     if (t.length < 2) return;
     if (s.pinId && t === (s.address ?? "").trim()) return;
     onStayMapLink(s.id, t);
+  };
+
+  // 채워진 영문 주소를 한 번 눌러 옮겨 담기 — 입국·세관 서류 칸에 그대로 붙여 넣으라고.
+  // 누른 뒤 잠깐 체크 표시로 바뀌어, 담겼는지 눈으로 확인된다.
+  const [copiedId, setCopiedId] = useState("");
+  const copyAddress = async (id: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId((cur) => (cur === id ? "" : cur)), 1500);
+    } catch {
+      // 옮겨 담기가 막힌 곳(옛 브라우저 등) — 글자를 손으로 골라 복사하면 된다
+    }
   };
 
   // 여행 기간의 날짜 목록 — 숙소 날짜를 "몇 일차"로 고르게 해 준다.
@@ -181,22 +202,44 @@ export default function TravelInfoPanel({
               </div>
               {open && (
               <>
-              {/* 맨 처음 칸 — 여기에 구글 지도 링크나 숙소 이름을 넣으면 이름과 지도 핀이 따라온다. */}
+              {/* 맨 처음 칸 — 여기에 구글 지도 링크나 숙소 이름을 넣으면 이름·지도 핀·영문 주소가 따라온다.
+                  링크가 영문 주소로 바뀌어 남으므로, 세관 서류에 적을 때 이 칸을 그대로 보면 된다. */}
               <div className="mb-2">
-                <label className="flex flex-col gap-1">
+                <div className="mb-1 flex items-center justify-between gap-2">
                   <span className="text-[11px] font-semibold text-[var(--text-muted)]">
-                    구글 지도 주소
+                    주소 (영문)
                   </span>
-                  <input
-                    type="text"
-                    value={s.address ?? ""}
-                    onChange={(e) => patchStay(s.id, { address: e.target.value })}
-                    onPaste={(e) => tryStayLink(s, e.clipboardData.getData("text"))}
-                    onBlur={(e) => tryStayLink(s, e.target.value)}
-                    placeholder="공유 링크 붙여넣기 — 이름과 핀이 같이 채워져요"
-                    className="dw-input dw-input--sm text-xs"
-                  />
-                </label>
+                  {canCopyAddress(s) && (
+                    <button
+                      type="button"
+                      onClick={() => copyAddress(s.id, (s.address ?? "").trim())}
+                      className="dw-btn-ghost h-7 min-h-0 shrink-0 gap-1 px-2.5 text-[11px]"
+                      aria-label="영문 주소 복사"
+                    >
+                      {copiedId === s.id ? (
+                        <>
+                          <Check size={11} strokeWidth={2.6} aria-hidden />
+                          복사됨
+                        </>
+                      ) : (
+                        <>
+                          <Copy size={11} strokeWidth={2.4} aria-hidden />
+                          복사
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  value={s.address ?? ""}
+                  onChange={(e) => patchStay(s.id, { address: e.target.value })}
+                  onPaste={(e) => tryStayLink(s, e.clipboardData.getData("text"))}
+                  onBlur={(e) => tryStayLink(s, e.target.value)}
+                  placeholder="구글 지도 공유 링크 붙여넣기 — 이름과 영문 주소가 채워져요"
+                  aria-label="주소 (영문)"
+                  className="dw-input dw-input--sm text-xs"
+                />
               </div>
               {/* 체크인 — 여행 날짜를 정했으면 몇 일차로, 아니면 달력으로 고른다. 시각까지 함께. */}
               <div className="mb-2 flex items-end gap-2">

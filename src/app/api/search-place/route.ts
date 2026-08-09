@@ -12,30 +12,55 @@ interface PlaceResult {
   address?: string;
 }
 
-// 구글이 실어 보내는 글자들 중 주소를 골라낸다.
-// 주소는 거의 항상 두 벌로 들어 있다 — "주소"와 "주소 + 가게이름". 앞이 뒤의 앞부분과
-// 똑같다는 성질로 골라내면 나라·언어를 가리지 않는다.
-// simplify: 구글이 형식을 바꾸면 빈 칸이 된다 — 부르는 쪽이 빈 칸을 정상으로 다룬다.
-function pickAddress(raw: string): string {
-  const seen = [...raw.matchAll(/"([^"\\]{8,120})"/g)].map((m) => m[1]);
-  const uniq = [...new Set(seen)];
-  let best = "";
-  for (const a of uniq) {
-    if (/^[A-Z0-9]{4}\+/.test(a)) continue; // 구글 좌표 약칭(플러스 코드)은 주소가 아니다
-    if (!/\s/.test(a)) continue;
-    const wrapped = uniq.some((b) => b !== a && b.startsWith(a + " "));
-    if (wrapped && a.length > best.length) best = a;
-  }
-  return best;
+// 찾은 곳이 딱 한 군데일 때, 구글은 그 한 곳의 "자세한 칸"을 함께 실어 보낸다.
+// 그 칸은 [[번호들, "가게이름 + 주소", [위도, 경도], …], "가게이름", ["동네","시","나라"], …] 꼴이라,
+// 주소 줄 묶음을 ", "로 이으면 그대로 한 줄 주소가 된다.
+// 이은 글이 "가게이름 + 주소" 글의 뒤끝과 똑같은지 한 번 더 맞춰 보고 쓴다 — 엉뚱한 글을
+// 주소로 착각하지 않게 하는 안전장치다. 나라마다 이름과 주소의 앞뒤 차례가 달라도 통한다.
+// simplify: 여러 곳이 한꺼번에 나온 검색에는 이 칸이 없어 주소가 빈 칸이 된다 —
+// 부르는 쪽이 빈 칸을 정상으로 다룬다.
+interface PlaceDetail {
+  address: string;
+  lat: number;
+  lng: number;
+}
+
+function pickDetail(data: unknown): PlaceDetail | null {
+  let address = "";
+  let lat = 0;
+  let lng = 0;
+  const walk = (node: unknown): void => {
+    if (!Array.isArray(node)) return;
+    const head = node[0];
+    const lines = node[2];
+    if (
+      Array.isArray(head) &&
+      typeof head[1] === "string" &&
+      Array.isArray(head[2]) &&
+      typeof head[2][0] === "number" &&
+      typeof head[2][1] === "number" &&
+      typeof node[1] === "string" &&
+      Array.isArray(lines) &&
+      lines.length > 0 &&
+      lines.every((s) => typeof s === "string" && s.length > 0 && s.length <= 80)
+    ) {
+      const joined = (lines as string[]).join(", ");
+      if (head[1].endsWith(joined) && joined.length > address.length) {
+        address = joined;
+        lat = head[2][0];
+        lng = head[2][1];
+      }
+    }
+    for (const child of node) walk(child);
+  };
+  walk(data);
+  return address ? { address, lat, lng } : null;
 }
 
 const EMBED_TIMEOUT_MS = 8000;
 
-const BROWSER_HEADERS = {
-  "User-Agent":
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-  "Accept-Language": "ko",
-};
+const USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
 // 좌표 항목 판별 — [식별자들, 구글 장소 번호, null, [위도*1e7, 경도*1e7], …] 꼴.
 // 장소 번호는 가게면 "/g/…"나 "0x…", 도시·지역이면 "/m/…"로 온다 — 셋 다 인정한다.
@@ -72,7 +97,6 @@ function parseInitEmbed(html: string, query: string): PlaceResult[] {
   const end = html.indexOf(");", start);
   if (end < 0) return [];
   const rawJson = html.slice(start + "initEmbed(".length, end);
-  const address = pickAddress(rawJson);
   let data: unknown;
   try {
     data = JSON.parse(rawJson);
@@ -91,7 +115,7 @@ function parseInitEmbed(html: string, query: string): PlaceResult[] {
         const lat = coord[0] / 1e7;
         const lng = coord[1] / 1e7;
         if (Math.abs(lat) > 90 || Math.abs(lng) > 180) continue;
-        out.push({ name: ownName, lat, lng, address });
+        out.push({ name: ownName, lat, lng });
       } else {
         walk(child, ownName);
       }
@@ -107,18 +131,33 @@ function parseInitEmbed(html: string, query: string): PlaceResult[] {
     );
     if (!near) dedup.push(r);
   }
-  return dedup;
+  // 주소는 그 자세한 칸이 가리키는 바로 그 자리(약 100m 안)에만 붙인다 —
+  // 여러 곳이 나온 검색에서 남의 주소가 딸려 붙는 것을 막는다.
+  const detail = pickDetail(data);
+  if (!detail) return dedup;
+  return dedup.map((r) =>
+    Math.abs(r.lat - detail.lat) < 0.001 && Math.abs(r.lng - detail.lng) < 0.001
+      ? { ...r, address: detail.address }
+      : r
+  );
 }
 
 export async function GET(request: Request) {
-  const q = new URL(request.url).searchParams.get("q")?.trim() ?? "";
+  const params = new URL(request.url).searchParams;
+  const q = params.get("q")?.trim() ?? "";
+  // 어느 나라 말로 답을 받을지 — 기본은 한국어, en이면 영문 주소로 받는다
+  // (비행기에서 적는 입국·세관 서류의 체류지 칸은 영문으로만 받아 준다).
+  const lang = params.get("lang") === "en" ? "en" : "ko";
   if (!q) {
     return Response.json({ ok: false, results: [] }, { status: 400 });
   }
   try {
     const res = await fetch(
-      `https://maps.google.com/maps?q=${encodeURIComponent(q)}&hl=ko&output=embed`,
-      { headers: BROWSER_HEADERS, signal: AbortSignal.timeout(EMBED_TIMEOUT_MS) }
+      `https://maps.google.com/maps?q=${encodeURIComponent(q)}&hl=${lang}&output=embed`,
+      {
+        headers: { "User-Agent": USER_AGENT, "Accept-Language": lang },
+        signal: AbortSignal.timeout(EMBED_TIMEOUT_MS),
+      }
     );
     if (!res.ok) return Response.json({ ok: false, results: [] });
     const results = parseInitEmbed(await res.text(), q).slice(0, 5);

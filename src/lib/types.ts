@@ -88,7 +88,8 @@ export interface StayInfo {
   checkIn: string; // YYYY-MM-DD
   checkOut: string; // YYYY-MM-DD
   memo: string;
-  // 구글 지도에서 찾을 주소 — 옛 저장본에는 없으므로 선택 사항.
+  // 숙소 주소 — 구글 지도 링크를 붙여넣으면 영문 주소로 바뀌어 남는다(입국·세관 서류용).
+  // 옛 저장본에는 없으므로 선택 사항.
   address?: string;
   // 체크인/아웃 시각(HH:MM) — 옛 저장본에는 없으므로 선택 사항.
   checkInTime?: string;

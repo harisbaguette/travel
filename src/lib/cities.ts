@@ -5,6 +5,9 @@ import { GOOGLE_MAPS_KEY, hasGoogleKey } from "./googleMaps";
 
 export type LatLng = [number, number];
 
+/** 구글에게 어느 나라 말로 답을 달라고 할지 — 화면은 한국어, 서류용 주소는 영어. */
+type Lang = "ko" | "en";
+
 export interface PlaceSuggestion {
   name: string; // 장소 이름
   address: string; // 주소 요약(동네·도시·나라)
@@ -31,11 +34,12 @@ interface GooglePlace {
 async function googlePlacesSearch(
   query: string,
   near?: LatLng,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  lang: Lang = "ko"
 ): Promise<PlaceSuggestion[]> {
   const body: Record<string, unknown> = {
     textQuery: query,
-    languageCode: "ko",
+    languageCode: lang,
     pageSize: 6,
   };
   // 지금 보는 지도 근처를 먼저 — 반지름 50km 안을 우선한다
@@ -95,20 +99,28 @@ async function googlePlacesSearch(
 // simplify: 위치 편향이 안 먹혀 이름으로만 찾는다. 열쇠를 등록하면 위 공식 검색이 대신한다.
 async function googleEmbedSearch(
   query: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  lang: Lang = "ko"
 ): Promise<PlaceSuggestion[]> {
   try {
-    const res = await fetch(`/api/search-place?q=${encodeURIComponent(query)}`, {
-      signal,
-    });
+    const res = await fetch(
+      `/api/search-place?q=${encodeURIComponent(query)}&lang=${lang}`,
+      { signal }
+    );
     if (!res.ok) return [];
     const data = (await res.json()) as {
-      results?: { name?: string; lat?: number; lng?: number }[];
+      results?: { name?: string; lat?: number; lng?: number; address?: string }[];
     };
     const out: PlaceSuggestion[] = [];
     for (const r of data.results ?? []) {
       if (typeof r?.lat !== "number" || typeof r?.lng !== "number") continue;
-      out.push({ name: r.name || query, address: "", lat: r.lat, lng: r.lng, zoom: 16 });
+      out.push({
+        name: r.name || query,
+        address: r.address ?? "",
+        lat: r.lat,
+        lng: r.lng,
+        zoom: 16,
+      });
       if (out.length >= 3) break;
     }
     return out;
@@ -123,18 +135,19 @@ async function googleEmbedSearch(
 async function searchGoogle(
   q: string,
   near?: LatLng,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  lang: Lang = "ko"
 ): Promise<PlaceSuggestion[]> {
   if (hasGoogleKey()) {
     try {
-      const fromGoogle = await googlePlacesSearch(q, near, signal);
+      const fromGoogle = await googlePlacesSearch(q, near, signal, lang);
       if (fromGoogle.length > 0) return fromGoogle;
     } catch (e) {
       // 도중 취소는 그대로 알리고, 그 밖의 실패는 열쇠 없는 통로로 넘어간다
       if (e instanceof DOMException && e.name === "AbortError") throw e;
     }
   }
-  return googleEmbedSearch(q, signal);
+  return googleEmbedSearch(q, signal, lang);
 }
 
 // 글자를 치는 동안 보여줄 후보 목록(자동완성) — 두 글자부터 묻는다(한 글자마다 묻지 않게).
@@ -146,6 +159,38 @@ export async function suggestPlaces(
   const q = query.trim();
   if (q.length < 2) return [];
   return searchGoogle(q, near, signal);
+}
+
+// 비행기에서 적는 입국·세관 서류의 "머무는 곳" 칸은 영문 주소만 받아 준다.
+// 그래서 자리 이름으로 구글에게 한 번 더, 이번에는 영어로 답해 달라고 물어본다.
+// 좌표를 알고 있으면 돌아온 자리가 그 좌표 근처(가로세로 약 2km 상자 안)일 때만 믿는다 —
+// 같은 이름의 가게가 다른 도시에도 있어서, 엉뚱한 도시 주소가 적히는 것을 막는 장치다.
+// 못 찾으면 빈 칸을 돌려준다(부르는 쪽이 원래 적힌 글자를 그대로 둔다).
+const SAME_PLACE_DEG = 0.02;
+
+export async function findAddressInEnglish(
+  name: string,
+  near?: LatLng
+): Promise<string> {
+  const q = name.trim();
+  if (q.length < 2) return "";
+  try {
+    const list = await searchGoogle(q, near, undefined, "en");
+    for (const p of list) {
+      if (!p.address) continue;
+      if (
+        near &&
+        (Math.abs(p.lat - near[0]) > SAME_PLACE_DEG ||
+          Math.abs(p.lng - near[1]) > SAME_PLACE_DEG)
+      ) {
+        continue;
+      }
+      return p.address;
+    }
+  } catch {
+    // 못 물어봐도 앱은 그대로 돈다 — 주소 칸만 비워 둔다
+  }
+  return "";
 }
 
 // 이름 하나로 좌표 하나 — 구글 검색의 첫 결과를 쓴다(엔터 검색·여행 이름으로 이동용).
