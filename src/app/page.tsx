@@ -661,17 +661,21 @@ export default function Home() {
           ]);
           return;
         }
-        // 이미 꽂힌 핀과 50m 안쪽으로 겹치는 후보는 뺀다
-        const fresh = (data.pins ?? []).filter(
-          (np) =>
-            !pins.some((ep) => distanceMeters(ep.lat, ep.lng, np.lat, np.lng) < 50)
-        );
+        // 이미 꽂힌 핀과 50m 안쪽으로 겹치는 후보는 그 핀의 번호를 물려받게 한다.
+        // 목록에서 빼 버리면 "세 곳 찾았다"는 말과 달리 카드가 한 장만 남아 이상해진다 —
+        // 카드는 그대로 두고 '꽂음'으로만 보이게 해, 찾은 개수와 카드 수를 맞춘다.
+        const found = (data.pins ?? []).map((np) => {
+          const already = pins.find(
+            (ep) => distanceMeters(ep.lat, ep.lng, np.lat, np.lng) < 50
+          );
+          return already ? { ...np, id: already.id } : np;
+        });
         setChat((cur) => [
           ...cur,
           {
             role: "assistant",
             text: data.reply ?? "",
-            pins: fresh.length > 0 ? fresh : undefined,
+            pins: found.length > 0 ? found : undefined,
             sources: data.sources && data.sources.length > 0 ? data.sources : undefined,
           },
         ]);

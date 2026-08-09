@@ -23,6 +23,8 @@ const ROUTER_MODEL = "deepseek/deepseek-v4-flash-0731"; // 2026-07-31 정식판
 const MAX_TURNS = 6; // 도구 호출 왕복 상한 — 무한 반복 방지
 const MAX_PINS = 10;
 const MAX_SOURCES_PER_PIN = 3;
+// 한 곳에 근거 글이 하나뿐이면 빈약해 보인다 — 본문에 그 가게 이름이 적힌 글로 여기까지 채운다.
+const MIN_SOURCES_PER_PIN = 2;
 const MAX_REPLY_SOURCES = 6;
 const CALL_TIMEOUT_MS = 30_000;
 const TOTAL_BUDGET_MS = 50_000;
@@ -157,12 +159,13 @@ function buildSystem(context: AssistantContext): string {
     "- 본문 글 속에 주소만 적혀 있으면 address 에 그 주소를 옮겨 적으세요(블로그 글에는 구글 지도 주소를 적어 두는 경우가 많습니다).",
     "- 본문에 없는 좌표를 지어내는 것은 금지입니다. 없으면 lat/lng 를 비워 두세요 — 앱이 직접 찾습니다.",
     "area 에는 지역 이름을, area_lat/area_lng 에는 그 지역(도시·동네) 중심의 대략적인 좌표를 적으세요. 예: 다낭 16.05/108.21, 서울 성수동 37.544/127.056. 이 값은 앱이 '가게가 그 동네에 있는지' 재는 잣대로만 씁니다.",
-    "memo에는 '갈지 말지 정하는 데' 도움 되는 알맹이만 1~2문장 적으세요 — 후기들이 입을 모아 칭찬한 점, 대표 메뉴·서비스와 대략 가격, 가 본 사람만 아는 팁(예약·웨이팅·가기 좋은 시간). 예: '90분 아로마 코스가 인기인데 저녁엔 예약이 꽉 차니 낮에 가라는 후기가 많음. 가격은 2인 기준 약 5만 원.'",
+    "memo는 줄글이 아니라 짧은 토막 2~3개를 ' · '(가운뎃점)로 이어 붙여 적으세요. 토막 하나는 15자 안팎, 명사로 끝냅니다. 예: '90분 아로마 코스 인기 · 저녁은 예약 꽉 참 · 2인 5만 원'. 토막에는 '갈지 말지 정하는 데' 도움 되는 알맹이만 담으세요 — 후기들이 입을 모아 칭찬한 점, 대표 메뉴·서비스와 대략 가격, 가 본 사람만 아는 팁(예약·웨이팅·가기 좋은 시간).",
     "별점·리뷰 개수·업종 분류·지역 이름·조사 날짜를 나열하는 메모는 금지입니다(예: '구글 ★4.7 (리뷰 130개) · 스파 · 다낭'). 그런 정보는 앱이 이미 보여 주거나 갈지 말지 정하는 데 도움이 안 됩니다. 후기에서 알맹이를 못 찾았으면 지어내지 말고 memo를 비워 두세요.",
-    "sources에는 반드시 검색 결과로 받은 링크만 그대로 붙여 넣으세요. 링크를 지어내면 그 후보는 버려집니다. 후보는 3~8곳이 적당합니다.",
+    "sources에는 반드시 검색 결과로 받은 링크만 그대로 붙여 넣으세요. 링크를 지어내면 그 후보는 버려집니다. 한 곳마다 그 가게가 언급된 글을 2~3개 붙이세요(정말 한 글에만 나오면 1개도 괜찮습니다). 후보는 3~8곳이 적당합니다.",
     "장소 추천이 아닌 일반 질문에는 도구 없이 한국어로 짧게 답하세요.",
+    "가장 중요한 규칙(어기면 답이 버려집니다): 최종 답변에는 propose_pins 가 '등록되었어요'라고 알려 준 곳만 언급할 수 있습니다. 등록되지 않은 곳(출처·위치 확인에 실패해 버려진 곳)의 이름은 절대 쓰지 마세요 — 화면 카드에 없는 이름을 답에 쓰면 사용자는 '찾았다더니 왜 없냐'고 느낍니다.",
     "최종 답변은 아주 짧게, 정해진 모양으로만 씁니다. 첫 줄에 한 줄 요약 하나(35자 안팎), 그 아래에 '- '로 시작하는 핵심 줄 2~3개(각 30자 안팎). 전체 4줄을 넘기지 마세요.",
-    "핵심 줄에는 고르는 데 도움 되는 것만 적습니다 — 후기들이 입을 모은 점, 조심할 점(웨이팅·휴무·현금만 등), 가기 좋은 시간. 장소 이름을 하나하나 나열하거나 카드에 이미 있는 주소·메모를 다시 쓰는 것은 금지입니다(화면 카드가 대신 보여 줍니다). 인사말·맺음말도 쓰지 마세요.",
+    "핵심 줄에는 등록된 곳들을 아우르는 정보만 적습니다 — 후기들이 입을 모은 점, 조심할 점(웨이팅·휴무·현금만 등), 가기 좋은 시간, 묶어 다니기 좋은 동선. 장소 이름을 한 줄에 하나씩 나열하거나 카드에 이미 있는 주소·메모를 다시 쓰는 것은 금지입니다(화면 카드가 대신 보여 줍니다). 인사말·맺음말도 쓰지 마세요.",
   ];
   if (context.room) lines.push(`현재 여행 이름: ${context.room}`);
   if (context.center)
@@ -360,6 +363,9 @@ export async function POST(request: Request): Promise<Response> {
   // AI가 본문까지 읽은 글과, 그 글에 붙어 있던 지도 카드 — 좌표 검증과 출처 순서에 쓴다.
   const readUrls = new Set<string>();
   const cardsSeen: BlogPlaceCard[] = [];
+  // 본문까지 읽어 둔 글 — 어느 글에 어떤 가게 이름이 적혀 있는지 나중에 다시 훑어,
+  // 출처가 한 개뿐인 곳에 진짜 근거를 더 붙이는 데 쓴다(퍼플렉시티식 근거 보강).
+  const readBodies = new Map<string, { title: string; url: string; text: string }>();
 
   let reply = "";
   let proposed: Pin[] = [];
@@ -474,6 +480,11 @@ export async function POST(request: Request): Promise<Response> {
                   if (!body) return null;
                   readUrls.add(normalizeUrl(asked[idx].url));
                   cardsSeen.push(...body.places);
+                  readBodies.set(normalizeUrl(asked[idx].url), {
+                    title: asked[idx].title,
+                    url: asked[idx].url,
+                    text: body.text,
+                  });
                   return {
                     url: body.url,
                     title: asked[idx].title,
@@ -490,23 +501,26 @@ export async function POST(request: Request): Promise<Response> {
             }
           } else if (name === "propose_pins") {
             const list = Array.isArray(args.pins) ? (args.pins as ProposedPin[]) : [];
-            const { pins, droppedNoSource, droppedNoSpot } = await buildPins(
+            const { pins, dropped } = await buildPins(
               list,
               blogSeen,
               cardsSeen,
+              readBodies,
               context.center,
               request.url
             );
             proposed = pins;
-            const buts = [
-              droppedNoSource > 0 ? `출처가 확인되지 않은 ${droppedNoSource}곳` : "",
-              droppedNoSpot > 0 ? `위치를 못 찾은 ${droppedNoSpot}곳` : "",
-            ].filter(Boolean);
+            // 어떤 이름이 화면 카드로 나갔는지 그대로 알려 준다 — 이 목록에 없는 이름을
+            // 답에 쓰면 "찾았다더니 카드에 없다"가 되므로, 여기서 못을 박는다.
             result =
               pins.length > 0
-                ? `${pins.length}곳이 등록되었어요.${
-                    buts.length > 0 ? ` ${buts.join("과 ")}은 버렸어요.` : ""
-                  } 사용자에게 짧게 안내하고 마치세요.`
+                ? `${pins.length}곳이 등록되었어요. 화면 카드로 나가는 이름은 이것뿐입니다: ${pins
+                    .map((p) => p.name)
+                    .join(", ")}.${
+                    dropped.length > 0
+                      ? ` 다음 ${dropped.length}곳은 출처나 위치를 확인하지 못해 버렸으니 답변에서 이름을 절대 언급하지 마세요: ${dropped.join(", ")}.`
+                      : ""
+                  } 위 이름들만 근거로 짧게 안내하고 마치세요.`
                 : "등록된 곳이 없어요. 출처는 naver_blog_search 결과 링크를 그대로 넣고, name에는 간판 이름, area에는 지역을 정확히 적어 다시 제출하세요.";
           } else {
             result = "그런 도구는 없어요.";
@@ -570,6 +584,22 @@ function squeeze(s: string): string {
   return s.replace(/[\s()[\]·・.,'"`’”“\-_/]/g, "").toLowerCase();
 }
 
+/**
+ * 가게 이름을 견주기 좋은 토막들로 나눈다 — 간판에 한글 이름과 현지 이름이 같이 붙은 곳이 많아
+ * ("옥뎀39 (Ốc Đêm 39)") 통째로만 견주면 글 본문에서 못 찾는다. 두 글자 미만 토막은 버린다
+ * (아무 글에나 걸려 엉뚱한 글이 근거로 붙는다).
+ */
+function nameKeys(name: string): string[] {
+  const inParen = /\(([^)]+)\)/.exec(name)?.[1] ?? "";
+  const outParen = name.replace(/\([^)]*\)/g, "");
+  const keys: string[] = [];
+  for (const part of [outParen, inParen, name]) {
+    const k = squeeze(part);
+    if (k.length >= 2 && !keys.includes(k)) keys.push(k);
+  }
+  return keys;
+}
+
 /** 두 지점이 얼마나 떨어져 있는지 대충 재는 값(도 단위) — 엉뚱한 나라 좌표를 걸러내는 용도. */
 function roughFar(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
   return Math.abs(a.lat - b.lat) + Math.abs(a.lng - b.lng);
@@ -581,12 +611,46 @@ function roughFar(a: { lat: number; lng: number }, b: { lat: number; lng: number
  */
 async function locate(
   name: string,
-  hint: string,
+  hints: string[],
   anchor: { lat: number; lng: number } | undefined,
   base: string
 ): Promise<{ lat: number; lng: number; address: string } | null> {
-  const q = [name, hint].filter(Boolean).join(" ").trim();
-  if (!q) return null;
+  // 간판에 두 이름이 붙어 있는 곳이 많다 — "옥뎀39 (Ốc Đêm 39)"처럼.
+  // 한 벌로만 물으면 못 찾으니 이름을 갈래로 나눠 여러 벌을 만든다.
+  const inParen = /\(([^)]+)\)/.exec(name)?.[1]?.trim() ?? "";
+  const outParen = name.replace(/\([^)]*\)/g, "").trim();
+  const names = [name, inParen, outParen].filter(Boolean);
+
+  const queries: string[] = [];
+  for (const hint of [...hints.filter(Boolean), ""]) {
+    for (const n of names) {
+      const q = [n, hint].filter(Boolean).join(" ").trim();
+      if (q && !queries.includes(q)) queries.push(q);
+    }
+  }
+  if (queries.length === 0) return null;
+
+  // 가장 그럴듯한 한 벌(이름 + 글에서 본 주소)을 먼저 물어본다. 대부분 여기서 끝난다.
+  const best = await locateOnce(queries[0], name, anchor, base).catch(() => null);
+  if (best) return best;
+
+  // 빗나갔을 때만 나머지 벌을 한꺼번에 던진다. 차례로 물으면 8초씩 쌓여 시간 상한에 걸리고,
+  // 처음부터 다 던지면 장소 사전이 "너무 잦다"며 답을 흘려버린다 — 그래서 2단으로 나눴다.
+  const rest = queries.slice(1, 3);
+  if (rest.length === 0) return null;
+  const tries = await Promise.all(
+    rest.map((q) => locateOnce(q, name, anchor, base).catch(() => null))
+  );
+  return tries.find((t): t is { lat: number; lng: number; address: string } => Boolean(t)) ?? null;
+}
+
+/** 검색어 한 벌로 자리를 찾아본다 — 위의 locate 가 여러 벌을 차례로 던지는 데 쓴다. */
+async function locateOnce(
+  q: string,
+  name: string,
+  anchor: { lat: number; lng: number } | undefined,
+  base: string
+): Promise<{ lat: number; lng: number; address: string } | null> {
   const [byNaver, byDict, byMap] = await Promise.all([
     // 네이버 장소 창구는 열쇠가 있을 때만 답한다(없으면 빈 목록)
     searchNaverLocal(q).catch(() => []),
@@ -625,23 +689,26 @@ async function locate(
 
 /**
  * AI가 낸 후보를 핀으로 바꾼다.
- * 출처는 네이버가 실제로 돌려준 글 목록에 있는 것만 인정하고, 하나도 남지 않으면 그 곳은 버린다.
- * 자리는 세 갈래로 정한다 — ① 읽은 글의 지도 카드 좌표(글쓴이가 직접 붙인 값이라 가장 정확),
- * ② 글에서 본 주소로 찾기, ③ 이름+지역으로 찾기. ①은 실제 읽은 카드와 맞을 때만 믿는다.
+ * 출처는 네이버가 실제로 돌려준 글 목록에 있는 것만 인정하고, 하나뿐이면 본문에 그 가게 이름이
+ * 적힌 읽은 글로 채운다. 하나도 남지 않으면 그 곳은 버린다.
+ * 자리는 ① 읽은 글의 지도 카드 좌표(글쓴이가 직접 붙인 값이라 가장 정확)를 먼저 쓰고,
+ * 없으면 ② 이름·현지 이름 × 주소·지역으로 만든 검색어를 한꺼번에 던져 먼저 걸리는 답을 쓴다.
+ * 버린 곳 이름은 그대로 돌려줘서, AI가 답변에서 그 이름을 말하지 못하게 한다.
  */
 async function buildPins(
   list: ProposedPin[],
   blogSeen: Map<string, NaverBlogItem>,
   cardsSeen: BlogPlaceCard[],
+  readBodies: Map<string, { title: string; url: string; text: string }>,
   near: { lat: number; lng: number } | undefined,
   base: string
 ): Promise<{
   pins: Pin[];
-  droppedNoSource: number;
-  droppedNoSpot: number;
+  /** 카드로 못 만들고 버린 곳 이름 — AI가 답변에서 언급하지 못하게 그대로 알려 준다 */
+  dropped: string[];
 }> {
   const now = Date.now();
-  let droppedNoSource = 0;
+  const dropped: string[] = [];
 
   // 1단계 — 이름과 출처가 멀쩡한 후보만 남긴다
   const kept: {
@@ -657,10 +724,7 @@ async function buildPins(
   for (const p of list) {
     if (kept.length >= MAX_PINS) break;
     const name = typeof p.name === "string" ? p.name.trim() : "";
-    if (!name) {
-      droppedNoSource++;
-      continue;
-    }
+    if (!name) continue;
 
     const sources: PinSource[] = [];
     const seenHere = new Set<string>();
@@ -674,8 +738,23 @@ async function buildPins(
       // 제목도 검색 결과 것을 쓴다 — 지어낸 제목이 화면에 나가지 않게.
       sources.push({ title: hit.title, url: hit.url });
     }
+    // AI가 근거 글을 하나만 달아 두는 일이 잦다. 읽어 둔 글 본문을 다시 훑어,
+    // 그 가게 이름이 실제로 적혀 있는 글을 더 붙인다(본문에 이름이 있는 글만 쓰므로
+    // 지어낸 연결이 아니다 — 퍼플렉시티도 '검색으로 가져온 것'만 근거로 삼는다).
+    if (sources.length < MIN_SOURCES_PER_PIN) {
+      const keys = nameKeys(name);
+      for (const body of readBodies.values()) {
+        if (sources.length >= MAX_SOURCES_PER_PIN) break;
+        const key = normalizeUrl(body.url);
+        if (seenHere.has(key)) continue;
+        const squeezed = squeeze(body.text);
+        if (!keys.some((k) => squeezed.includes(k))) continue;
+        seenHere.add(key);
+        sources.push({ title: body.title, url: body.url });
+      }
+    }
     if (sources.length === 0) {
-      droppedNoSource++;
+      dropped.push(name);
       continue;
     }
 
@@ -733,20 +812,16 @@ async function buildPins(
         };
       }
       await new Promise((r) => setTimeout(r, i * 150));
-      if (k.address) {
-        const byAddress = await locate(k.name, k.address, anchor, base);
-        if (byAddress) return { ...byAddress, address: byAddress.address || k.address };
-      }
-      return locate(k.name, k.area, anchor, base);
+      const spot = await locate(k.name, [k.address, k.area], anchor, base);
+      return spot ? { ...spot, address: spot.address || k.address } : null;
     })
   );
 
   const pins: Pin[] = [];
-  let droppedNoSpot = 0;
   kept.forEach((k, i) => {
     const spot = spots[i];
     if (!spot) {
-      droppedNoSpot++;
+      dropped.push(k.name);
       return;
     }
     pins.push({
@@ -764,5 +839,5 @@ async function buildPins(
     });
   });
 
-  return { pins, droppedNoSource, droppedNoSpot };
+  return { pins, dropped };
 }

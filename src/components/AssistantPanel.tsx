@@ -14,6 +14,7 @@ import {
 import type { Pin, PinType } from "@/lib/types";
 import { PIN_TYPES } from "@/lib/pinTypes";
 import { googleMapsUrl } from "@/lib/mapLinks";
+import { splitMemoLines } from "@/lib/memoLines";
 
 // 비서 화면 — AI에게 채팅으로 시키는 곳.
 // 화면은 세 덩이로만 나뉜다: ① 한 줄 요약(+ 점 목록) → ② 종류별로 묶은 장소 카드 →
@@ -171,9 +172,10 @@ function CandidateCard({
   onPin: () => void;
 }) {
   const [openSrc, setOpenSrc] = useState(false);
-  const [openMemo, setOpenMemo] = useState(false);
   const cfg = PIN_TYPES[pin.type];
   const sources = pin.sources ?? [];
+  // 줄 쪼개는 규칙은 리스트 화면과 같은 것을 쓴다 — 두 화면이 서로 다르게 쪼개면 안 된다.
+  const points = useMemo(() => splitMemoLines(pin.memo), [pin.memo]);
   return (
     <li className="anim-rise-sm overflow-hidden rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--surface-raised)] transition-[transform,box-shadow,border-color] duration-200 ease-[var(--ease-out)] hover:-translate-y-px hover:border-[var(--accent-soft)] hover:shadow-[var(--shadow-lift)]">
       <div className="flex items-center gap-2.5 px-2.5 py-2.5">
@@ -221,23 +223,21 @@ function CandidateCard({
       </div>
 
       {/* 왜 여기냐는 설명 — 평소엔 두 줄까지만, 누르면 다 펴진다 */}
-      {pin.memo && (
-        // 아래 여백은 바깥 상자가 갖는다 — 글 자르는 상자에 여백을 주면 잘린 셋째 줄이
-        // 그 여백 자리에 빼꼼 비쳐 보인다.
-        <div className="pb-2 pl-[3.25rem] pr-3">
-          <button
-            type="button"
-            onClick={() => setOpenMemo((v) => !v)}
-            aria-expanded={openMemo}
-            // 두 줄까지만 보이게 자르는 것과 "칸 전체를 차지하라"는 지시가 서로 밀어내서,
-            // 접힌 동안에는 자르는 쪽만 쓴다(둘을 같이 쓰면 잘리지 않는다).
-            className={`w-full text-left text-xs leading-relaxed text-[var(--text-muted)] ${
-              openMemo ? "block" : "line-clamp-2"
-            }`}
-          >
-            {pin.memo}
-          </button>
-        </div>
+      {points.length > 0 && (
+        <ul className="flex flex-col gap-0.5 pb-2 pl-[3.25rem] pr-3">
+          {points.map((point, i) => (
+            <li
+              key={i}
+              className="flex gap-1.5 text-xs leading-relaxed text-[var(--text-muted)]"
+            >
+              <span
+                className="mt-[7px] h-[3px] w-[3px] shrink-0 rounded-full bg-[var(--text-faint)]"
+                aria-hidden
+              />
+              <span className="min-w-0">{point}</span>
+            </li>
+          ))}
+        </ul>
       )}
 
       {sources.length > 0 && (
